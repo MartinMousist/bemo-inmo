@@ -23,23 +23,26 @@ sobre una hipótesis sin verificar.
 
 ---
 
-## Etapa 1 — Fundaciones
+## Etapa 1 — Fundaciones ✅ CERRADA (2026-08-03)
 
 **Qué**: el esqueleto del proyecto.
 
-- [ ] Docker Compose: `db` (Postgres 16) + `api` (NestJS) + `web` (Vite), con healthchecks
-- [ ] Migraciones SQL versionadas con auto-run en dev, las mismas en test y producción
-- [ ] Rol de base restringido + `app_current_tenant()` + RLS en la primera migración
-- [ ] Contexto de tenant vía `set_config(..., true)` + test de que el pool no filtra el
+- [x] Docker Compose: `db` (Postgres 16) + `api` (NestJS) + `web` (Vite), con healthchecks
+- [x] Migraciones SQL versionadas con auto-run en dev, las mismas en test y producción
+- [x] Rol de base restringido + `app_current_tenant()` + RLS en la primera migración
+- [x] Contexto de tenant vía `set_config(..., true)` + test de que el pool no filtra el
       tenant entre requests
-- [ ] Seed de datos demo (dos inmobiliarias ficticias — hacen falta dos para probar el aislamiento)
-- [ ] Contrato de error RFC 9457 + prefijo `/v1` + validación de entorno al arrancar
-- [ ] Jest + Supertest contra Postgres real, en CI desde el primer día
-- [ ] gitleaks en pre-commit y en CI
-- [ ] Tokens CSS + modo oscuro + script anti-flash en el `<head>`
+- [x] Seed de datos demo (dos inmobiliarias ficticias — hacen falta dos para probar el aislamiento)
+- [x] Contrato de error RFC 9457 + prefijo `/v1` + validación de entorno al arrancar
+- [x] Jest + Supertest contra Postgres real
+- [x] gitleaks en pre-commit
+- [ ] CI (GitHub Actions) corriendo la suite — pendiente, no hay remoto todavía
+- [x] Tokens CSS + modo oscuro + script anti-flash en el `<head>`
 
 **Gate**: `docker compose up` levanta todo en menos de 5 minutos, en una máquina limpia.
-**Esfuerzo**: 3-4 días.
+**Cerrado con**: arranque limpio en **13,8 s**, 10/10 tests contra Postgres real, y RLS
+comprobado a mano (owner ve 2 filas, rol de app sin contexto ve 0, con contexto ve 1).
+**Esfuerzo real**: 1 sesión.
 
 **Trampa del playbook (error #7)**: los contenedores tienen su propio `node_modules` en un
 volumen anónimo. Instalar dependencias sólo en el host no rompe al instalar — rompe al
