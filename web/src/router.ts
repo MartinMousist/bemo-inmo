@@ -4,6 +4,10 @@ import { useAuth } from './stores/auth';
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // La portada es pública y NO rebota a alguien con sesión abierta: querer
+    // ver la página del producto estando logueado es legítimo.
+    { path: '/', component: () => import('./paginas/LandingPage.vue'),
+      meta: { publica: true, permiteSesion: true } },
     { path: '/login', component: () => import('./paginas/LoginPage.vue'), meta: { publica: true } },
     { path: '/registrar', component: () => import('./paginas/RegistrarPage.vue'), meta: { publica: true } },
     {
@@ -12,7 +16,7 @@ const router = createRouter({
       meta: { publica: true, permiteSesion: true },
     },
 
-    { path: '/', redirect: '/propiedades' },
+    { path: '/app', redirect: '/propiedades' },
     { path: '/propiedades', component: () => import('./paginas/PropiedadesPage.vue') },
     { path: '/propiedades/nueva', component: () => import('./paginas/PropiedadFormPage.vue') },
     { path: '/propiedades/:id/editar', component: () => import('./paginas/PropiedadFormPage.vue') },
@@ -47,7 +51,7 @@ router.beforeEach(async (to) => {
 
   if (!auth.autenticado) {
     // `next` para volver adonde quería ir, en vez de tirarlo al inicio.
-    return { path: '/login', query: to.fullPath === '/' ? {} : { next: to.fullPath } };
+    return { path: '/login', query: { next: to.fullPath } };
   }
   return true;
 });

@@ -3,21 +3,53 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bemo INMO</title>
+
+    <title>Bemo INMO — Gestión inmobiliaria</title>
+    <meta
+      name="description"
+      content="Alquileres con actualización automática por IPC, ICL y UVA, ventas, comisiones y publicación a portales. Para inmobiliarias argentinas."
+    />
 
     <!--
-      Tema ANTES del primer pintado. Inline y bloqueante a propósito: si esto
-      fuera un módulo diferido, cada carga arrancaría en claro y pegaría un
-      destello blanco antes de corregirse. Es el detalle que casi todos se olvidan.
+      Favicon: la misma "B" blanca sobre naranja del logo, como SVG inline.
+      Sin archivo aparte y sin request extra; el navegador la escala sola a
+      cualquier tamaño de pestaña.
+    -->
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23d2703f'/%3E%3Cpath d='M13.4 10.2h8.05c2.32 0 4.12.5 5.38 1.5 1.27 1 1.9 2.4 1.9 4.2 0 1.2-.3 2.22-.9 3.06-.6.83-1.44 1.43-2.5 1.8v.12c1.32.3 2.34.92 3.05 1.86.72.94 1.08 2.1 1.08 3.5 0 1.94-.68 3.45-2.03 4.53-1.35 1.08-3.25 1.62-5.7 1.62H13.4V10.2Zm4.36 8.94h3.3c1.06 0 1.88-.24 2.45-.72.58-.48.87-1.16.87-2.04 0-.88-.3-1.55-.87-2-.57-.46-1.4-.7-2.46-.7h-3.29v5.46Zm0 9.66h3.75c1.15 0 2.04-.26 2.66-.79.63-.53.94-1.28.94-2.25s-.31-1.72-.94-2.25c-.62-.53-1.51-.8-2.66-.8h-3.75v6.09Z' fill='%23fff'/%3E%3C/svg%3E"
+    />
+    <link rel="apple-touch-icon" href="/icono-180.png" />
+    <meta name="theme-color" content="#d2703f" />
+
+    <!-- Open Graph: cuando alguien comparte el enlace por WhatsApp. -->
+    <meta property="og:title" content="Bemo INMO — Gestión inmobiliaria" />
+    <meta
+      property="og:description"
+      content="El alquiler se administra solo: índices, vencimientos y liquidaciones."
+    />
+    <meta property="og:type" content="website" />
+
+    <!--
+      Tema ANTES del primer pintado. Inline y bloqueante a propósito: como
+      módulo diferido, cada carga arrancaría en claro y pegaría un destello
+      blanco antes de corregirse.
+
+      La preferencia guardada puede ser 'claro', 'oscuro' o 'sistema'. Con
+      'sistema' se resuelve contra prefers-color-scheme en cada carga.
     -->
     <script>
       (function () {
         try {
-          var guardado = localStorage.getItem('bemo-inmo:theme');
-          var tema =
-            guardado ||
-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-          document.documentElement.setAttribute('data-theme', tema);
+          var p = localStorage.getItem('bemo-inmo:theme') || 'sistema';
+          // Compatibilidad con el formato viejo, que guardaba el tema efectivo.
+          if (p === 'dark') p = 'oscuro';
+          if (p === 'light') p = 'claro';
+          var oscuro =
+            p === 'oscuro' ||
+            (p !== 'claro' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.setAttribute('data-theme', oscuro ? 'dark' : 'light');
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'light');
         }
@@ -27,7 +59,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
   </head>

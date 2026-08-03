@@ -15,7 +15,13 @@
   --muted:   #6b6560;
   --muted-2: #928b83;
 
-  /* ── Acento: uno solo. Azul de estilográfica ── */
+  /* ── Marca del grupo BEMO. Sólo firma: logo, favicon, portada ── */
+  --marca:        #d2703f;
+  --marca-suave:  #f6e7de;
+  --marca-linea:  #ecc9b4;
+  --marca-fuerte: #b45c30;
+
+  /* ── Acento de la interfaz: uno solo. Azul de estilográfica ── */
   --accent:       #1e3a5f;
   --accent-hover: #162c48;
   --accent-tint:  #e8edf3;
@@ -51,6 +57,11 @@
 }
 
 [data-theme='dark'] {
+  --marca:        #e08a58;
+  --marca-suave:  #33231a;
+  --marca-linea:  #5c3d2a;
+  --marca-fuerte: #f0a377;
+
   --bg:          #161513;
   --surface:     #1e1d1a;
   --surface-2:   #262421;

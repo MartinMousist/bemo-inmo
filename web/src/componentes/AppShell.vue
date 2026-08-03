@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref } from 'vue';
 import { useAuth } from '../stores/auth';
-import { etiquetaRol } from '../dominio/roles';
 import UiIcon from './UiIcon.vue';
+import BemoLogo from './BemoLogo.vue';
+import MenuUsuario from './MenuUsuario.vue';
 import CommandPalette from './CommandPalette.vue';
 
 const auth = useAuth();
-const router = useRouter();
 
 /** Sidebar agrupado por función, no una lista plana de 12 ítems. */
 const grupos = [
@@ -34,30 +33,6 @@ const grupos = [
 const drawerAbierto = ref(false);
 const paletaAbierta = ref(false);
 
-const iniciales = computed(() =>
-  (auth.usuario?.nombre ?? '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join(''),
-);
-
-const tema = ref<'light' | 'dark'>(
-  (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'light',
-);
-
-function alternarTema() {
-  tema.value = tema.value === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', tema.value);
-  localStorage.setItem('bemo-inmo:theme', tema.value);
-}
-
-async function salir() {
-  await auth.logout();
-  router.replace('/login');
-}
-
 // ⌘K / Ctrl+K abre la paleta desde cualquier pantalla.
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -70,9 +45,9 @@ window.addEventListener('keydown', (e) => {
 <template>
   <div class="shell">
     <aside class="sidebar" :class="{ abierto: drawerAbierto }">
-      <div class="marca">
-        <RouterLink to="/propiedades">Bemo <span>INMO</span></RouterLink>
-      </div>
+      <RouterLink to="/propiedades" class="marca">
+        <BemoLogo :tam="30" con-nombre />
+      </RouterLink>
 
       <nav>
         <div v-for="g in grupos" :key="g.titulo" class="grupo">
@@ -106,22 +81,9 @@ window.addEventListener('keydown', (e) => {
         </button>
 
         <span class="tenant">{{ auth.tenant?.nombre }}</span>
+        <span class="separador" />
 
-        <div class="row">
-          <span class="chip">{{ etiquetaRol(auth.rol) }}</span>
-          <span class="avatar" :title="auth.usuario?.nombre ?? ''">{{ iniciales }}</span>
-          <button
-            class="icon-btn"
-            type="button"
-            :aria-label="tema === 'dark' ? 'Tema claro' : 'Tema oscuro'"
-            @click="alternarTema"
-          >
-            <UiIcon :nombre="tema === 'dark' ? 'sol' : 'luna'" />
-          </button>
-          <button class="icon-btn" type="button" aria-label="Salir" @click="salir">
-            <UiIcon nombre="salir" />
-          </button>
-        </div>
+        <MenuUsuario />
       </header>
 
       <main class="contenido">
@@ -149,18 +111,11 @@ window.addEventListener('keydown', (e) => {
   border-right: 1px solid var(--line);
 }
 
-.marca a {
-  font-family: var(--font-title);
-  font-size: 18px;
-  color: var(--ink);
-  text-decoration: none;
+.marca {
+  display: inline-flex;
   padding: var(--s-sm);
-  display: inline-block;
-}
-.marca span {
-  font-family: var(--font-ui);
-  font-weight: 400;
-  color: var(--accent);
+  border-radius: var(--r-md);
+  text-decoration: none;
 }
 
 nav {
@@ -235,41 +190,13 @@ nav {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.topbar .row {
+.separador {
   margin-left: auto;
 }
 
 .tenant {
   color: var(--muted);
   font-size: 13px;
-}
-
-.avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent-tint);
-  border: 1px solid var(--accent-line);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.icon-btn {
-  display: inline-flex;
-  padding: 6px;
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.icon-btn:hover {
-  background: var(--surface-2);
-  color: var(--ink-2);
 }
 
 .contenido {

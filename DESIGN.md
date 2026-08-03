@@ -14,6 +14,12 @@ BEMO es el grupo; cada producto es una vertical. El sistema de diseño vive en d
 - Las tres familias tipográficas y la escala de tamaños.
 - La forma de los componentes: altura de botón, densidad de tabla, chips, modales.
 
+**Capa marca (grupo BEMO)** — el isotipo:
+- La **"B" blanca sobre un cuadrado naranja** de esquinas suaves (`--marca: #d2703f`).
+  Es el mismo signo para todas las verticales; sólo cambia el wordmark que lo acompaña.
+- El naranja es color de **firma**, no de interfaz: aparece en el logo, el favicon, la
+  portada y los acentos de navegación pública. **Nunca** como color de acción en la app.
+
 **Capa producto** — lo único que cambia:
 - **El acento.** Uno solo. Es la identidad del producto.
 - **El matiz de los neutros**: mismos valores de luminosidad, hue rotado hacia el acento.
