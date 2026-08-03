@@ -26,6 +26,12 @@ const router = createRouter({
     { path: '/oportunidades', component: () => import('./paginas/OportunidadesPage.vue') },
     { path: '/oportunidades/nueva', component: () => import('./paginas/OportunidadFormPage.vue') },
     { path: '/reservas', component: () => import('./paginas/ReservasPage.vue') },
+    { path: '/vencimientos', component: () => import('./paginas/VencimientosPage.vue') },
+    { path: '/contratos', component: () => import('./paginas/ContratosPage.vue') },
+    { path: '/contratos/nuevo', component: () => import('./paginas/ContratoFormPage.vue') },
+    { path: '/contratos/:id', component: () => import('./paginas/ContratoDetallePage.vue') },
+    { path: '/liquidaciones', component: () => import('./paginas/LiquidacionesPage.vue') },
+    { path: '/indices', component: () => import('./paginas/IndicesPage.vue') },
     { path: '/equipo', component: () => import('./paginas/EquipoPage.vue') },
 
     { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },

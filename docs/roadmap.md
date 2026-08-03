@@ -111,26 +111,41 @@ relaciones reales; un dato derivado no se desincroniza.
 
 ---
 
-## Etapa 4 — Alquileres vivos (el primer corte vertical)
+## Etapa 4 — Alquileres vivos ⚠️ CONSTRUIDA, GATE ABIERTO (2026-08-03)
 
 **Qué**: el motor. Es la razón de ser del producto.
 
-- [ ] `contrato_alquiler` + partes + garantías
-- [ ] Ingesta de índices: IPC (INDEC), ICL y UVA (BCRA), ICP. Job diario + carga manual de respaldo
-- [ ] Motor de ajustes: proyectado → confirmado → notificado → aplicado, con memoria congelada
-- [ ] Constraint `EXCLUDE` de contratos solapados + advisory lock + reintento de `40001`/`40P01`
-- [ ] Calendario de vencimientos con semáforo (90/60/30/7 días)
-- [ ] Generación idempotente de períodos
-- [ ] Cobros y estado de cuenta por contrato
-- [ ] Liquidación mensual al propietario, con reparto por condominio
-- [ ] Avisos de aumento y de vencimiento (email + in-app)
+- [x] `contrato_alquiler` + partes + garantías
+- [x] Índices IPC / ICL / UVA / ICP con carga manual y de a lote. **La ingesta
+      automática desde INDEC y BCRA queda para la etapa 7**; la manual se queda como
+      respaldo permanente
+- [x] Motor de ajustes con memoria congelada. Un ajuste confirmado es inmutable por trigger
+- [x] Constraint `EXCLUDE` de contratos solapados + advisory lock + reintento de `40001`/`40P01`
+- [x] Tablero de vencimientos con semáforo, agrupado por urgencia
+- [x] Generación idempotente de períodos
+- [x] Cobros, cobros parciales y estado de cuenta por contrato
+- [x] Liquidación al propietario, con reparto por condominio
+- [ ] Avisos de aumento y de vencimiento — **etapa 7**, con el resto de las notificaciones
 
-**Gate — el más importante de todos**: se toman **tres liquidaciones reales del mes
-pasado** y el sistema devuelve exactamente los mismos números. Si difiere en un peso, el
-gate no está cerrado.
-**Esfuerzo**: 3 semanas.
-**Trampa conocida**: aflojar el gate porque "difiere poco". La diferencia de un peso
-siempre es una regla que no se entendió.
+**Gate**: tres liquidaciones reales del mes pasado tienen que dar exactamente los mismos
+números.
+
+**⚠️ EL GATE SIGUE ABIERTO.** No depende de código: hacen falta **tus** liquidaciones
+reales. Lo que sí está probado, con 41 tests:
+- El motor de cálculo, con casos de papel (17 tests sin base).
+- El ciclo completo contra Postgres real (24 tests): contrato → ajustes encadenados →
+  cuotas → cobros parciales → liquidación → cierre → pago tardío.
+- Condominio 60/40: la suma de las partes da el total exacto, sin perder ni inventar un peso.
+
+**Tres bugs que sólo aparecieron al correr**:
+- Las columnas `date` de Postgres llegaban como `Date` de JS. Un `date` no tiene hora ni
+  zona: convertirlo le inventa medianoche UTC y al mostrarlo en Argentina se corre un día.
+  Un contrato que empieza el 1 aparecía empezando el 31 del mes anterior. Se corrigió en
+  las dos puntas — parser de `pg` y formateo del front.
+- Un test se acopló al estado **global** de los índices, que por diseño no se limpia entre
+  corridas. Ahora afirma la invariante, no un valor exacto.
+- El tablero escondía los ajustes sin confirmar más viejos de 31 días — justo los que no
+  hay que dejar caer.
 
 ---
 

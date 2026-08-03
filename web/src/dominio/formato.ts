@@ -30,16 +30,28 @@ export function numero(n: number | null | undefined, sufijo = ''): string {
   return `${ENTERO_FMT.format(n)}${sufijo}`;
 }
 
+/**
+ * Un `YYYY-MM-DD` es una fecha de calendario, NO un instante.
+ *
+ * `new Date('2026-01-01')` lo interpreta como medianoche UTC; al mostrarlo en
+ * Argentina (UTC-3) se corre al 31/12/2025. Un contrato que empieza el 1 pasa a
+ * empezar el 31 del mes anterior, y un aumento que rige desde abril aparece en
+ * marzo. Por eso las fechas puras se parten a mano y nunca pasan por Date.
+ *
+ * Los `timestamptz` (con hora) sí son instantes y ahí la zona corresponde: eso
+ * lo maneja `fechaHora`.
+ */
+function partesDeFecha(iso: string): [number, number, number] | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
 export function fecha(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    timeZone: 'America/Argentina/Buenos_Aires',
-  });
+  const p = partesDeFecha(iso);
+  if (!p) return '—';
+  const [a, m, d] = p;
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${a}`;
 }
 
 export function fechaHora(iso: string | null | undefined): string {
@@ -57,19 +69,15 @@ export function fechaHora(iso: string | null | undefined): string {
 }
 
 /** "nov/25" — para períodos de índices y liquidaciones. */
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
+               'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
 export function periodo(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  const mes = d.toLocaleDateString('es-AR', {
-    month: 'short',
-    timeZone: 'America/Argentina/Buenos_Aires',
-  });
-  const anio = d.toLocaleDateString('es-AR', {
-    year: '2-digit',
-    timeZone: 'America/Argentina/Buenos_Aires',
-  });
-  return `${mes.replace('.', '')}/${anio}`;
+  const p = partesDeFecha(iso);
+  if (!p) return '—';
+  const [a, m] = p;
+  return `${MESES[m - 1]}/${String(a).slice(2)}`;
 }
 
 /**
@@ -82,10 +90,12 @@ export function proximidad(iso: string | null | undefined): {
   texto: string;
 } {
   if (!iso) return { dias: null, tono: 'neutro', texto: '—' };
+  const p = partesDeFecha(iso);
+  if (!p) return { dias: null, tono: 'neutro', texto: '—' };
+  // Se construye en hora LOCAL, no UTC, para comparar contra hoy sin corrimiento.
+  const d = new Date(p[0], p[1] - 1, p[2]);
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
-  const d = new Date(iso);
-  d.setHours(0, 0, 0, 0);
   const dias = Math.round((d.getTime() - hoy.getTime()) / 86_400_000);
 
   if (dias < 0) return { dias, tono: 'vencido', texto: `Vencido hace ${-dias} d` };

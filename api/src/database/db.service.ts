@@ -1,7 +1,21 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Pool, type PoolClient, type QueryResultRow } from 'pg';
+import { Pool, types, type PoolClient, type QueryResultRow } from 'pg';
 import { loadEnv } from '../config/env';
 import { AppError, ErrorCode } from '../common/app-error';
+
+/**
+ * Las columnas `date` viajan como texto `YYYY-MM-DD`, no como Date de JS.
+ *
+ * Un `date` de Postgres no tiene hora ni zona horaria. Convertirlo a Date le
+ * inventa medianoche UTC, y al serializar en otra zona puede correrse un día:
+ * un contrato que vence el 1 pasa a vencer el 31 del mes anterior. Además hacía
+ * que unos endpoints devolvieran "2026-04-01" y otros "2026-04-01T00:00:00.000Z"
+ * para el mismo tipo de dato.
+ *
+ * 1082 = DATE. Los `timestamptz` (1184) se dejan como Date: esos sí son un
+ * instante y la zona importa.
+ */
+types.setTypeParser(1082, (v) => v);
 
 /** Errores transitorios de Postgres que vale la pena reintentar. */
 const SERIALIZATION_FAILURE = '40001';

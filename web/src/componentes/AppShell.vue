@@ -18,6 +18,15 @@ const grupos = [
     ],
   },
   {
+    titulo: 'Alquileres',
+    items: [
+      { a: '/vencimientos', icono: 'campana', texto: 'Vencimientos' },
+      { a: '/contratos', icono: 'documento', texto: 'Contratos' },
+      { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
+      { a: '/indices', icono: 'grafico', texto: 'Índices' },
+    ],
+  },
+  {
     titulo: 'Comercial',
     items: [
       { a: '/oportunidades', icono: 'embudo', texto: 'Oportunidades' },
