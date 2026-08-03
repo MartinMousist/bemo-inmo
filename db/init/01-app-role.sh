@@ -20,17 +20,21 @@ fi
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
      -v app_user="$APP_DB_USER" -v app_pass="$APP_DB_PASSWORD" <<'EOSQL'
-  CREATE ROLE app_role NOLOGIN;
+CREATE ROLE app_role NOLOGIN;
 
-  SELECT format('CREATE ROLE %I LOGIN PASSWORD %L IN ROLE app_role', :'app_user', :'app_pass')
-  \gexec
+-- format() con %I y %L escapa identificadores y literales: el nombre y la
+-- contraseña salen del entorno y no se interpolan a mano.
+-- \gexec tiene que arrancar en la columna 0.
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L IN ROLE app_role', :'app_user', :'app_pass')
+\gexec
 
-  -- nadie crea objetos en public salvo el owner
-  REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+-- nadie crea objetos en public salvo el owner
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
-  SELECT format('GRANT CONNECT ON DATABASE %I TO app_role', current_database())
-  \gexec
-  GRANT USAGE ON SCHEMA public TO app_role;
+SELECT format('GRANT CONNECT ON DATABASE %I TO app_role', current_database())
+\gexec
+
+GRANT USAGE ON SCHEMA public TO app_role;
 EOSQL
 
 echo "rol de aplicación '$APP_DB_USER' creado (miembro de app_role)"

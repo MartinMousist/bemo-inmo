@@ -1,0 +1,11 @@
+# El node_modules del host NUNCA entra a la imagen: sus binarios nativos están
+# compilados para macOS/arm64 y el contenedor es Linux. Además pesa cientos de MB
+# y anularía el propósito del npm install del Dockerfile.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.git
