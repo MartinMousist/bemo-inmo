@@ -23,7 +23,9 @@ COPY --from=build /app/migrations ./migrations
 USER node
 EXPOSE 3000
 
+# 127.0.0.1 y no localhost: localhost resuelve también a ::1 y busybox wget
+# prueba IPv6 primero, contra una app que escucha en IPv4.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
-  CMD wget -qO- http://localhost:3000/v1/health/live >/dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/v1/health/live >/dev/null || exit 1
 
 CMD ["node", "dist/main.js"]

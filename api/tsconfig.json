@@ -20,6 +20,11 @@
     "noImplicitAny": true,
     "forceConsistentCasingInFileNames": true
   },
+  // Incluye test/ para que `tsc --noEmit` chequee también los tests.
+  // Para COMPILAR se usa tsconfig.build.json, que excluye test/: si test/ entra
+  // en la compilación, TypeScript infiere rootDir en la raíz del proyecto y la
+  // salida queda en dist/src/ en vez de dist/, rompiendo toda ruta relativa a
+  // __dirname (migraciones, seeds).
   "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }
