@@ -51,22 +51,30 @@ reconstruye la imagen.
 
 ---
 
-## Etapa 2 — Auth, tenant y aislamiento
+## Etapa 2 — Auth, tenant y aislamiento ✅ CERRADA (2026-08-03)
 
 **Qué**: la capa que define quién ve qué.
 
-- [ ] Signup / login / refresh con rotación y detección de reuso
-- [ ] Refresh token en cookie httpOnly. Renovación automática single-flight
-- [ ] Guard de rutas con `?next=`. Logout que limpia estado local **primero**
-- [ ] Membresías y los cuatro roles (`owner`, `admin`, `agente`, `contable`)
-- [ ] Invitaciones por email
-- [ ] Auditoría append-only funcionando
+- [x] Signup / login / refresh con rotación y detección de reuso
+- [x] Refresh token en cookie httpOnly. Renovación automática single-flight
+- [x] Guard de rutas con `?next=`. Logout que limpia estado local **primero**
+- [x] Membresías y los cuatro roles (`owner`, `admin`, `agente`, `contable`)
+- [x] Invitaciones — se genera el enlace; **el envío por correo queda para la etapa 7**,
+      junto con el resto de las notificaciones. La UI lo dice.
+- [x] Auditoría append-only funcionando, incluidas las denegaciones
 
-**Gate**: un test que prueba **cero fuga** entre dos inmobiliarias sembradas — todos los
-list/get, y un update cruzado que da 404 y no un 200 vacío.
-**Esfuerzo**: 4-5 días.
-**Trampa conocida**: poner un `await` de red en el logout rompe el redirect, porque el
-guard del router todavía ve el token viejo.
+**Gate**: cero fuga entre dos inmobiliarias.
+**Cerrado con**: 55 tests contra Postgres real, entre ellos la matriz de permisos
+table-driven (5 endpoints × 5 identidades) y `test/fuga.spec.ts`. Verificado además con
+**dos mutaciones deliberadas**: sacar un `@Roles` hace fallar 3 tests de la matriz, y
+sacar un `withTenant` hace fallar el de aislamiento.
+**Esfuerzo real**: 1 sesión.
+
+**Dos decisiones que conviene recordar**:
+- El guard es **global y default-deny**: una ruta es pública sólo con `@Publico()`. Si
+  fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
+- Olvidarse un `withTenant` **rompe la feature, no filtra datos**: sin contexto, las
+  policies devuelven cero filas. Verificado con la mutación.
 
 ---
 

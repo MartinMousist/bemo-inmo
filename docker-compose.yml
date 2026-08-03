@@ -35,6 +35,7 @@ services:
       DATABASE_OWNER_URL: postgres://${DB_OWNER_USER}:${DB_OWNER_PASSWORD}@db:5432/${DB_NAME}
       MIGRATE_ON_BOOT: "true"
       SEED_ON_BOOT: "true"
+      JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: http://localhost:5173
     volumes:
       - ./api:/app

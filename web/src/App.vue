@@ -1,189 +1,132 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useAuth } from './stores/auth';
+import { cuandoSePierdaLaSesion } from './api/cliente';
+import { etiquetaRol } from './dominio/roles';
+
+const auth = useAuth();
+const router = useRouter();
+const route = useRoute();
 
 /**
- * Shell de la etapa 1. No hay datos falsos: el estado de la API es real y el
- * catálogo dice la verdad sobre qué existe y qué no.
+ * El layout lo decide la RUTA, no el estado de sesión.
  *
- * Regla del playbook §9: no se simulan datos, se simula el futuro. Cada capacidad
- * lleva su estado; cuando una se termina se cambia acá y la pantalla se actualiza
- * sola. Un control apagado y explicado se lee como roadmap; uno ausente se lee
- * como olvido.
+ * Atarlo a `auth.autenticado` parece equivalente y no lo es: alguien logueado
+ * que abre un enlace de invitación termina viendo la pantalla partida metida
+ * adentro del shell, con la topbar arriba. La ruta sabe qué layout le
+ * corresponde; el estado de sesión no.
  */
+const sinShell = computed(() => route.meta.publica === true);
 
-type Estado = 'available' | 'soon';
-
-const capacidades: Array<{ etapa: number; nombre: string; estado: Estado }> = [
-  { etapa: 1, nombre: 'Fundaciones: base, migraciones y RLS', estado: 'available' },
-  { etapa: 2, nombre: 'Auth, roles y aislamiento entre inmobiliarias', estado: 'soon' },
-  { etapa: 3, nombre: 'Propiedades, personas y oportunidades', estado: 'soon' },
-  { etapa: 4, nombre: 'Alquileres: contratos, índices y liquidaciones', estado: 'soon' },
-  { etapa: 5, nombre: 'Ventas y comisiones por punta', estado: 'soon' },
-  { etapa: 6, nombre: 'Publicación a portales', estado: 'soon' },
-];
-
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/v1';
-
-type Salud = { estado: 'cargando' | 'ok' | 'caida'; detalle: string };
-const salud = ref<Salud>({ estado: 'cargando', detalle: 'Consultando…' });
-
-async function verificarApi(): Promise<void> {
-  salud.value = { estado: 'cargando', detalle: 'Consultando…' };
-  try {
-    const res = await fetch(`${API}/health`);
-    if (!res.ok) {
-      // El contrato de error es RFC 9457: el front lee `code`, no `detail`.
-      const problema = await res.json().catch(() => null);
-      salud.value = {
-        estado: 'caida',
-        detalle: problema?.code ?? `HTTP ${res.status}`,
-      };
-      return;
-    }
-    const cuerpo = await res.json();
-    salud.value = { estado: 'ok', detalle: `API y base respondiendo · db: ${cuerpo.db}` };
-  } catch {
-    salud.value = { estado: 'caida', detalle: 'No se pudo contactar la API' };
-  }
-}
-
-onMounted(verificarApi);
+// Si la renovación falla, se cierra la sesión y se vuelve al login con aviso.
+// Silencioso sería peor: el usuario vería la app vacía sin saber por qué.
+cuandoSePierdaLaSesion(() => {
+  auth.limpiar();
+  router.replace({ path: '/login', query: { motivo: 'expirada' } });
+});
 
 const tema = ref<'light' | 'dark'>(
   (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'light',
 );
 
-function alternarTema(): void {
+function alternarTema() {
   tema.value = tema.value === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', tema.value);
   localStorage.setItem('bemo-inmo:theme', tema.value);
 }
 
-const chipSalud = computed(() => {
-  if (salud.value.estado === 'ok') return 'chip ok';
-  if (salud.value.estado === 'caida') return 'chip err';
-  return 'chip';
-});
+const iniciales = computed(() =>
+  (auth.usuario?.nombre ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join(''),
+);
+
+async function salir() {
+  await auth.logout();
+  router.replace('/login');
+}
 </script>
 
 <template>
-  <main class="shell">
-    <header class="cabecera">
-      <div>
-        <h1>Bemo <span class="vertical">INMO</span></h1>
-        <p class="bajada">Gestión inmobiliaria — alquileres, ventas y publicaciones</p>
+  <!-- Login, registro e invitación traen su propio layout partido. -->
+  <RouterView v-if="sinShell" />
+
+  <div v-else class="shell">
+    <header class="topbar">
+      <div class="marca">Bemo <span>INMO</span></div>
+      <div class="row">
+        <span class="tenant">{{ auth.tenant?.nombre }}</span>
+        <span class="chip">{{ etiquetaRol(auth.rol) }}</span>
+        <span class="avatar" :title="auth.usuario?.nombre">{{ iniciales }}</span>
+        <button class="btn secondary sm" type="button" @click="alternarTema">
+          {{ tema === 'dark' ? 'Claro' : 'Oscuro' }}
+        </button>
+        <button class="btn secondary sm" type="button" @click="salir">Salir</button>
       </div>
-      <button class="btn secondary" type="button" @click="alternarTema">
-        {{ tema === 'dark' ? 'Tema claro' : 'Tema oscuro' }}
-      </button>
     </header>
 
-    <section class="card stack">
-      <div class="row" style="justify-content: space-between">
-        <h2>Estado del sistema</h2>
-        <span :class="chipSalud">{{
-          salud.estado === 'ok' ? 'En línea' : salud.estado === 'caida' ? 'Caída' : '…'
-        }}</span>
-      </div>
-      <p class="detalle mono">{{ salud.detalle }}</p>
-      <div class="row">
-        <button class="btn secondary" type="button" @click="verificarApi">
-          Volver a verificar
-        </button>
-        <span class="endpoint mono">{{ API }}/health</span>
-      </div>
-    </section>
-
-    <section class="card stack">
-      <h2>Qué existe hoy</h2>
-      <ul class="lista">
-        <li v-for="c in capacidades" :key="c.etapa" class="item">
-          <span class="etapa mono">Etapa {{ c.etapa }}</span>
-          <span class="nombre">{{ c.nombre }}</span>
-          <span :class="c.estado === 'available' ? 'chip ok' : 'chip'">
-            {{ c.estado === 'available' ? 'Disponible' : 'En desarrollo' }}
-          </span>
-        </li>
-      </ul>
-    </section>
-  </main>
+    <main class="contenido">
+      <RouterView />
+    </main>
+  </div>
 </template>
 
 <style scoped>
 .shell {
-  max-width: 780px;
-  margin: 0 auto;
-  padding: var(--s-3xl) var(--s-xl);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-xl);
+  min-height: 100vh;
 }
 
-.cabecera {
+.topbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--s-lg);
+  padding: var(--s-md) var(--s-xl);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
-.vertical {
+.marca {
+  font-family: var(--font-title);
+  font-size: 18px;
+}
+.marca span {
   font-family: var(--font-ui);
   font-weight: 400;
-  letter-spacing: 0.02em;
   color: var(--accent);
 }
 
-.bajada {
-  margin: var(--s-xs) 0 0;
-  color: var(--muted);
-}
-
-.detalle {
-  margin: 0;
+.tenant {
   color: var(--muted);
   font-size: 13px;
 }
 
-.endpoint {
-  color: var(--muted-2);
-  font-size: 12px;
-}
-
-.lista {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.item {
-  display: grid;
-  grid-template-columns: 72px 1fr auto;
+.avatar {
+  display: inline-flex;
   align-items: center;
-  gap: var(--s-md);
-  padding: var(--s-md) 0;
-  border-bottom: 1px solid var(--line);
-}
-.item:last-child {
-  border-bottom: none;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.etapa {
+.btn.sm {
+  padding: 4px var(--s-md);
   font-size: 12px;
-  color: var(--muted-2);
 }
 
-.nombre {
-  color: var(--ink-2);
-}
-
-@media (max-width: 560px) {
-  .item {
-    grid-template-columns: 1fr auto;
-  }
-  .etapa {
-    grid-column: 1 / -1;
-  }
+.contenido {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--s-2xl) var(--s-xl);
 }
 </style>

@@ -2,8 +2,10 @@ import 'reflect-metadata';
 import { join } from 'node:path';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { ProblemDetailsFilter } from './common/problem-details.filter';
@@ -29,11 +31,18 @@ async function bootstrap(): Promise<void> {
     logger.log('Seed demo aplicado');
   }
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: false,
+  });
 
   app.use(helmet());
+  app.use(cookieParser());
   app.use(express.json({ limit: env.BODY_LIMIT }));
   app.use(express.urlencoded({ extended: true, limit: env.BODY_LIMIT }));
+
+  // Necesario para que req.ip sea la IP real detrás del proxy, y no la del
+  // proxy. La auditoría con la IP equivocada es peor que sin IP.
+  app.set('trust proxy', 1);
 
   app.setGlobalPrefix('v1');
   app.useGlobalFilters(new ProblemDetailsFilter());

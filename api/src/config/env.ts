@@ -23,11 +23,38 @@ const schema = z.object({
 
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   BODY_LIMIT: z.string().default('1mb'),
+
+  /**
+   * Secreto de firma de los access tokens. Sin default: si falta, la app no
+   * levanta. Un default acá sería una clave de producción que nadie configuró.
+   * Mínimo 32 caracteres — una clave corta se rompe por fuerza bruta.
+   */
+  JWT_SECRET: z.string().min(32, 'debe tener al menos 32 caracteres'),
+
+  /** Access token corto: si se filtra, la ventana de daño es chica. */
+  ACCESS_TTL_MIN: z.coerce.number().int().positive().max(60).default(15),
+  /** Refresh largo, pero rota en cada uso. */
+  REFRESH_TTL_DIAS: z.coerce.number().int().positive().max(90).default(14),
+
+  /**
+   * Dominio de la cookie de refresh. Vacío = el host exacto, que es lo correcto.
+   * NUNCA poner `.bemo.com.ar`: una cookie de dominio padre la comparten todos
+   * los subdominios, y un XSS en cualquier producto del grupo alcanzaría esta
+   * sesión.
+   */
+  COOKIE_DOMAIN: z.string().default(''),
+  COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
 });
 
-export type Env = Omit<z.infer<typeof schema>, 'MIGRATE_ON_BOOT' | 'SEED_ON_BOOT'> & {
+type Crudo = z.infer<typeof schema>;
+
+export type Env = Omit<
+  Crudo,
+  'MIGRATE_ON_BOOT' | 'SEED_ON_BOOT' | 'COOKIE_SECURE'
+> & {
   MIGRATE_ON_BOOT: boolean;
   SEED_ON_BOOT: boolean;
+  COOKIE_SECURE: boolean;
   isProduction: boolean;
 };
 
@@ -50,11 +77,23 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ...e,
     MIGRATE_ON_BOOT: e.MIGRATE_ON_BOOT === 'true',
     SEED_ON_BOOT: e.SEED_ON_BOOT === 'true',
+    COOKIE_SECURE: e.COOKIE_SECURE === 'true',
     isProduction: e.NODE_ENV === 'production',
   };
 
-  if (cached.isProduction && cached.SEED_ON_BOOT) {
-    throw new Error('SEED_ON_BOOT no puede estar activo en producción.');
+  if (cached.isProduction) {
+    if (cached.SEED_ON_BOOT) {
+      throw new Error('SEED_ON_BOOT no puede estar activo en producción.');
+    }
+    if (!cached.COOKIE_SECURE) {
+      throw new Error('COOKIE_SECURE tiene que ser true en producción.');
+    }
+    if (cached.COOKIE_DOMAIN.startsWith('.')) {
+      throw new Error(
+        `COOKIE_DOMAIN no puede ser un dominio padre ("${cached.COOKIE_DOMAIN}"): ` +
+          'la cookie de sesión quedaría compartida con todos los subdominios.',
+      );
+    }
   }
 
   return cached;
