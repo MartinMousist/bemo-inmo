@@ -39,7 +39,11 @@ export async function crearApp(): Promise<INestApplication> {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
-  await app.init();
+  // listen(0) y no init(): supertest, si el server NO está escuchando, hace
+  // listen(0) por cada request. Con requests en paralelo eso abre varios
+  // listeners sobre el mismo server y las conexiones se caen con ECONNRESET
+  // — que parece un bug de concurrencia de la app y es del arnés de test.
+  await app.listen(0);
   return app;
 }
 

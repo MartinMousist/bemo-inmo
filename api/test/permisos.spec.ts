@@ -58,6 +58,44 @@ const CASOS: Caso[] = [
     permitidos: ['owner', 'admin', 'agente', 'contable'],
   },
   {
+    nombre: 'GET /personas',
+    metodo: 'get',
+    ruta: '/v1/personas',
+    permitidos: ['owner', 'admin', 'agente', 'contable'],
+  },
+  {
+    nombre: 'POST /personas',
+    metodo: 'post',
+    ruta: '/v1/personas',
+    cuerpo: { nombre: 'Persona Test' },
+    permitidos: ['owner', 'admin', 'agente'],
+  },
+  {
+    nombre: 'GET /propiedades',
+    metodo: 'get',
+    ruta: '/v1/propiedades',
+    permitidos: ['owner', 'admin', 'agente', 'contable'],
+  },
+  {
+    nombre: 'POST /propiedades',
+    metodo: 'post',
+    ruta: '/v1/propiedades',
+    cuerpo: { calle: 'San Martin', numero: '100', tipo: 'departamento' },
+    permitidos: ['owner', 'admin', 'agente'],
+  },
+  {
+    nombre: 'GET /oportunidades',
+    metodo: 'get',
+    ruta: '/v1/oportunidades',
+    permitidos: ['owner', 'admin', 'agente', 'contable'],
+  },
+  {
+    nombre: 'GET /reservas',
+    metodo: 'get',
+    ruta: '/v1/reservas',
+    permitidos: ['owner', 'admin', 'agente', 'contable'],
+  },
+  {
     nombre: 'GET /health',
     metodo: 'get',
     ruta: '/v1/health',
@@ -90,10 +128,15 @@ describe('Matriz de permisos', () => {
       it(`${caso.nombre} — ${etiqueta} a ${quien}`, async () => {
         let req = request(app.getHttpServer())[caso.metodo](caso.ruta);
         if (quien !== 'anonimo') req = req.set(...auth(inmo.tokens[quien]));
-        // Un cuerpo distinto por rol: si dos roles pudieran, el segundo chocaría
-        // con la invitación pendiente del primero y el test mentiría.
+        // Cuerpo distinto por rol: si dos roles pueden, el segundo no debe
+        // chocar con lo que creó el primero (invitación pendiente, documento
+        // duplicado) — el test estaría midiendo un conflicto, no un permiso.
         if (caso.cuerpo) {
-          req = req.send({ ...caso.cuerpo, email: `${quien}.${caso.cuerpo.email}` });
+          const cuerpo: Record<string, unknown> = { ...caso.cuerpo };
+          if (typeof cuerpo.email === 'string') cuerpo.email = `${quien}.${cuerpo.email}`;
+          if (typeof cuerpo.nombre === 'string') cuerpo.nombre = `${cuerpo.nombre} ${quien}`;
+          if (typeof cuerpo.numero === 'string') cuerpo.numero = `${cuerpo.numero}${quien.length}`;
+          req = req.send(cuerpo);
         }
 
         const res = await req;

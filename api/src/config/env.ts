@@ -44,6 +44,13 @@ const schema = z.object({
    */
   COOKIE_DOMAIN: z.string().default(''),
   COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
+
+  /**
+   * Opcional a propósito. Sin key la app funciona igual: no geocodifica, no
+   * inventa coordenadas, y la UI ofrece cargar lat/lng a mano diciendo por qué.
+   * Un default falso acá sería una propiedad ubicada en el medio del océano.
+   */
+  GOOGLE_MAPS_API_KEY: z.string().default(''),
 });
 
 type Crudo = z.infer<typeof schema>;

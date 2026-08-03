@@ -4,30 +4,29 @@ import { useAuth } from './stores/auth';
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('./paginas/LoginPage.vue'),
-      meta: { publica: true },
-    },
-    {
-      path: '/registrar',
-      name: 'registrar',
-      component: () => import('./paginas/RegistrarPage.vue'),
-      meta: { publica: true },
-    },
+    { path: '/login', component: () => import('./paginas/LoginPage.vue'), meta: { publica: true } },
+    { path: '/registrar', component: () => import('./paginas/RegistrarPage.vue'), meta: { publica: true } },
     {
       path: '/invitacion/:token',
-      name: 'invitacion',
       component: () => import('./paginas/InvitacionPage.vue'),
       meta: { publica: true, permiteSesion: true },
     },
-    {
-      path: '/',
-      name: 'equipo',
-      component: () => import('./paginas/EquipoPage.vue'),
-    },
+
+    { path: '/', redirect: '/propiedades' },
+    { path: '/propiedades', component: () => import('./paginas/PropiedadesPage.vue') },
+    { path: '/propiedades/nueva', component: () => import('./paginas/PropiedadFormPage.vue') },
+    { path: '/propiedades/:id/editar', component: () => import('./paginas/PropiedadFormPage.vue') },
+    { path: '/propiedades/:id', component: () => import('./paginas/PropiedadDetallePage.vue') },
+    { path: '/personas', component: () => import('./paginas/PersonasPage.vue') },
+    { path: '/personas/nueva', component: () => import('./paginas/PersonaFormPage.vue') },
+    { path: '/oportunidades', component: () => import('./paginas/OportunidadesPage.vue') },
+    { path: '/oportunidades/nueva', component: () => import('./paginas/OportunidadFormPage.vue') },
+    { path: '/reservas', component: () => import('./paginas/ReservasPage.vue') },
+    { path: '/equipo', component: () => import('./paginas/EquipoPage.vue') },
+
+    { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },
   ],
+  scrollBehavior: () => ({ top: 0 }),
 });
 
 /**
@@ -36,15 +35,12 @@ const router = createRouter({
  */
 router.beforeEach(async (to) => {
   const auth = useAuth();
-
-  // Al primer navigate todavía no se intentó restaurar la sesión desde la cookie.
   if (!auth.listo) await auth.restaurar();
 
   if (to.meta.publica) {
     // Si ya está adentro, no tiene sentido mostrarle el login…
-    // …salvo en la invitación: alguien puede estar logueado con una cuenta y
-    // abrir una invitación a otra inmobiliaria. Rebotarlo al inicio le dejaría
-    // el enlace inservible sin explicación.
+    // …salvo en la invitación: alguien logueado puede abrir una invitación a
+    // otra inmobiliaria, y rebotarlo dejaría el enlace inservible.
     if (auth.autenticado && !to.meta.permiteSesion) return { path: '/' };
     return true;
   }
@@ -53,7 +49,6 @@ router.beforeEach(async (to) => {
     // `next` para volver adonde quería ir, en vez de tirarlo al inicio.
     return { path: '/login', query: to.fullPath === '/' ? {} : { next: to.fullPath } };
   }
-
   return true;
 });
 

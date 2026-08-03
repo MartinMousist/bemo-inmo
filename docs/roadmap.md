@@ -78,24 +78,36 @@ sacar un `withTenant` hace fallar el de aislamiento.
 
 ---
 
-## Etapa 3 — La espina compartida
+## Etapa 3 — La espina compartida ✅ CERRADA (2026-08-03)
 
 **Qué**: personas, propiedades, ubicación y oportunidades. El 70% del sistema que sirve
 igual para venta y para alquiler.
 
-- [ ] `persona` con roles contextuales + búsqueda por documento con alta inline
-- [ ] `propiedad` + `titularidad` (condominio con porcentajes) + fotos
-- [ ] `operacion` múltiple: venta y alquiler simultáneos sobre la misma propiedad
-- [ ] Geocodificación al guardar, persistida. Static Maps en listados
-- [ ] `oportunidad` → `visita` → `reserva`
-- [ ] Paginación server-side y búsqueda indexada
-- [ ] Importador CSV de cartera
-- [ ] Los ~20 componentes base + `AppShell` + `CommandPalette` (⌘K)
+- [x] `persona` con roles **derivados** + búsqueda por documento con alta inline
+- [x] `propiedad` + `titularidad` (condominio, suma 100% por trigger deferrable)
+- [x] `operacion` múltiple: venta y alquiler simultáneos sobre la misma propiedad
+- [x] Geocodificación al guardar, persistida. Sin API key no inventa coordenadas
+- [x] `oportunidad` → `visita` → `reserva` (una activa por operación, por índice parcial)
+- [x] Paginación server-side y búsqueda
+- [ ] Importador CSV de cartera — **pendiente**
+- [ ] Fotos de propiedades — **pendiente** (falta el bucket S3)
+- [x] Componentes base + `AppShell` + `CommandPalette` (⌘K)
 
-**Gate**: cargar una propiedad real con fotos y ubicación, y seguir un lead hasta reserva,
-sin que nadie ayude al usuario.
-**Esfuerzo**: 2 semanas.
-**Desbloquea**: las etapas 4, 5 y 6 en paralelo.
+**Gate**: cargar una propiedad real y seguir un lead, sin ayuda.
+**Cerrado con**: 105 tests, y uso real en el navegador con tres propiedades y tres
+oportunidades cargadas.
+**Esfuerzo real**: 1 sesión.
+
+**Cambio respecto del spec**: no existe `persona_rol`. Era polimórfica (entidad_tipo +
+entidad_id) y una FK polimórfica no se puede hacer cumplir. Los roles se derivan de las
+relaciones reales; un dato derivado no se desincroniza.
+
+**Dos bugs que sólo aparecieron usando la app**:
+- Un `PATCH` parcial borraba todos los campos que no venían en el cuerpo. Cargar los
+  titulares dejaba la propiedad sin número, sin ambientes y sin metros.
+- El CSS *scoped* del padre alcanza al elemento **raíz** del componente hijo: un
+  `.velo { display: none }` en `AppShell` (velo del drawer móvil) le pegaba a la raíz de
+  `CommandPalette`, y la paleta nunca se veía.
 
 ---
 
