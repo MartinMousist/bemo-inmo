@@ -1,0 +1,15 @@
+title = "Bemo INMO — gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders de documentación y ejemplos"
+paths = [
+  '''\.env\.example$''',
+  '''docs/.*\.md$''',
+  '''db/init/.*\.sh$''',
+]
+regexes = [
+  '''cambiame_(owner|app)''',
+]

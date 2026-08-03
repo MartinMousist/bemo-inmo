@@ -1,0 +1,47 @@
+/**
+ * Catálogo de códigos de error estables.
+ *
+ * El front lee `code`, nunca `detail`. `detail` es texto para mostrarle a una
+ * persona y puede cambiar de redacción sin aviso; `code` es contrato y cambiarlo
+ * rompe clientes. Cada código nuevo se agrega acá y en ningún otro lado.
+ */
+export const ErrorCode = {
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
+  UNAUTHENTICATED: 'UNAUTHENTICATED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  TENANT_CONTEXT_MISSING: 'TENANT_CONTEXT_MISSING',
+  DB_UNAVAILABLE: 'DB_UNAVAILABLE',
+  INTERNAL: 'INTERNAL',
+} as const;
+
+export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+export class AppError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: ErrorCodeValue,
+    readonly detail: string,
+    readonly title?: string,
+  ) {
+    super(detail);
+    this.name = 'AppError';
+  }
+
+  static notFound(detail: string): AppError {
+    return new AppError(404, ErrorCode.NOT_FOUND, detail, 'Not Found');
+  }
+
+  static forbidden(detail: string): AppError {
+    return new AppError(403, ErrorCode.FORBIDDEN, detail, 'Forbidden');
+  }
+
+  static tenantContextMissing(): AppError {
+    return new AppError(
+      500,
+      ErrorCode.TENANT_CONTEXT_MISSING,
+      'La operación requiere contexto de inmobiliaria y no se fijó ninguno.',
+      'Internal Server Error',
+    );
+  }
+}

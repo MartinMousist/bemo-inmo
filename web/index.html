@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es-AR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bemo INMO</title>
+
+    <!--
+      Tema ANTES del primer pintado. Inline y bloqueante a propósito: si esto
+      fuera un módulo diferido, cada carga arrancaría en claro y pegaría un
+      destello blanco antes de corregirse. Es el detalle que casi todos se olvidan.
+    -->
+    <script>
+      (function () {
+        try {
+          var guardado = localStorage.getItem('bemo-inmo:theme');
+          var tema =
+            guardado ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', tema);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

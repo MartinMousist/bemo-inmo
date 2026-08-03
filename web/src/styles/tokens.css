@@ -1,0 +1,173 @@
+/* Tokens de Bemo INMO. Fuente: DESIGN.md — no editar sin actualizar ese archivo.
+   Ningún componente define un color: todos salen de acá. */
+
+:root {
+  /* ── Neutros cálidos (papel). El 95% de la interfaz ── */
+  --bg:          #fbfaf8;
+  --surface:     #ffffff;
+  --surface-2:   #f4f2ee;
+  --surface-3:   #ebe8e2;
+  --line:        #e6e3dd;
+  --line-strong: #d5d1c9;
+
+  --ink:     #1a1815;
+  --ink-2:   #3a3630;
+  --muted:   #6b6560;
+  --muted-2: #928b83;
+
+  /* ── Acento: uno solo. Azul de estilográfica ── */
+  --accent:       #1e3a5f;
+  --accent-hover: #162c48;
+  --accent-tint:  #e8edf3;
+  --accent-line:  #c3d0de;
+  --on-accent:    #ffffff;
+
+  /* ── Semánticos, apagados ── */
+  --success: #2f6b4f;  --success-tint: #e6f0ea;  --success-line: #bfd9cc;
+  --warning: #9a6b0f;  --warning-tint: #f7efdd;  --warning-line: #e3d2ab;
+  --danger:  #a33a2e;  --danger-tint:  #f7e8e5;  --danger-line:  #e6c5bf;
+
+  /* ── Radios: nada de redondeo burbuja ── */
+  --r-sm: 6px;  --r-md: 8px;  --r-lg: 12px;
+
+  /* ── Espaciado, base 4 ── */
+  --s-xs: 4px;  --s-sm: 8px;  --s-md: 12px;  --s-lg: 16px;
+  --s-xl: 24px; --s-2xl: 32px; --s-3xl: 48px;
+
+  /* ── Elevación mínima ── */
+  --sh-1: 0 1px 2px rgba(26, 24, 21, .05);
+  --sh-2: 0 4px 12px rgba(26, 24, 21, .08);
+
+  /* ── Foco siempre visible ── */
+  --ring: 0 0 0 3px rgba(30, 58, 95, .18);
+
+  /* ── Velocidad = confianza ── */
+  --t-micro: 90ms;  --t-short: 170ms;
+
+  /* ── Tipografía (capa familia BEMO) ── */
+  --font-title: 'Newsreader', Georgia, serif;
+  --font-ui:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono:  'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+[data-theme='dark'] {
+  --bg:          #161513;
+  --surface:     #1e1d1a;
+  --surface-2:   #262421;
+  --surface-3:   #302d29;
+  --line:        #34312c;
+  --line-strong: #46423b;
+
+  --ink:     #f0ede7;
+  --ink-2:   #d6d1c9;
+  --muted:   #9d968c;
+  --muted-2: #746e66;
+
+  --accent:       #8fb3d9;
+  --accent-hover: #a6c4e4;
+  --accent-tint:  #1c2a3a;
+  --accent-line:  #35506e;
+  /* Oscuro, no blanco: un acento claro con texto blanco no contrasta. */
+  --on-accent:    #10203a;
+
+  --success: #6fbe97;  --success-tint: #1b2f26;  --success-line: #2f5544;
+  --warning: #d9ab55;  --warning-tint: #33290f;  --warning-line: #5c4a1d;
+  --danger:  #d98878;  --danger-tint:  #341f1b;  --danger-line:  #5e3730;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .3);
+  --sh-2: 0 4px 12px rgba(0, 0, 0, .4);
+  --ring: 0 0 0 3px rgba(143, 179, 217, .22);
+}
+
+/* ── Base ── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { color-scheme: light; }
+[data-theme='dark'] html,
+html:has([data-theme='dark']) { color-scheme: dark; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--t-short), color var(--t-short);
+}
+
+h1, h2, h3 {
+  font-family: var(--font-title);
+  font-weight: 500;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: 28px; }
+h2 { font-size: 20px; }
+h3 { font-size: 16px; }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-sm);
+}
+
+/* Cualquier cosa con números en columna. No es opcional. */
+.num, table td, table th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Componentes base ── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+  padding: var(--s-xl);
+}
+
+.btn {
+  font: inherit;
+  font-weight: 500;
+  padding: var(--s-sm) var(--s-lg);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+  transition: background var(--t-micro), border-color var(--t-micro);
+}
+.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.btn.secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.btn.secondary:hover { background: var(--surface-2); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-xs);
+  padding: 2px var(--s-sm);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.chip.ok      { background: var(--success-tint); border-color: var(--success-line); color: var(--success); }
+.chip.warn    { background: var(--warning-tint); border-color: var(--warning-line); color: var(--warning); }
+.chip.err     { background: var(--danger-tint);  border-color: var(--danger-line);  color: var(--danger); }
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.stack { display: flex; flex-direction: column; gap: var(--s-lg); }
+.row   { display: flex; align-items: center; gap: var(--s-md); }

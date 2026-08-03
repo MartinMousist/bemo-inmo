@@ -1,0 +1,17 @@
+# Node 20, no la última. Node 26 inyecta un localStorage experimental que rompe
+# la suite de tests con errores que no son bugs reales.
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Las dependencias se instalan en la imagen. docker-compose monta ./api encima
+# con un volumen anónimo en /app/node_modules que preserva ESTE node_modules.
+# Instalar en el host no alcanza: rompe al reiniciar, no al instalar (error #7
+# del playbook).
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+CMD ["npm", "run", "start:dev"]
