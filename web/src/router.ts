@@ -13,6 +13,15 @@ const router = createRouter({
     { path: '/producto', component: () => import('./paginas/LandingPage.vue'),
       meta: { publica: true, permiteSesion: true } },
     { path: '/login', component: () => import('./paginas/LoginPage.vue'), meta: { publica: true } },
+
+    // El portal del propietario. Público y con el token en la URL: quien lo abre
+    // NO tiene sesión y no tiene por qué tenerla. `permiteSesion` para que un
+    // empleado pueda abrirlo y ver exactamente lo que ve el dueño.
+    {
+      path: '/propietario/:token',
+      component: () => import('./paginas/PortalPropietarioPage.vue'),
+      meta: { publica: true, permiteSesion: true },
+    },
     { path: '/registrar', component: () => import('./paginas/RegistrarPage.vue'), meta: { publica: true } },
     {
       path: '/invitacion/:token',

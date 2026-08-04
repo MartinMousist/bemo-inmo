@@ -7,6 +7,7 @@ import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import UiIcon from '../componentes/UiIcon.vue';
 import GaleriaFotos from '../componentes/GaleriaFotos.vue';
+import EnlacePropietario from '../componentes/EnlacePropietario.vue';
 import {
   ETIQUETA_ESTADO_OP,
   ETIQUETA_OPERACION,
@@ -202,8 +203,12 @@ onMounted(cargar);
             <h2>Titulares</h2>
             <ul v-if="p.titulares.length" class="titulares">
               <li v-for="t in p.titulares" :key="t.personaId">
-                <span>{{ t.nombre }}</span>
-                <span class="mono pct">{{ t.porcentaje }}%</span>
+                <div class="quien">
+                  <span>{{ t.nombre }}</span>
+                  <span class="mono pct">{{ t.porcentaje }}%</span>
+                </div>
+                <!-- Acá está el dueño: es el lugar natural para darle acceso. -->
+                <EnlacePropietario :persona-id="t.personaId" :nombre="t.nombre" />
               </li>
             </ul>
             <p v-else class="vacio">Sin titulares cargados.</p>
@@ -255,7 +260,8 @@ h2 { font-size: 15px; }
 .mapa { width: 100%; height: 260px; border: 1px solid var(--line); border-radius: var(--r-md); }
 
 .titulares { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-sm); }
-.titulares li { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
+.titulares li { display: flex; flex-direction: column; font-size: 13px; color: var(--ink-2); }
+.titulares .quien { display: flex; justify-content: space-between; gap: var(--s-md); }
 .pct { color: var(--muted); }
 .vacio { margin: 0; color: var(--muted-2); font-size: 13px; }
 .volver { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--s-xs); }

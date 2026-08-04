@@ -62,6 +62,13 @@ import { PlantillasController } from './plantillas/plantillas.controller';
 import { PlantillasService } from './plantillas/plantillas.service';
 import { CajaController, InicioController } from './inicio/inicio.controller';
 import { CajaService } from './inicio/caja.service';
+import { NotasController } from './notas/notas.controller';
+import { NotasService } from './notas/notas.service';
+import {
+  AccesosPropietarioController,
+  PortalController,
+} from './portal/portal.controller';
+import { PortalService } from './portal/portal.service';
 import { InicioService } from './inicio/inicio.service';
 
 @Module({
@@ -75,6 +82,9 @@ import { InicioService } from './inicio/inicio.service';
     InicioController,
     CajaController,
     AuditoriaController,
+    NotasController,
+    AccesosPropietarioController,
+    PortalController,
     EquipoController,
     PersonasController,
     PropiedadesController,
@@ -104,6 +114,8 @@ import { InicioService } from './inicio/inicio.service';
     TokensService,
     InicioService,
     CajaService,
+    NotasService,
+    PortalService,
     EquipoService,
     PersonasService,
     PropiedadesService,

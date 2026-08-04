@@ -158,15 +158,24 @@ describe('Plantillas y pre-contratos', () => {
     expect(doc.body.texto).toContain('«locador.documento»');
   });
 
-  it('el recibo trae el monto en número y en letras', async () => {
+  it('un recibo generado desde el CONTRATO no tiene monto, y lo dice', async () => {
+    // Un recibo es por un cobro concreto, no por un contrato: el monto es lo que
+    // se pagó, no el alquiler pactado. Generarlo por la vía genérica deja los
+    // huecos a la vista en vez de imprimir el nominal, que con un pago parcial
+    // sería un comprobante por plata que nadie entregó.
+    //
+    // El camino correcto es `POST /v1/plantillas/recibo/:cobroId`, con su suite
+    // en `portal.spec.ts`.
     const lista = await http().get('/v1/plantillas').set(...como()).expect(200);
     const recibo = lista.body.find((p: { tipo: string }) => p.tipo === 'recibo');
 
     const doc = await http().post(`/v1/plantillas/${recibo.id}/generar`).set(...como())
       .send({ contratoId }).expect(201);
 
-    expect(doc.body.texto).toContain('ARS 485.000,00');
-    expect(doc.body.texto).toContain('cuatrocientos ochenta y cinco mil');
+    expect(doc.body.faltantes).toEqual(expect.arrayContaining(['cobro.monto']));
+    expect(doc.body.texto).toContain('«cobro.monto»');
+    // Y NO inventa el monto del contrato en su lugar.
+    expect(doc.body.texto).not.toContain('ARS 485.000,00');
   });
 
   it('la previsualización usa datos de ejemplo y no toca ningún contrato', async () => {

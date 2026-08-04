@@ -6,6 +6,7 @@ import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
+import PanelNotas from '../componentes/PanelNotas.vue';
 import { fecha, money, periodo as fmtPeriodo, proximidad } from '../dominio/formato';
 import type { Pagina } from '../dominio/pagina';
 
@@ -226,6 +227,10 @@ onMounted(cargar);
         Contrato de <strong>intermediación</strong>: no genera cuotas ni liquidaciones. La
         inmobiliaria cobró su comisión una vez y las partes arreglan entre ellas.
       </p>
+
+      <!-- Va último y siempre visible: el seguimiento es lo que se consulta
+           cuando alguien pregunta "¿qué pasó con este contrato?". -->
+      <PanelNotas entidad-tipo="contrato_alquiler" :entidad-id="c.id" />
     </template>
   </div>
 </template>

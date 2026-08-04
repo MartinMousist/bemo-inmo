@@ -17,6 +17,32 @@ export interface Documento {
   texto: string;
   faltantes: string[];
   plantilla: { id: string; nombre: string };
+  /** Un problema de la PLANTILLA, no del documento. La UI lo muestra aparte. */
+  advertencia?: string;
+}
+
+const ETIQUETA_MEDIO: Record<string, string> = {
+  efectivo: 'efectivo',
+  transferencia: 'transferencia bancaria',
+  cheque: 'cheque',
+  debito: 'débito',
+  otro: 'otro medio',
+};
+
+/** Dos decimales, como en toda la plata del sistema. */
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+const MESES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+/** "marzo de 2026". Se parte a mano: un `date` no pasa por `Date`. */
+function periodoLegible(iso: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(iso);
+  return m ? `${MESES[Number(m[2]) - 1]} de ${m[1]}` : iso;
 }
 
 @Injectable()
@@ -139,6 +165,113 @@ export class PlantillasService {
         texto: r.texto,
         faltantes: r.faltantes,
         plantilla: { id: p[0].id, nombre: p[0].nombre },
+      };
+    });
+  }
+
+  /**
+   * El recibo de un cobro concreto.
+   *
+   * Se registraba el cobro y no salía ningún papel; el inquilino que paga en
+   * efectivo pide comprobante, y hasta ahora la respuesta era escribirlo a mano.
+   *
+   * Lo importante es que el recibo lleva **lo que realmente se cobró**, no el
+   * alquiler nominal del contrato: si alguien pagó la mitad, el recibo dice la
+   * mitad. Por eso el contexto suma `cobro.*` a lo que ya había, y se avisa si
+   * la plantilla no lo usa.
+   */
+  async recibo(tenantId: string, cobroId: string): Promise<Documento> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows: c } = await ej.query<{
+        monto: string; moneda: string; fecha: string; medio: string;
+        comprobante: string | null; imputacion: string;
+        periodo: string; vence_el: string; contrato_id: string;
+        total: string; cobrado_total: string; registrado_por: string | null;
+      }>(
+        `SELECT co.monto, co.moneda, co.fecha, co.medio, co.comprobante, co.imputacion,
+                p.periodo, p.vence_el, p.total, c.id AS contrato_id,
+                u.nombre AS registrado_por,
+                coalesce((SELECT sum(x.monto) FROM cobro x
+                           WHERE x.periodo_id = p.id AND x.imputacion = 'alquiler'), 0)
+                  AS cobrado_total
+           FROM cobro co
+           JOIN periodo_alquiler p ON p.id = co.periodo_id
+           JOIN contrato_alquiler c ON c.id = p.contrato_id
+           LEFT JOIN usuario u ON u.id = co.registrado_por
+          WHERE co.id = $1`,
+        [cobroId],
+      );
+      if (!c.length) throw AppError.notFound('No se encontró ese cobro.');
+      const co = c[0];
+
+      const { rows: p } = await ej.query<{ id: string; nombre: string; contenido: string }>(
+        `SELECT id, nombre, contenido FROM plantilla_doc
+          WHERE tipo = 'recibo' AND activa ORDER BY nombre LIMIT 1`,
+      );
+      if (!p.length) {
+        throw new AppError(
+          422,
+          ErrorCode.NOT_FOUND,
+          'No hay ninguna plantilla de recibo. Cargá las plantillas base desde ' +
+            'Plantillas → «Cargar las base», o escribí la tuya.',
+          'Unprocessable Entity',
+        );
+      }
+
+      const base = await this.contextoDeContrato(ej, co.contrato_id);
+      const saldo = round2(Number(co.total) - Number(co.cobrado_total));
+
+      const ctx: Contexto = {
+        ...base,
+        // La moneda del RECIBO es la del cobro, no la del contrato: son la misma
+        // hoy, pero el formato `| moneda` la toma de la raíz y tiene que seguir
+        // al importe que se está recibiendo.
+        moneda: co.moneda,
+        cobro: {
+          monto: Number(co.monto),
+          moneda: co.moneda,
+          fecha: String(co.fecha).slice(0, 10),
+          medio: ETIQUETA_MEDIO[co.medio] ?? co.medio,
+          comprobante: co.comprobante,
+          concepto: co.imputacion === 'punitorio' ? 'interés por mora' : 'alquiler',
+          periodo: String(co.periodo).slice(0, 10),
+          venceEl: String(co.vence_el).slice(0, 10),
+          totalCuota: Number(co.total),
+          saldo,
+          // Un recibo por un pago parcial tiene que decirlo: si no, el inquilino
+          // guarda un papel que parece cancelar el mes entero.
+          //
+          // La bandera va en POSITIVO (`esParcial`) porque el motor de plantillas
+          // no tiene negación — y no se la voy a agregar: el día que tenga `!`,
+          // `&&` y paréntesis dejó de ser un motor de plantillas y es un lenguaje
+          // que alguien va a poder ejecutar desde un textarea.
+          esParcial: saldo > 0,
+          registradoPor: co.registrado_por,
+          // El período, ya escrito: tampoco hay filtro `periodo` en el motor, y
+          // formatear en el contexto es más simple que sumar sintaxis.
+          periodoTexto: periodoLegible(String(co.periodo)),
+        },
+      };
+
+      const r = renderizar(p[0].contenido, ctx);
+
+      // Si la plantilla no menciona el cobro, está imprimiendo el alquiler
+      // nominal del contrato. Con un pago parcial eso es un recibo por un monto
+      // que nadie pagó.
+      const usaElCobro = /\{\{\s*cobro\./.test(p[0].contenido);
+
+      return {
+        texto: r.texto,
+        faltantes: r.faltantes,
+        plantilla: { id: p[0].id, nombre: p[0].nombre },
+        ...(usaElCobro
+          ? {}
+          : {
+              advertencia:
+                'Esta plantilla de recibo no usa el monto realmente cobrado ' +
+                '({{ cobro.monto }}): está imprimiendo el alquiler del contrato. ' +
+                'Con un pago parcial, el recibo diría un monto que no se pagó.',
+            }),
       };
     });
   }

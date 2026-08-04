@@ -61,6 +61,18 @@ export class PlantillasController {
     return this.plantillas.borrar(a.tenantId, id);
   }
 
+  /**
+   * El recibo de un cobro concreto.
+   *
+   * Va acá y no en `/cobros/:id/recibo` porque es una plantilla renderizada, no
+   * una acción sobre el cobro: el cobro no cambia por imprimir su comprobante.
+   */
+  @Post('recibo/:cobroId')
+  @Roles('owner', 'admin', 'contable')
+  recibo(@ActorActual() a: Actor, @Param('cobroId', ParseUUIDPipe) cobroId: string) {
+    return this.plantillas.recibo(a.tenantId, cobroId);
+  }
+
   /** Genera el documento con los datos reales de un contrato. */
   @Post(':id/generar')
   @Roles('owner', 'admin', 'agente')

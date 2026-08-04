@@ -138,16 +138,26 @@ Atentamente,
   {
     tipo: 'recibo',
     nombre: 'Recibo de alquiler',
+    // Usa `cobro.monto` y NO `contrato.montoVigente`: el recibo dice lo que
+    // realmente se pagó. Con un pago parcial, el alquiler nominal sería un
+    // comprobante por un monto que nadie entregó.
     contenido: `RECIBO
 
 {{ inmobiliaria.nombre }} — CUIT {{ inmobiliaria.cuit }}
 
 Recibí de {{ locatario.nombre }}, {{ locatario.tipoDocumento }} {{ locatario.documento }},
-la suma de {{ contrato.montoVigente | moneda }}
-({{ contrato.montoVigente | letras }}) en concepto de alquiler del inmueble
-sito en {{ propiedad.direccion }}.
+la suma de {{ cobro.monto | moneda }}
+({{ cobro.monto | letras }}) en concepto de {{ cobro.concepto }} del inmueble
+sito en {{ propiedad.direccion }}, correspondiente al período
+{{ cobro.periodoTexto }}.
 
-{{ propiedad.localidad }}, {{ hoy | fecha_larga }}
+Forma de pago: {{ cobro.medio }}.
+{% si cobro.comprobante %}Comprobante: {{ cobro.comprobante }}.
+{% fin %}{% si cobro.esParcial %}
+Este pago es PARCIAL. Queda un saldo de {{ cobro.saldo | moneda }} sobre la
+cuota de {{ cobro.totalCuota | moneda }}.
+{% fin %}
+{{ propiedad.localidad }}, {{ cobro.fecha | fecha_larga }}
 
 
                           ________________________
