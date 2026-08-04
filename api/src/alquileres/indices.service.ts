@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { BcraService } from './bcra.service';
 
 export type TipoIndicePublicado = 'ipc' | 'icl' | 'uva' | 'icp';
 
@@ -27,7 +28,59 @@ export interface ValorIndice {
 export class IndicesService {
   private readonly logger = new Logger('Indices');
 
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly bcra: BcraService,
+  ) {}
+
+  capacidades() {
+    return this.bcra.capacidades();
+  }
+
+  /**
+   * Trae del BCRA lo que falte de ICL y UVA.
+   *
+   * Idempotente: `app_indice_cargar` no pisa un valor ya cargado, así que
+   * correrlo dos veces no cambia nada. Pensado para un cron.
+   */
+  async sincronizar(
+    usuarioId: string,
+    desde = '2020-07-01',
+  ): Promise<Record<string, { cargados: number; yaEstaban: number; error?: string }>> {
+    const hasta = new Date().toISOString().slice(0, 10);
+    const salida: Record<string, { cargados: number; yaEstaban: number; error?: string }> = {};
+
+    for (const tipo of ['icl', 'uva']) {
+      const serie = await this.bcra.serie(tipo, desde, hasta);
+
+      if (serie === null) {
+        // La fuente falló. No se estima ni se rellena: se informa y se sigue.
+        salida[tipo] = {
+          cargados: 0,
+          yaEstaban: 0,
+          error: 'No se pudo consultar el BCRA. Los valores existentes no se tocaron.',
+        };
+        this.logger.warn(`Sincronización de ${tipo} sin datos: la fuente no respondió`);
+        continue;
+      }
+
+      const mensual = this.bcra.mensual(serie);
+      salida[tipo] = await this.cargarLote(
+        mensual.map((m) => ({
+          tipo,
+          periodo: m.periodo,
+          valor: m.valor,
+          fuente: `BCRA v4.0 · ${tipo.toUpperCase()}`,
+        })),
+        usuarioId,
+      );
+      this.logger.log(
+        `${tipo.toUpperCase()}: ${salida[tipo].cargados} nuevos, ${salida[tipo].yaEstaban} ya estaban`,
+      );
+    }
+
+    return salida;
+  }
 
   async listar(tipo?: TipoIndicePublicado, desde?: string): Promise<ValorIndice[]> {
     const filas = await this.db.query<{

@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+
+    # Postgres REAL, no un sustituto. Los tests corren las mismas migraciones
+    # que producción: un schema armado a mano para CI prueba otra cosa.
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bemo_inmo
+          POSTGRES_USER: inmo_owner
+          POSTGRES_PASSWORD: ci_owner
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U inmo_owner -d bemo_inmo"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://inmo_app:ci_app@localhost:5432/bemo_inmo
+      DATABASE_OWNER_URL: postgres://inmo_owner:ci_owner@localhost:5432/bemo_inmo
+      JWT_SECRET: clave_de_ci_de_al_menos_treinta_y_dos_caracteres
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 20, no la última: Node 26 inyecta un localStorage experimental que
+      # rompe la suite del frontend con errores que no son bugs reales.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Crear el rol restringido
+        run: |
+          PGPASSWORD=ci_owner psql -h localhost -U inmo_owner -d bemo_inmo -v ON_ERROR_STOP=1 <<'SQL'
+            CREATE ROLE app_role NOLOGIN;
+            CREATE ROLE inmo_app LOGIN PASSWORD 'ci_app' IN ROLE app_role;
+            REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+            GRANT CONNECT ON DATABASE bemo_inmo TO app_role;
+            GRANT USAGE ON SCHEMA public TO app_role;
+          SQL
+
+      - run: npm ci
+        working-directory: api
+
+      - run: npm run migrate
+        working-directory: api
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: api
+
+      - name: Tests
+        run: npm test
+        working-directory: api
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Typecheck
+        run: npx vue-tsc --noEmit
+        working-directory: web
+      - name: Build
+        run: npx vite build
+        working-directory: web
+
+  secretos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # El pre-commit se puede saltear con --no-verify; esto no.
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

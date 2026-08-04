@@ -101,6 +101,22 @@ export class IndicesController {
     return this.indices.cobertura();
   }
 
+  /** Qué índices se traen solos y cuáles siguen siendo manuales, con el motivo. */
+  @Get('capacidades')
+  capacidades() {
+    return this.indices.capacidades();
+  }
+
+  /**
+   * Trae del BCRA lo que falte de ICL y UVA. Idempotente: pensado para un cron,
+   * y mientras tanto para un botón.
+   */
+  @Post('sincronizar')
+  @Roles('owner', 'admin')
+  sincronizar(@ActorActual() a: Actor) {
+    return this.indices.sincronizar(a.usuarioId);
+  }
+
   @Post()
   @Roles('owner', 'admin')
   cargar(@ActorActual() a: Actor, @Body() dto: CargarIndiceDto) {

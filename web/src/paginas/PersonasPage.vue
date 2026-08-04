@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
-import { api, ApiError } from '../api/cliente';
+import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import StatusChip from '../componentes/StatusChip.vue';
@@ -57,6 +57,12 @@ async function crearInline() {
   }
 }
 
+async function exportar() {
+  error.value = '';
+  try { await descargar('/exportar/personas.csv'); }
+  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo exportar.'; }
+}
+
 onMounted(cargar);
 </script>
 
@@ -64,6 +70,7 @@ onMounted(cargar);
   <div class="stack">
     <PageHeader titulo="Personas" :bajada="cargando ? '' : `${total} registradas`">
       <template #acciones>
+        <button class="btn secondary" type="button" @click="exportar">Exportar</button>
         <RouterLink class="btn" to="/personas/nueva">Nueva persona</RouterLink>
       </template>
     </PageHeader>

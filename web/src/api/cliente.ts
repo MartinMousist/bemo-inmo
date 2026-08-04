@@ -102,4 +102,44 @@ export async function api<T = unknown>(
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
+/**
+ * Descarga un archivo de la API.
+ *
+ * Un `<a download href="/v1/…">` no sirve: apunta al servidor web y no manda el
+ * token, así que el endpoint responde 401. Y los export llevan datos de la
+ * inmobiliaria — hacerlos públicos para que el enlace funcione sería exponer la
+ * cartera entera. Se baja con fetch autenticado y se dispara como blob.
+ */
+export async function descargar(ruta: string, nombreSugerido?: string): Promise<void> {
+  const res = await fetch(`${BASE}${ruta}`, {
+    credentials: 'include',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+
+  if (res.status === 401 && (await renovar())) {
+    return descargar(ruta, nombreSugerido);
+  }
+  if (!res.ok) {
+    const problema = await res.json().catch(() => null);
+    throw new ApiError(res.status, problema?.code ?? 'DESCONOCIDO',
+      problema?.detail ?? 'No se pudo descargar el archivo.');
+  }
+
+  // El nombre lo manda el servidor en Content-Disposition; el sugerido es el
+  // respaldo por si un proxy lo saca.
+  const disp = res.headers.get('content-disposition') ?? '';
+  const delServidor = /filename="?([^";]+)"?/.exec(disp)?.[1];
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = delServidor ?? nombreSugerido ?? 'descarga.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Sin revoke, cada descarga deja el blob en memoria hasta recargar.
+  URL.revokeObjectURL(url);
+}
+
 export { renovar };

@@ -36,7 +36,9 @@ sobre una hipótesis sin verificar.
 - [x] Contrato de error RFC 9457 + prefijo `/v1` + validación de entorno al arrancar
 - [x] Jest + Supertest contra Postgres real
 - [x] gitleaks en pre-commit
-- [ ] CI (GitHub Actions) corriendo la suite — pendiente, no hay remoto todavía
+- [x] CI en `.github/workflows/ci.yml`: Postgres real, migraciones de producción,
+      typecheck de las dos puntas, build del front y gitleaks. **Sin verificar**: no hay
+      repo remoto donde correrlo
 - [x] Tokens CSS + modo oscuro + script anti-flash en el `<head>`
 
 **Gate**: `docker compose up` levanta todo en menos de 5 minutos, en una máquina limpia.
@@ -89,7 +91,8 @@ igual para venta y para alquiler.
 - [x] Geocodificación al guardar, persistida. Sin API key no inventa coordenadas
 - [x] `oportunidad` → `visita` → `reserva` (una activa por operación, por índice parcial)
 - [x] Paginación server-side y búsqueda
-- [ ] Importador CSV de cartera — **pendiente**
+- [x] Importador CSV con previsualización que no escribe nada, alias de columna y
+      números escritos a mano
 - [ ] Fotos de propiedades — **pendiente** (falta el bucket S3)
 - [x] Componentes base + `AppShell` + `CommandPalette` (⌘K)
 
@@ -201,7 +204,9 @@ dirección exacta es para quien ya llamó.
 - [ ] Envío por **email** — falta configurar un proveedor
 - [ ] Envío por **WhatsApp** — Business Cloud API pide verificación de negocio y
       plantillas aprobadas. Es un trámite, no código
-- [ ] Ingesta automática de índices desde INDEC y BCRA
+- [x] Ingesta automática de **ICL y UVA** desde la API del BCRA (v4.0, variables 40 y
+      31). El **IPC sigue manual**: INDEC no publica una API estable y raspar un HTML que
+      cambia sin aviso pondría un número equivocado en un aviso de aumento
 - [ ] Preferencias de canal por persona
 
 **Gate**: dejaron de mirar el Excel.

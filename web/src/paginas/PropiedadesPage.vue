@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { api, ApiError } from '../api/cliente';
+import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import StatusChip from '../componentes/StatusChip.vue';
@@ -83,6 +83,12 @@ function tono(estado: string) {
   return 'neutro' as const;
 }
 
+async function exportar() {
+  error.value = '';
+  try { await descargar('/exportar/propiedades.csv'); }
+  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo exportar.'; }
+}
+
 onMounted(cargar);
 </script>
 
@@ -93,6 +99,7 @@ onMounted(cargar);
       :bajada="cargando ? '' : `${total} en cartera`"
     >
       <template #acciones>
+        <button class="btn secondary" type="button" @click="exportar">Exportar</button>
         <RouterLink class="btn" to="/propiedades/nueva">Nueva propiedad</RouterLink>
       </template>
     </PageHeader>

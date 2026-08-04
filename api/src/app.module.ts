@@ -27,6 +27,7 @@ import {
 } from './alquileres/alquileres.controller';
 import { ContratosService } from './alquileres/contratos.service';
 import { IndicesService } from './alquileres/indices.service';
+import { BcraService } from './alquileres/bcra.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
 import { ComisionesController, VentasController } from './ventas/ventas.controller';
 import { VentasService } from './ventas/ventas.service';
@@ -45,6 +46,8 @@ import {
   SucursalesController,
 } from './planes/planes.controller';
 import { PlanesService } from './planes/planes.service';
+import { ImportarController } from './importar/importar.controller';
+import { ImportarService } from './importar/importar.service';
 
 @Module({
   imports: [DatabaseModule],
@@ -70,6 +73,7 @@ import { PlanesService } from './planes/planes.service';
     PlanesController,
     SucursalesController,
     ApiKeysController,
+    ImportarController,
   ],
   providers: [
     AuthService,
@@ -81,12 +85,14 @@ import { PlanesService } from './planes/planes.service';
     OportunidadesService,
     ContratosService,
     IndicesService,
+    BcraService,
     LiquidacionesService,
     VentasService,
     PublicacionesService,
     RecordatoriosService,
     ExportarService,
     PlanesService,
+    ImportarService,
     // Guard GLOBAL: todo exige token salvo lo marcado con @Publico().
     // Si fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
     { provide: APP_GUARD, useClass: AuthGuard },

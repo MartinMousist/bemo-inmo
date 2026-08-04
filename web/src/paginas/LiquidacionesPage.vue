@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { api, ApiError } from '../api/cliente';
+import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
@@ -45,6 +45,12 @@ async function cerrar(id: string) {
   catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo cerrar.'; }
 }
 
+async function exportar() {
+  error.value = '';
+  try { await descargar(`/exportar/liquidaciones.csv?periodo=${mes.value}-01`); }
+  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo exportar.'; }
+}
+
 onMounted(cargar);
 </script>
 
@@ -54,6 +60,7 @@ onMounted(cargar);
       bajada="Se liquida lo COBRADO, no lo facturado. En condominio, cada propietario recibe la suya.">
       <template #acciones>
         <input v-model="mes" type="month" class="mes" @change="cargar" />
+        <button class="btn secondary" type="button" @click="exportar">Exportar</button>
         <button class="btn" type="button" @click="generar">Generar</button>
       </template>
     </PageHeader>

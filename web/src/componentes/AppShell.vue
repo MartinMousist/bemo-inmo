@@ -40,6 +40,7 @@ const grupos = [
     titulo: 'Administración',
     items: [
       { a: '/equipo', icono: 'equipo', texto: 'Equipo' },
+      { a: '/importar', icono: 'mas', texto: 'Importar' },
       { a: '/plan', icono: 'documento', texto: 'Tu plan' },
     ],
   },

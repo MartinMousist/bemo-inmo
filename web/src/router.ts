@@ -37,6 +37,7 @@ const router = createRouter({
     { path: '/avisos', component: () => import('./paginas/AvisosPage.vue') },
     { path: '/equipo', component: () => import('./paginas/EquipoPage.vue') },
     { path: '/plan', component: () => import('./paginas/PlanPage.vue') },
+    { path: '/importar', component: () => import('./paginas/ImportarPage.vue') },
 
     { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },
   ],

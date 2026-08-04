@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { api, ApiError } from '../api/cliente';
+import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
@@ -47,6 +47,12 @@ async function cargar() {
   } finally { cargando.value = false; }
 }
 
+async function exportar() {
+  error.value = '';
+  try { await descargar('/exportar/contratos.csv'); }
+  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo exportar.'; }
+}
+
 onMounted(cargar);
 </script>
 
@@ -54,6 +60,7 @@ onMounted(cargar);
   <div class="stack">
     <PageHeader titulo="Contratos" :bajada="cargando ? '' : `${total} de alquiler`">
       <template #acciones>
+        <button class="btn secondary" type="button" @click="exportar">Exportar</button>
         <RouterLink class="btn" to="/contratos/nuevo">Nuevo contrato</RouterLink>
       </template>
     </PageHeader>
