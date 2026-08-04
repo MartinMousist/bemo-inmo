@@ -40,6 +40,39 @@ export class PropiedadesController {
     return { mapas: this.geo.configurado, fotos: this.almacen.configurado };
   }
 
+  /**
+   * Prueba la API key contra Google de verdad.
+   *
+   * "Hay una key en el `.env`" y "la key funciona" son dos cosas distintas, y
+   * las tres formas de que no funcione —API sin habilitar, facturación sin
+   * activar, restricción mal puesta— dan todas el mismo síntoma acá adentro:
+   * propiedades sin ubicación.
+   */
+  @Get('geocoding/diagnostico')
+  @Roles('owner', 'admin')
+  diagnostico() {
+    return this.geo.diagnostico();
+  }
+
+  /** Cuántas propiedades quedaron sin coordenadas. */
+  @Get('geocoding/pendientes')
+  @Roles('owner', 'admin')
+  pendientes(@ActorActual() actor: Actor) {
+    return this.propiedades.contarSinUbicacion(actor.tenantId);
+  }
+
+  /**
+   * Geocodifica en tanda las que quedaron sin coordenadas.
+   *
+   * De a 50: cada una es una llamada paga a Google. El tope está para que un
+   * clic no dispare una factura de 2.000 consultas sin que nadie lo decida.
+   */
+  @Post('geocoding/sincronizar')
+  @Roles('owner', 'admin')
+  sincronizarGeocoding(@ActorActual() actor: Actor) {
+    return this.propiedades.geocodificarPendientes(actor.tenantId, 50);
+  }
+
   @Get()
   listar(@ActorActual() actor: Actor, @Query() f: FiltroPropiedadesDto) {
     return this.propiedades.listar(actor.tenantId, f);

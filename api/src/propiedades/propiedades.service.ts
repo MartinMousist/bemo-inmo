@@ -283,6 +283,136 @@ export class PropiedadesService {
 
   // ── Internos ───────────────────────────────────────────────────────────────
 
+  /**
+   * Cuántas propiedades no tienen ubicación y podrían resolverse solas.
+   *
+   * Deja afuera las de carga manual: ésas tienen coordenadas y no cuentan como
+   * pendientes.
+   */
+  async contarSinUbicacion(tenantId: string): Promise<{ pendientes: number }> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{ total: string }>(
+        `SELECT count(*)::text AS total FROM propiedad
+          WHERE lat IS NULL AND geocode_fuente IS DISTINCT FROM 'manual'`,
+      );
+      return { pendientes: Number(rows[0].total) };
+    });
+  }
+
+  /**
+   * Geocodifica las propiedades que quedaron sin coordenadas.
+   *
+   * Es el equivalente de `POST /v1/indices/sincronizar` para los mapas, y hace
+   * falta por una razón concreta: si la API key se configura DESPUÉS de haber
+   * cargado la cartera —que es lo que pasa siempre— esas propiedades quedan sin
+   * lat/lng para siempre. La geocodificación sólo corre al crear o al editar la
+   * dirección, así que sin esto habría que abrir y volver a guardar cada ficha
+   * a mano.
+   *
+   * **Idempotente**: sólo toca las que no tienen coordenadas. Correrlo dos veces
+   * no vuelve a pagarle a Google por las que ya se resolvieron.
+   *
+   * **Nunca pisa una carga manual**: `geocode_fuente = 'manual'` significa que
+   * alguien corrigió la ubicación a mano porque Google la ubicaba mal, y eso
+   * gana siempre.
+   */
+  async geocodificarPendientes(
+    tenantId: string,
+    limite: number,
+  ): Promise<{
+    pendientes: number;
+    procesadas: number;
+    resueltas: number;
+    resultados: Array<{ id: string; etiqueta: string; direccion: string; motivo: string }>;
+  }> {
+    if (!this.geo.configurado) {
+      throw new AppError(
+        422,
+        ErrorCode.VALIDATION_FAILED,
+        'No hay GOOGLE_MAPS_API_KEY configurada. Sin la key no se puede geocodificar; ' +
+          'las coordenadas se pueden cargar a mano desde cada ficha.',
+        'Unprocessable Entity',
+      );
+    }
+
+    // Se leen primero y se geocodifica DESPUÉS, fuera de la transacción: son
+    // llamadas de red a un tercero, y hasta 50 de ellas con una transacción de
+    // Postgres abierta esperándolas es una conexión tomada durante minutos.
+    const { pendientes, tanda } = await this.db.withTenant(tenantId, async (ej) => {
+      const { rows: cuenta } = await ej.query<{ total: string }>(
+        `SELECT count(*)::text AS total FROM propiedad
+          WHERE lat IS NULL AND geocode_fuente IS DISTINCT FROM 'manual'`,
+      );
+      const { rows } = await ej.query<{
+        id: string; codigo: number; calle: string; numero: string | null;
+        localidad: string | null; provincia: string | null;
+      }>(
+        `SELECT id, codigo, calle, numero, localidad, provincia
+           FROM propiedad
+          WHERE lat IS NULL AND geocode_fuente IS DISTINCT FROM 'manual'
+          ORDER BY codigo
+          LIMIT $1`,
+        [limite],
+      );
+      return { pendientes: Number(cuenta[0].total), tanda: rows };
+    });
+
+    const resueltas: Array<{ id: string; lat: number; lng: number; fuente: string }> = [];
+    const resultados: Array<{
+      id: string; etiqueta: string; direccion: string; motivo: string;
+    }> = [];
+
+    for (const p of tanda) {
+      const direccion = GeocodingService.direccionCompleta(p);
+      const r = await this.geo.geocodificar(direccion);
+      const etiqueta = `PROP-${String(p.codigo).padStart(4, '0')}`;
+
+      if (r.coordenadas) {
+        resueltas.push({ id: p.id, ...r.coordenadas });
+      } else {
+        // Se informa una por una: "18 de 20" sin decir cuáles fallaron obliga a
+        // buscarlas a mano, y el motivo distingue "esa dirección no existe" de
+        // "se cayó la key", que se arreglan de forma muy distinta.
+        resultados.push({
+          id: p.id,
+          etiqueta,
+          direccion,
+          motivo:
+            r.motivo === 'sin_resultados'
+              ? 'Google no encontró esa dirección. Revisala o cargá lat/lng a mano.'
+              : 'Falló la consulta a Google. Probá el diagnóstico de la key.',
+        });
+      }
+    }
+
+    if (resueltas.length) {
+      await this.db.withTenant(tenantId, (ej) =>
+        ej.query(
+          `UPDATE propiedad p
+              SET lat = x.lat, lng = x.lng, geocode_fuente = x.fuente, geocode_el = now()
+             FROM unnest($1::uuid[], $2::numeric[], $3::numeric[], $4::text[])
+                  AS x(id, lat, lng, fuente)
+            WHERE p.id = x.id
+              AND p.lat IS NULL
+              AND p.geocode_fuente IS DISTINCT FROM 'manual'`,
+          [
+            resueltas.map((r) => r.id),
+            resueltas.map((r) => r.lat),
+            resueltas.map((r) => r.lng),
+            resueltas.map((r) => r.fuente),
+          ],
+        ),
+      );
+    }
+
+    return {
+      pendientes,
+      procesadas: tanda.length,
+      resueltas: resueltas.length,
+      resultados,
+    };
+  }
+
   private async resolverUbicacion(dto: CrearPropiedadDto): Promise<{
     lat: number | null;
     lng: number | null;

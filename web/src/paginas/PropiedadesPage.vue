@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
+import PanelMapas from '../componentes/PanelMapas.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
@@ -103,6 +104,10 @@ onMounted(cargar);
         <RouterLink class="btn" to="/propiedades/nueva">Nueva propiedad</RouterLink>
       </template>
     </PageHeader>
+
+    <!-- Sólo aparece si hay algo que hacer con los mapas: falta la key, la key
+         no responde, o quedaron propiedades sin ubicar. -->
+    <PanelMapas @sincronizado="cargar" />
 
     <div class="filtros">
       <SearchInput v-model="q" placeholder="Dirección, localidad o código…" />
