@@ -69,7 +69,7 @@ describe('Recordatorios', () => {
     expect(r.body.contrato_por_vencer).toBeGreaterThanOrEqual(1);
 
     const bandeja = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
-    const aviso = bandeja.body.find((e: { tipo: string }) => e.tipo === 'contrato_por_vencer');
+    const aviso = bandeja.body.items.find((e: { tipo: string }) => e.tipo === 'contrato_por_vencer');
     expect(aviso).toBeDefined();
     expect(aviso.titulo).toContain('Vence el contrato');
   });
@@ -79,12 +79,12 @@ describe('Recordatorios', () => {
 
     await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
     const antes = (await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200))
-      .body.length;
+      .body.total;
 
     // El cron se reintenta: correrlo otra vez no puede mandar el aviso de nuevo.
     const segunda = await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
     const despues = (await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200))
-      .body.length;
+      .body.total;
 
     expect(despues).toBe(antes);
     expect(Object.values(segunda.body).every((n) => n === 0)).toBe(true);
@@ -95,7 +95,7 @@ describe('Recordatorios', () => {
     await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
 
     const bandeja = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
-    const suyos = bandeja.body.filter(
+    const suyos = bandeja.body.items.filter(
       (e: { entidadId: string; tipo: string }) =>
         e.entidadId === c.id && e.tipo === 'contrato_por_vencer',
     );
@@ -112,10 +112,10 @@ describe('Recordatorios', () => {
     const hoy = await http().get('/v1/avisos').set(...como(inmo)).expect(200);
     const futuros = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
 
-    expect(futuros.body.length).toBeGreaterThan(hoy.body.length);
+    expect(futuros.body.total).toBeGreaterThan(hoy.body.total);
     // Nada de la bandeja de hoy tiene fecha futura.
     const hoyIso = new Date().toISOString().slice(0, 10);
-    expect(hoy.body.every((e: { disparaEl: string }) => e.disparaEl <= hoyIso)).toBe(true);
+    expect(hoy.body.items.every((e: { disparaEl: string }) => e.disparaEl <= hoyIso)).toBe(true);
   });
 
   it('marcar visto lo saca de la bandeja', async () => {
@@ -123,13 +123,13 @@ describe('Recordatorios', () => {
     await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
 
     const bandeja = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
-    const uno = bandeja.body[0];
+    const uno = bandeja.body.items[0];
 
     await http().post(`/v1/avisos/${uno.id}/visto`).set(...como(inmo)).expect(201);
     await http().post(`/v1/avisos/${uno.id}/visto`).set(...como(inmo)).expect(404);
 
     const luego = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
-    expect(luego.body.find((e: { id: string }) => e.id === uno.id)).toBeUndefined();
+    expect(luego.body.items.find((e: { id: string }) => e.id === uno.id)).toBeUndefined();
   });
 
   it('avisa las cuotas impagas el día que vencen y en la mora', async () => {
@@ -140,7 +140,7 @@ describe('Recordatorios', () => {
     await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
 
     const bandeja = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
-    const impagas = bandeja.body.filter((e: { tipo: string }) => e.tipo === 'cuota_impaga');
+    const impagas = bandeja.body.items.filter((e: { tipo: string }) => e.tipo === 'cuota_impaga');
     expect(impagas.length).toBeGreaterThan(0);
     expect(impagas[0].detalle).toMatch(/ARS/);
   });
@@ -162,7 +162,10 @@ describe('Recordatorios', () => {
     await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
 
     const res = await http().get('/v1/avisos?futuros=true').set(...como(otra)).expect(200);
-    expect(res.body).toHaveLength(0);
+    expect(res.body.items).toHaveLength(0);
+    // El total también tiene que ser cero: si contara sobre todos los tenants,
+    // la vecina vería una lista vacía pero sabría cuántos avisos tenemos.
+    expect(res.body.total).toBe(0);
   });
 
   it('la clave única impide un duplicado incluso por SQL directo', async () => {

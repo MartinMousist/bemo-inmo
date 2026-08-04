@@ -153,7 +153,7 @@ describe('Publicaciones', () => {
       .send({ operacionId, portal: 'argenprop' }).expect(201);
 
     const lista = await http().get('/v1/publicaciones').set(...como(inmo)).expect(200);
-    const deEsta = lista.body.filter(
+    const deEsta = lista.body.items.filter(
       (p: { operacionId: string; portal: string }) =>
         p.operacionId === operacionId && p.portal === 'argenprop',
     );

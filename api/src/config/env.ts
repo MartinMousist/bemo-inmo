@@ -49,6 +49,31 @@ const schema = z.object({
   COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
 
   /**
+   * Límite de intentos en las rutas públicas de autenticación.
+   *
+   * Antes no había ninguno. `bcrypt` a costo 12 hace lento cada intento, pero eso
+   * no frena un ataque sostenido: lo único que logra es que el ataque le cueste
+   * más CPU al servidor que al atacante.
+   *
+   * Dos contadores independientes y complementarios:
+   *  - por IP: frena a alguien probando muchas contraseñas desde un lugar.
+   *  - por cuenta: frena el mismo ataque repartido entre muchas IPs. Va más alto
+   *    a propósito — si fuera bajo, cualquiera podría dejar afuera a un usuario
+   *    real quemándole los intentos.
+   */
+  RATE_LIMIT_VENTANA_MIN: z.coerce.number().int().positive().default(15),
+  RATE_LIMIT_LOGIN_IP: z.coerce.number().int().positive().default(10),
+  RATE_LIMIT_LOGIN_CUENTA: z.coerce.number().int().positive().default(20),
+  /** Crear inmobiliarias es caro y raro: una persona no abre cinco por hora. */
+  RATE_LIMIT_REGISTRO_IP: z.coerce.number().int().positive().default(5),
+  /**
+   * El refresh lo llama el front solo, no una persona. Va holgado para no cortar
+   * a una oficina entera detrás de una sola IP, pero acotado igual: sin límite,
+   * es un oráculo para adivinar tokens.
+   */
+  RATE_LIMIT_REFRESH_IP: z.coerce.number().int().positive().default(60),
+
+  /**
    * Opcional a propósito. Sin key la app funciona igual: no geocodifica, no
    * inventa coordenadas, y la UI ofrece cargar lat/lng a mano diciendo por qué.
    * Un default falso acá sería una propiedad ubicada en el medio del océano.

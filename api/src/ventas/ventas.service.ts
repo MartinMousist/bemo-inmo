@@ -1,13 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import {
   calcularComisiones,
   cuadra,
   type EntradaComision,
   type Punta,
 } from './comisiones.motor';
-import type { CerrarVentaDto, CrearVentaDto, RepartoDto } from './ventas.dto';
+import type {
+  CerrarVentaDto,
+  CrearVentaDto,
+  FiltroVentasDto,
+  RepartoDto,
+} from './ventas.dto';
 
 export interface Venta {
   id: string;
@@ -46,10 +52,36 @@ const FLUJO = ['en_curso', 'boleto', 'escriturada'] as const;
 export class VentasService {
   constructor(private readonly db: DbService) {}
 
-  async listar(tenantId: string) {
+  async listar(tenantId: string, f: FiltroVentasDto): Promise<Pagina<Venta>> {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows } = await ej.query<FilaVenta>(`${SELECT_VENTA} ORDER BY v.created_at DESC`);
-      return rows.map(aVenta);
+      const q = f.q ? `%${f.q.trim()}%` : null;
+      const params = [q, f.estado ?? null];
+
+      const donde = `
+        WHERE ($1::text IS NULL
+               OR pr.calle ILIKE $1 OR pr.localidad ILIKE $1
+               OR pr.codigo::text = trim(both '%' from $1)
+               OR trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')) ILIKE $1)
+          AND ($2::text IS NULL OR v.estado = $2)`;
+
+      // El conteo NO usa SELECT_VENTA: ese trae el json_agg de comisiones por
+      // fila, y contar no necesita las comisiones de nadie.
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        `SELECT count(*)::text AS total
+           FROM operacion_venta v
+           JOIN operacion o ON o.id = v.operacion_id
+           JOIN propiedad pr ON pr.id = o.propiedad_id
+           LEFT JOIN persona pe ON pe.id = v.comprador_id
+          ${donde}`,
+        params,
+      );
+
+      const { rows } = await ej.query<FilaVenta>(
+        `${SELECT_VENTA} ${donde} ORDER BY v.created_at DESC LIMIT $3 OFFSET $4`,
+        [...params, f.porPagina, offset(f)],
+      );
+
+      return armarPagina(rows.map(aVenta), Number(conteo[0].total), f);
     });
   }
 
@@ -151,24 +183,84 @@ export class VentasService {
 
       await ej.query('DELETE FROM comision WHERE venta_id = $1', [ventaId]);
 
-      // Se insertan primero los de nivel 1 para poder encadenar padre → hijo.
-      const ids: string[] = [];
-      for (const l of r.lineas) {
-        const { rows } = await ej.query<{ id: string }>(
+      // Dos INSERT en lote, no uno por línea.
+      //
+      // Todo `padre` del motor apunta a una línea de NIVEL 1 (ver
+      // `comisiones.motor.ts`), así que alcanza con dos pasadas: primero los
+      // nivel 1, después el resto ya con el id del padre resuelto. Una venta con
+      // dos puntas, una externa y dos agentes eran nueve viajes a la base.
+      //
+      // El mapeo padre→id se hace por `punta`, que es única entre los nivel 1
+      // (uno por punta), y NO por el orden en que vuelve el RETURNING: el orden
+      // de las filas devueltas por un INSERT no es algo que el motor garantice,
+      // y acá una fila mal encadenada es plata asignada a quien no corresponde.
+      const nivel1 = r.lineas.filter((l) => l.nivel === 1);
+      const resto = r.lineas.filter((l) => l.nivel !== 1);
+
+      const idPorPunta = new Map<string, string>();
+
+      if (nivel1.length) {
+        const { rows: creadas } = await ej.query<{ id: string; punta: string }>(
           `INSERT INTO comision
              (tenant_id, venta_id, padre_id, nivel, punta, base_monto, moneda,
               porcentaje, monto, beneficiario_tipo, beneficiario_id,
               beneficiario_nombre, concepto)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+           SELECT $1, $2, NULL, 1, x.punta, x.base, x.moneda, x.porcentaje,
+                  x.monto, x.beneficiario_tipo, NULL, NULL, x.concepto
+             FROM unnest($3::text[], $4::numeric[], $5::text[], $6::numeric[],
+                         $7::numeric[], $8::text[], $9::text[])
+                  AS x(punta, base, moneda, porcentaje, monto,
+                       beneficiario_tipo, concepto)
+           RETURNING id, punta`,
           [
             tenantId, ventaId,
-            l.padre === undefined ? null : ids[l.padre],
-            l.nivel, l.punta, l.base, l.moneda, l.porcentaje, l.monto,
-            l.beneficiarioTipo, l.beneficiarioId ?? null,
-            l.beneficiarioNombre ?? null, l.concepto,
+            nivel1.map((l) => l.punta),
+            nivel1.map((l) => l.base),
+            nivel1.map((l) => l.moneda),
+            nivel1.map((l) => l.porcentaje),
+            nivel1.map((l) => l.monto),
+            nivel1.map((l) => l.beneficiarioTipo),
+            nivel1.map((l) => l.concepto),
           ],
         );
-        ids.push(rows[0].id);
+        for (const c of creadas) idPorPunta.set(c.punta, c.id);
+      }
+
+      if (resto.length) {
+        const padres = resto.map((l) => {
+          const dePunta = l.padre === undefined ? null : r.lineas[l.padre].punta;
+          return dePunta === null ? null : (idPorPunta.get(dePunta) ?? null);
+        });
+
+        await ej.query(
+          `INSERT INTO comision
+             (tenant_id, venta_id, padre_id, nivel, punta, base_monto, moneda,
+              porcentaje, monto, beneficiario_tipo, beneficiario_id,
+              beneficiario_nombre, concepto)
+           SELECT $1, $2, x.padre_id, x.nivel, x.punta, x.base, x.moneda,
+                  x.porcentaje, x.monto, x.beneficiario_tipo, x.beneficiario_id,
+                  x.beneficiario_nombre, x.concepto
+             FROM unnest($3::uuid[], $4::smallint[], $5::text[], $6::numeric[],
+                         $7::text[], $8::numeric[], $9::numeric[], $10::text[],
+                         $11::uuid[], $12::text[], $13::text[])
+                  AS x(padre_id, nivel, punta, base, moneda, porcentaje, monto,
+                       beneficiario_tipo, beneficiario_id, beneficiario_nombre,
+                       concepto)`,
+          [
+            tenantId, ventaId,
+            padres,
+            resto.map((l) => l.nivel),
+            resto.map((l) => l.punta),
+            resto.map((l) => l.base),
+            resto.map((l) => l.moneda),
+            resto.map((l) => l.porcentaje),
+            resto.map((l) => l.monto),
+            resto.map((l) => l.beneficiarioTipo),
+            resto.map((l) => l.beneficiarioId ?? null),
+            resto.map((l) => l.beneficiarioNombre ?? null),
+            resto.map((l) => l.concepto),
+          ],
+        );
       }
 
       return this.leer(ej, ventaId);

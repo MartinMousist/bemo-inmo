@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
+import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { periodo as fmtPeriodo } from '../dominio/formato';
+import { consulta, type Pagina } from '../dominio/pagina';
 
 interface Cobertura { tipo: string; ultimo: string | null; valores: number }
 interface Valor { tipo: string; periodo: string; valor: number; fuente: string }
@@ -13,8 +15,14 @@ const NOMBRE: Record<string, string> = {
   ipc: 'IPC · INDEC', icl: 'ICL · BCRA', uva: 'UVA · BCRA', icp: 'Casa Propia',
 };
 
+// 12 períodos por año: una página de 60 son cinco años de historia de un índice.
+const POR_PAGINA = 60;
+
 const cobertura = ref<Cobertura[]>([]);
 const valores = ref<Valor[]>([]);
+const total = ref(0);
+const paginas = ref(1);
+const pagina = ref(1);
 const tipoVisto = ref('ipc');
 const cargando = ref(true);
 const error = ref('');
@@ -27,13 +35,23 @@ async function cargar() {
   try {
     const [c, v] = await Promise.all([
       api<Cobertura[]>('/indices/cobertura'),
-      api<Valor[]>(`/indices?tipo=${tipoVisto.value}`),
+      api<Pagina<Valor>>(
+        `/indices?${consulta(
+          { pagina: pagina.value, porPagina: POR_PAGINA },
+          { tipo: tipoVisto.value },
+        )}`,
+      ),
     ]);
-    cobertura.value = c; valores.value = v;
+    cobertura.value = c;
+    valores.value = v.items;
+    total.value = v.total;
+    paginas.value = v.paginas;
   } catch (e) {
     error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar los índices.';
   } finally { cargando.value = false; }
 }
+
+watch(pagina, () => void cargar());
 
 async function guardar() {
   error.value = ''; ok.value = '';
@@ -55,7 +73,13 @@ async function guardar() {
   }
 }
 
-function verTipo(t: string) { tipoVisto.value = t; cargar(); }
+function verTipo(t: string) {
+  tipoVisto.value = t;
+  // Cambiar de índice vuelve a la primera página: quedarse en la 3 de un índice
+  // con 74 períodos al mirar otro que tiene 12 muestra una tabla vacía.
+  if (pagina.value !== 1) pagina.value = 1;
+  else void cargar();
+}
 
 onMounted(cargar);
 </script>
@@ -90,9 +114,16 @@ onMounted(cargar);
         <label class="campo"><span>Valor</span><input v-model="alta.valor" inputmode="decimal" required /></label>
         <button class="btn" type="submit">Guardar</button>
       </div>
+      <!--
+        Este texto decía que la ingesta automática "llega en la etapa 7". Ya llegó
+        para ICL y UVA, y para IPC no va a llegar: INDEC no publica una API estable.
+        Un texto viejo en una pantalla de índices es una promesa que no se cumple.
+      -->
       <p class="nota">
-        La ingesta automática desde INDEC y BCRA llega en la etapa 7. Hasta entonces la carga
-        es manual, y va a seguir estando como respaldo cuando la fuente falle.
+        ICL y UVA se traen solos del BCRA con «Sincronizar». El IPC de INDEC es manual
+        a propósito: no hay una API estable, y raspar un HTML que cambia sin aviso
+        pondría un número equivocado en un aviso de aumento. La carga a mano queda
+        además como respaldo cuando una fuente falla.
       </p>
     </form>
 
@@ -113,6 +144,15 @@ onMounted(cargar);
       </table>
       <p v-else class="vacio">Todavía no hay valores de {{ NOMBRE[tipoVisto] }}.</p>
     </div>
+
+    <UiPager
+      v-if="!cargando"
+      v-model:pagina="pagina"
+      :paginas="paginas"
+      :total="total"
+      :por-pagina="POR_PAGINA"
+      sustantivo="períodos"
+    />
   </div>
 </template>
 

@@ -49,18 +49,18 @@ export class PlanesService {
       );
       if (!s.length) throw AppError.notFound('Esta cuenta no tiene una suscripción.');
 
-      const limites = [];
-      for (const recurso of ['usuarios', 'propiedades']) {
-        const { rows } = await ej.query<{
-          permitido: boolean; usado: number; maximo: number | null;
-        }>('SELECT * FROM app_limite_plan($1)', [recurso]);
-        limites.push({
-          recurso,
-          usado: rows[0].usado,
-          maximo: rows[0].maximo,
-          permitido: rows[0].permitido,
-        });
-      }
+      // Los dos recursos en una sola consulta, con LATERAL. Son sólo dos hoy,
+      // pero el patrón "una consulta por elemento de una lista" es el que hay
+      // que no dejar crecer: el día que haya seis límites, son seis viajes.
+      const { rows: limites } = await ej.query<{
+        recurso: string; permitido: boolean; usado: number; maximo: number | null;
+      }>(
+        `SELECT r.recurso, l.permitido, l.usado, l.maximo
+           FROM unnest($1::text[]) AS r(recurso),
+                LATERAL app_limite_plan(r.recurso) AS l
+          ORDER BY array_position($1::text[], r.recurso)`,
+        [['usuarios', 'propiedades']],
+      );
 
       return {
         plan: { codigo: s[0].plan_codigo, nombre: s[0].nombre, modulos: s[0].modulos },

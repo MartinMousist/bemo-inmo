@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError } from '../common/app-error';
+import { armarPagina, offset, type Pagina } from '../common/paginacion';
+import type { FiltroAvisosDto } from './recordatorios.dto';
 
 export interface Evento {
   id: string;
@@ -173,8 +175,27 @@ export class RecordatoriosService {
   }
 
   /** La bandeja: lo que hay que mirar hoy. */
-  async bandeja(tenantId: string, incluirFuturos = false): Promise<Evento[]> {
+  /**
+   * Antes esto tenía un `LIMIT 200` pelado. Eso no es paginar: es truncar en
+   * silencio — la pantalla mostraba 200 avisos y no había forma de saber que
+   * había un aviso 201, ni de llegar a él. Ahora el total viene en la respuesta.
+   */
+  async bandeja(tenantId: string, f: FiltroAvisosDto): Promise<Pagina<Evento>> {
     return this.db.withTenant(tenantId, async (ej) => {
+      const q = f.q ? `%${f.q.trim()}%` : null;
+      const params = [f.futuros ?? false, f.tipo ?? null, q];
+
+      const donde = `
+        WHERE estado IN ('pendiente','enviado')
+          AND ($1::boolean OR dispara_el <= current_date)
+          AND ($2::text IS NULL OR tipo = $2)
+          AND ($3::text IS NULL OR titulo ILIKE $3 OR detalle ILIKE $3)`;
+
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        `SELECT count(*)::text AS total FROM evento_programado ${donde}`,
+        params,
+      );
+
       const { rows } = await ej.query<{
         id: string; tipo: string; titulo: string; detalle: string | null;
         dispara_el: string; estado: string; canal: string;
@@ -183,14 +204,13 @@ export class RecordatoriosService {
         `SELECT id, tipo, titulo, detalle, dispara_el, estado, canal,
                 entidad_tipo, entidad_id
            FROM evento_programado
-          WHERE estado IN ('pendiente','enviado')
-            AND ($1::boolean OR dispara_el <= current_date)
+         ${donde}
           ORDER BY dispara_el, created_at
-          LIMIT 200`,
-        [incluirFuturos],
+          LIMIT $4 OFFSET $5`,
+        [...params, f.porPagina, offset(f)],
       );
 
-      return rows.map((r) => ({
+      const items = rows.map((r) => ({
         id: r.id,
         tipo: r.tipo,
         titulo: r.titulo,
@@ -201,6 +221,8 @@ export class RecordatoriosService {
         entidadTipo: r.entidad_tipo,
         entidadId: r.entidad_id,
       }));
+
+      return armarPagina(items, Number(conteo[0].total), f);
     });
   }
 

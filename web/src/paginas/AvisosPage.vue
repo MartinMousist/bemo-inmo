@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
+import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { fecha, proximidad } from '../dominio/formato';
+import { consulta, type Pagina } from '../dominio/pagina';
 
 interface Aviso {
   id: string; tipo: string; titulo: string; detalle: string | null;
@@ -19,9 +21,15 @@ const TIPO: Record<string, string> = {
   visita_agendada: 'Visita', garantia_por_vencer: 'Garantía',
 };
 
+const POR_PAGINA = 50;
+
 const items = ref<Aviso[]>([]);
+const total = ref(0);
+const paginas = ref(1);
+const pagina = ref(1);
 const canales = ref<Canal[]>([]);
 const futuros = ref(false);
+const filtroTipo = ref('');
 const cargando = ref(true);
 const error = ref('');
 
@@ -29,14 +37,28 @@ async function cargar() {
   cargando.value = true; error.value = '';
   try {
     const [a, c] = await Promise.all([
-      api<Aviso[]>(`/avisos?futuros=${futuros.value}`),
+      api<Pagina<Aviso>>(
+        `/avisos?${consulta(
+          { pagina: pagina.value, porPagina: POR_PAGINA },
+          { futuros: futuros.value, tipo: filtroTipo.value },
+        )}`,
+      ),
       api<Canal[]>('/avisos/canales'),
     ]);
-    items.value = a; canales.value = c;
+    items.value = a.items;
+    total.value = a.total;
+    paginas.value = a.paginas;
+    canales.value = c;
   } catch (e) {
     error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar los avisos.';
   } finally { cargando.value = false; }
 }
+
+watch([futuros, filtroTipo], () => {
+  pagina.value = 1;
+  void cargar();
+});
+watch(pagina, () => void cargar());
 
 async function generar() {
   error.value = '';
@@ -56,10 +78,11 @@ onMounted(cargar);
 
 <template>
   <div class="stack">
-    <PageHeader titulo="Avisos" :bajada="cargando ? '' : `${items.length} para revisar`">
+    <PageHeader titulo="Avisos" :bajada="cargando ? '' : `${total} para revisar`">
       <template #acciones>
+        <!-- Sin @change: el watch de `futuros` recarga y además vuelve a la página 1. -->
         <label class="toggle">
-          <input v-model="futuros" type="checkbox" @change="cargar" />
+          <input v-model="futuros" type="checkbox" />
           <span>Ver los que vienen</span>
         </label>
         <button class="btn" type="button" @click="generar">Recalcular</button>
@@ -78,8 +101,29 @@ onMounted(cargar);
     </div>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
+
+    <div class="segmented">
+      <button type="button" :class="{ activo: filtroTipo === '' }" @click="filtroTipo = ''">
+        Todos
+      </button>
+      <button
+        v-for="(etiqueta, clave) in TIPO"
+        :key="clave"
+        type="button"
+        :class="{ activo: filtroTipo === clave }"
+        @click="filtroTipo = clave"
+      >
+        {{ etiqueta }}
+      </button>
+    </div>
+
     <UiSkeleton v-if="cargando" :filas="4" :alto="56" />
 
+    <UiEmpty
+      v-else-if="!items.length && filtroTipo"
+      titulo="Nada de ese tipo"
+      detalle="Sacá el filtro para ver el resto de los avisos."
+    />
     <UiEmpty v-else-if="!items.length" titulo="Nada por revisar"
       detalle="Cuando haya contratos por vencer, aumentos por aplicar o cuotas impagas, aparecen acá.">
       <button class="btn" type="button" @click="generar">Recalcular ahora</button>
@@ -100,10 +144,24 @@ onMounted(cargar);
         </li>
       </ul>
     </div>
+
+    <UiPager
+      v-if="!cargando"
+      v-model:pagina="pagina"
+      :paginas="paginas"
+      :total="total"
+      :por-pagina="POR_PAGINA"
+      sustantivo="avisos"
+    />
   </div>
 </template>
 
 <style scoped>
+.segmented { display: flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow-x: auto; background: var(--surface); }
+.segmented button { font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-lg); border: none; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.segmented button:last-child { border-right: none; }
+.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
+
 .toggle { display: inline-flex; align-items: center; gap: var(--s-xs); font-size: 13px; color: var(--muted); }
 .canales { padding: var(--s-md) var(--s-lg); background: var(--warning-tint); border: 1px solid var(--warning-line); border-radius: var(--r-md); font-size: 13px; color: var(--warning); }
 .canales p { margin: 0 0 var(--s-sm); }

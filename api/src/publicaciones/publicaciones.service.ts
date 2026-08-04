@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { armarPagina, offset } from '../common/paginacion';
 import {
   generarAviso,
   generarFeedXml,
@@ -9,7 +10,11 @@ import {
   type ItemFeed,
 } from './aviso.motor';
 import { INTEGRACION_ACTIVA } from './etiquetas';
-import type { ActualizarPublicacionDto, CrearPublicacionDto } from './publicaciones.dto';
+import type {
+  ActualizarPublicacionDto,
+  CrearPublicacionDto,
+  FiltroPublicacionesDto,
+} from './publicaciones.dto';
 
 @Injectable()
 export class PublicacionesService {
@@ -36,8 +41,27 @@ export class PublicacionesService {
     });
   }
 
-  async listar(tenantId: string) {
+  async listar(tenantId: string, f: FiltroPublicacionesDto) {
     return this.db.withTenant(tenantId, async (ej) => {
+      const q = f.q ? `%${f.q.trim()}%` : null;
+      const params = [q, f.portal ?? null, f.estado ?? null];
+
+      const desde = `
+        FROM publicacion p
+        JOIN operacion o ON o.id = p.operacion_id
+        JOIN propiedad pr ON pr.id = o.propiedad_id
+       WHERE ($1::text IS NULL
+              OR p.aviso->>'titulo' ILIKE $1
+              OR pr.calle ILIKE $1
+              OR pr.codigo::text = trim(both '%' from $1))
+         AND ($2::text IS NULL OR p.portal = $2)
+         AND ($3::text IS NULL OR p.estado = $3)`;
+
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        `SELECT count(*)::text AS total ${desde}`,
+        params,
+      );
+
       const { rows } = await ej.query(
         `SELECT p.id, p.portal, p.estado, p.url_publica AS "urlPublica",
                 p.ultimo_sync AS "ultimoSync", p.ultimo_error AS "ultimoError",
@@ -45,16 +69,19 @@ export class PublicacionesService {
                 o.id AS "operacionId", o.tipo AS "tipoOperacion",
                 pr.codigo AS "codigoPropiedad",
                 trim(pr.calle || ' ' || coalesce(pr.numero,'')) AS direccion
-           FROM publicacion p
-           JOIN operacion o ON o.id = p.operacion_id
-           JOIN propiedad pr ON pr.id = o.propiedad_id
-          ORDER BY p.updated_at DESC`,
+         ${desde}
+          ORDER BY p.updated_at DESC
+          LIMIT $4 OFFSET $5`,
+        [...params, f.porPagina, offset(f)],
       );
-      return rows.map((r) => ({
+
+      const items = rows.map((r) => ({
         ...r,
         etiquetaPropiedad: `PROP-${String(r.codigoPropiedad).padStart(4, '0')}`,
         integracionActiva: INTEGRACION_ACTIVA[r.portal as string] ?? false,
       }));
+
+      return armarPagina(items, Number(conteo[0].total), f);
     });
   }
 

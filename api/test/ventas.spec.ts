@@ -1,6 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { Client } from 'pg';
 import { TokensService } from '../src/auth/tokens.service';
+import { loadEnv } from '../src/config/env';
 import {
   auth,
   crearApp,
@@ -139,6 +141,58 @@ describe('Ventas y comisiones', () => {
     expect(t.externas + t.agentes + t.casa).toBe(t.operacion);
   });
 
+  /**
+   * `padre_id` no sale por la API, así que se mira en la base.
+   *
+   * Importa porque es la trazabilidad de la plata: de qué punta salió cada peso
+   * que se le paga a un agente o a otra inmobiliaria. Si el encadenado se rompe,
+   * los totales siguen cuadrando —se calculan aparte— y el error queda invisible
+   * hasta que alguien pregunta de dónde salió un pago.
+   */
+  it('cada línea hija cuelga de la punta de la que salió', async () => {
+    const { venta } = await crearVenta(200000);
+
+    await http().post(`/v1/ventas/${venta.id}/reparto`).set(...como(inmo))
+      .send({
+        puntas: { compradora: 3, vendedora: 4 },
+        externas: { vendedora: { nombre: 'Colega SRL', porcentaje: 50 } },
+        repartoInterno: {
+          captador: { usuarioId: inmo.usuarios.agente, nombre: 'Asesor', porcentaje: 25 },
+        },
+      })
+      .expect(201);
+
+    const c = new Client({ connectionString: loadEnv().DATABASE_OWNER_URL });
+    await c.connect();
+    try {
+      const { rows } = await c.query<{
+        nivel: number; punta: string; padre_nivel: number | null; padre_punta: string | null;
+      }>(
+        `SELECT h.nivel, h.punta,
+                p.nivel AS padre_nivel, p.punta AS padre_punta
+           FROM comision h
+           LEFT JOIN comision p ON p.id = h.padre_id
+          WHERE h.venta_id = $1`,
+        [venta.id],
+      );
+
+      expect(rows.length).toBeGreaterThan(3);
+
+      for (const l of rows) {
+        if (l.nivel === 1) {
+          // Una punta es la raíz del árbol: no cuelga de nada.
+          expect(l.padre_nivel).toBeNull();
+          continue;
+        }
+        // Todo lo demás cuelga de la línea de nivel 1 de SU MISMA punta.
+        expect(l.padre_nivel).toBe(1);
+        expect(l.padre_punta).toBe(l.punta);
+      }
+    } finally {
+      await c.end();
+    }
+  });
+
   it('rehacer el reparto reemplaza, no duplica', async () => {
     const { venta } = await crearVenta(100000);
 
@@ -222,6 +276,9 @@ describe('Ventas y comisiones', () => {
   it('cero fuga: la vecina no ve ventas ajenas', async () => {
     await crearVenta();
     const res = await http().get('/v1/ventas').set(...como(otra)).expect(200);
-    expect(res.body).toHaveLength(0);
+    expect(res.body.items).toHaveLength(0);
+    // El total cuenta con el mismo WHERE y bajo RLS: si contara de más, el
+    // paginador de la vecina revelaría cuántas ventas tenemos.
+    expect(res.body.total).toBe(0);
   });
 });

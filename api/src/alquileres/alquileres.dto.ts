@@ -90,3 +90,28 @@ export class AgregarGastoDto {
   @IsIn(['expensas', 'reparacion', 'impuesto', 'ajuste', 'otro']) tipo!: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) monto!: number;
 }
+
+export const ESTADOS_LIQUIDACION = ['borrador', 'cerrada', 'pagada'] as const;
+
+/** `q` busca por nombre del propietario. */
+export class FiltroLiquidacionesDto extends PaginacionDto {
+  @IsOptional() @IsISO8601() periodo?: string;
+  @IsOptional() @IsIn(ESTADOS_LIQUIDACION as unknown as string[]) estado?: string;
+}
+
+/** `q` busca por tipo o fuente del índice. */
+export class FiltroIndicesDto extends PaginacionDto {
+  @IsOptional() @IsIn(INDICES_PUBLICADOS as unknown as string[]) tipo?: string;
+  @IsOptional() @IsISO8601() desde?: string;
+  /**
+   * Cierra la ventana. Sin esto sólo se podía pedir "de tal mes en adelante", y
+   * mirar un año concreto obligaba a traer todo lo posterior y descartarlo.
+   */
+  @IsOptional() @IsISO8601() hasta?: string;
+
+  /**
+   * Los índices se listan de a más: son ~74 períodos por tipo y la pantalla los
+   * muestra en columna. 25 por página obligaría a paginar para ver un año.
+   */
+  override porPagina: number = 100;
+}

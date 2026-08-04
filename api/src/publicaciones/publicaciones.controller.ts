@@ -1,9 +1,13 @@
 import {
-  Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Res,
+  Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { PublicacionesService } from './publicaciones.service';
-import { ActualizarPublicacionDto, CrearPublicacionDto } from './publicaciones.dto';
+import {
+  ActualizarPublicacionDto,
+  CrearPublicacionDto,
+  FiltroPublicacionesDto,
+} from './publicaciones.dto';
 import { ActorActual, Publico, Roles, type Actor } from '../auth/decoradores';
 
 @Controller('publicaciones')
@@ -29,8 +33,8 @@ export class PublicacionesController {
   }
 
   @Get()
-  listar(@ActorActual() a: Actor) {
-    return this.pub.listar(a.tenantId);
+  listar(@ActorActual() a: Actor, @Query() f: FiltroPublicacionesDto) {
+    return this.pub.listar(a.tenantId, f);
   }
 
   @Get('previsualizar/:operacionId')

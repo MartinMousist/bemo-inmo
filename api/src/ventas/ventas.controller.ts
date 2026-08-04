@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Patch } from '@nestjs/common';
+import {
+  Body, Controller, Get, Param, ParseUUIDPipe, Post, Patch, Query,
+} from '@nestjs/common';
 import { VentasService } from './ventas.service';
 import {
-  CerrarVentaDto, CobrarComisionDto, CrearVentaDto, RepartoDto,
+  CerrarVentaDto, CobrarComisionDto, CrearVentaDto, FiltroVentasDto, RepartoDto,
 } from './ventas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
@@ -10,8 +12,8 @@ export class VentasController {
   constructor(private readonly ventas: VentasService) {}
 
   @Get()
-  listar(@ActorActual() a: Actor) {
-    return this.ventas.listar(a.tenantId);
+  listar(@ActorActual() a: Actor, @Query() f: FiltroVentasDto) {
+    return this.ventas.listar(a.tenantId, f);
   }
 
   /** Lo que le corresponde a cada agente. El asesor ve lo suyo. */

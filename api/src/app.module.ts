@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { opcionesDeLimite } from './auth/limite-intentos';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { AuthController } from './auth/auth.controller';
@@ -55,7 +57,10 @@ import { PlantillasController } from './plantillas/plantillas.controller';
 import { PlantillasService } from './plantillas/plantillas.service';
 
 @Module({
-  imports: [DatabaseModule],
+  // El límite de intentos NO va como guard global: sólo lo aplica AuthController
+  // con @UseGuards. Un tope global de dos dígitos por ventana rompería el uso
+  // normal de la app, que hace decenas de requests por pantalla.
+  imports: [DatabaseModule, ThrottlerModule.forRoot(opcionesDeLimite)],
   controllers: [
     HealthController,
     AuthController,

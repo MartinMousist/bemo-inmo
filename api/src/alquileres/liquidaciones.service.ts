@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import { round2 } from './ajustes.motor';
+import type { FiltroLiquidacionesDto } from './alquileres.dto';
 
 export interface LineaLiquidacion {
   concepto: string;
@@ -99,6 +101,8 @@ export class LiquidacionesService {
         [mes],
       );
 
+      if (!cobros.length) return { generadas: 0, omitidasCerradas: 0 };
+
       // Agrupado por (propietario, moneda): un propietario con un alquiler en
       // pesos y otro en dólares recibe DOS liquidaciones, no una mezclada.
       const grupos = new Map<string, typeof cobros>();
@@ -108,42 +112,91 @@ export class LiquidacionesService {
         grupos.get(k)!.push(c);
       }
 
-      let generadas = 0;
+      // ── 1. Qué liquidaciones del período ya existen ────────────────────────
+      //
+      // Una sola consulta para todas. Antes se preguntaba una por grupo: cerrar
+      // el mes con 200 contratos eran 200 viajes a la base sólo para esto, el
+      // día del mes en que más se usa el sistema.
+      const { rows: existentes } = await ej.query<{
+        id: string; propietario_id: string; moneda: string; estado: string;
+      }>(
+        `SELECT id, propietario_id, moneda, estado
+           FROM liquidacion WHERE periodo = $1`,
+        [mes],
+      );
+      const porClave = new Map(
+        existentes.map((e) => [`${e.propietario_id}|${e.moneda}`, e]),
+      );
+
       let omitidasCerradas = 0;
+      const aRearmar: Array<{ id: string; filas: typeof cobros }> = [];
+      const faltantes: Array<{ clave: string; propietarioId: string; moneda: string }> = [];
 
       for (const [clave, filas] of grupos) {
         const [propietarioId, moneda] = clave.split('|');
+        const ya = porClave.get(clave);
 
-        const { rows: existente } = await ej.query<{ id: string; estado: string }>(
-          `SELECT id, estado FROM liquidacion
-            WHERE propietario_id = $1 AND periodo = $2 AND moneda = $3`,
-          [propietarioId, mes, moneda],
-        );
-
-        if (existente.length && existente[0].estado !== 'borrador') {
+        if (ya && ya.estado !== 'borrador') {
           omitidasCerradas++;
           continue;
         }
+        if (ya) aRearmar.push({ id: ya.id, filas });
+        else faltantes.push({ clave, propietarioId, moneda });
+      }
 
-        const liquidacionId = existente.length
-          ? existente[0].id
-          : (
-              await ej.query<{ id: string }>(
-                `INSERT INTO liquidacion (tenant_id, propietario_id, periodo, moneda)
-                 VALUES ($1,$2,$3,$4) RETURNING id`,
-                [tenantId, propietarioId, mes, moneda],
-              )
-            ).rows[0].id;
+      // ── 2. Crear las que faltan, todas de una ──────────────────────────────
+      if (faltantes.length) {
+        const { rows: creadas } = await ej.query<{
+          id: string; propietario_id: string; moneda: string;
+        }>(
+          `INSERT INTO liquidacion (tenant_id, propietario_id, periodo, moneda)
+           SELECT $1, x.propietario_id, $2::date, x.moneda
+             FROM unnest($3::uuid[], $4::text[]) AS x(propietario_id, moneda)
+           RETURNING id, propietario_id, moneda`,
+          [
+            tenantId,
+            mes,
+            faltantes.map((f) => f.propietarioId),
+            faltantes.map((f) => f.moneda),
+          ],
+        );
 
-        // Se rehace desde cero: es más simple y más seguro que intentar
-        // reconciliar líneas existentes.
-        await ej.query('DELETE FROM liquidacion_linea WHERE liquidacion_id = $1', [
-          liquidacionId,
-        ]);
+        for (const c of creadas) {
+          const clave = `${c.propietario_id}|${c.moneda}`;
+          aRearmar.push({ id: c.id, filas: grupos.get(clave)! });
+        }
+      }
 
-        let bruto = 0;
-        let honorarios = 0;
+      if (!aRearmar.length) return { generadas: 0, omitidasCerradas };
+      const ids = aRearmar.map((l) => l.id);
 
+      // ── 3. Borrar SÓLO lo que se recalcula ─────────────────────────────────
+      //
+      // Antes esto borraba TODAS las líneas de la liquidación y después sumaba
+      // los gastos desde una tabla que acababa de vaciar: el total de gastos
+      // daba siempre 0 y el gasto cargado a mano desaparecía. Con un termotanque
+      // de ARS 85.000 adelantado por la inmobiliaria, rearmar el período le
+      // transfería esos 85.000 de más al propietario.
+      await ej.query(
+        `DELETE FROM liquidacion_linea
+          WHERE liquidacion_id = ANY($1::uuid[])
+            AND tipo IN ('alquiler','honorarios')`,
+        [ids],
+      );
+
+      // ── 4. Calcular en memoria e insertar todas las líneas de una ──────────
+      const linea = {
+        liquidacionId: [] as string[],
+        contratoId: [] as string[],
+        periodoId: [] as string[],
+        concepto: [] as string[],
+        tipo: [] as string[],
+        signo: [] as number[],
+        monto: [] as number[],
+        detalle: [] as string[],
+      };
+
+      for (const { id, filas } of aRearmar) {
         for (const f of filas) {
           // El porcentaje de condominio de ESTE locador. Sin porcentaje se
           // asume 100: un contrato con un solo locador es el caso normal.
@@ -155,75 +208,118 @@ export class LiquidacionesService {
           const dir = [f.calle, f.numero].filter(Boolean).join(' ');
           const sufijo = pct === 100 ? '' : ` · ${pct}% de titularidad`;
 
-          await ej.query(
-            `INSERT INTO liquidacion_linea
-               (tenant_id, liquidacion_id, contrato_id, periodo_id, concepto, tipo, signo, monto, detalle)
-             VALUES ($1,$2,$3,$4,$5,'alquiler',1,$6,$7)`,
-            [
-              tenantId, liquidacionId, f.contrato_id, f.periodo_id,
-              `Alquiler ${etiqueta} · ${dir}${sufijo}`,
-              parteCobro,
-              JSON.stringify({
-                cobroId: f.cobro_id,
-                cobroTotal: Number(f.monto),
-                porcentajeTitularidad: pct,
-              }),
-            ],
+          linea.liquidacionId.push(id);
+          linea.contratoId.push(f.contrato_id);
+          linea.periodoId.push(f.periodo_id);
+          linea.concepto.push(`Alquiler ${etiqueta} · ${dir}${sufijo}`);
+          linea.tipo.push('alquiler');
+          linea.signo.push(1);
+          linea.monto.push(parteCobro);
+          linea.detalle.push(
+            JSON.stringify({
+              cobroId: f.cobro_id,
+              cobroTotal: Number(f.monto),
+              porcentajeTitularidad: pct,
+            }),
           );
-          bruto = round2(bruto + parteCobro);
 
           if (parteHonorarios > 0) {
-            await ej.query(
-              `INSERT INTO liquidacion_linea
-                 (tenant_id, liquidacion_id, contrato_id, periodo_id, concepto, tipo, signo, monto, detalle)
-               VALUES ($1,$2,$3,$4,$5,'honorarios',-1,$6,$7)`,
-              [
-                tenantId, liquidacionId, f.contrato_id, f.periodo_id,
-                `Honorarios ${Number(f.honorarios_pct)}% · ${etiqueta}`,
-                parteHonorarios,
-                JSON.stringify({ base: parteCobro, pct: Number(f.honorarios_pct) }),
-              ],
+            linea.liquidacionId.push(id);
+            linea.contratoId.push(f.contrato_id);
+            linea.periodoId.push(f.periodo_id);
+            linea.concepto.push(`Honorarios ${Number(f.honorarios_pct)}% · ${etiqueta}`);
+            linea.tipo.push('honorarios');
+            linea.signo.push(-1);
+            linea.monto.push(parteHonorarios);
+            linea.detalle.push(
+              JSON.stringify({ base: parteCobro, pct: Number(f.honorarios_pct) }),
             );
-            honorarios = round2(honorarios + parteHonorarios);
           }
         }
-
-        // Los gastos cargados a mano sobreviven al rearmado: se vuelven a sumar
-        // desde las líneas que no son ni alquiler ni honorarios.
-        const { rows: gastos } = await ej.query<{ total: string }>(
-          `SELECT coalesce(sum(monto),0) AS total FROM liquidacion_linea
-            WHERE liquidacion_id = $1 AND tipo NOT IN ('alquiler','honorarios') AND signo = -1`,
-          [liquidacionId],
-        );
-        const totalGastos = Number(gastos[0].total);
-
-        await ej.query(
-          `UPDATE liquidacion
-              SET total_bruto = $2, total_honorarios = $3, total_gastos = $4,
-                  total_neto = $5
-            WHERE id = $1`,
-          [
-            liquidacionId, bruto, honorarios, totalGastos,
-            round2(bruto - honorarios - totalGastos),
-          ],
-        );
-
-        generadas++;
       }
 
-      return { generadas, omitidasCerradas };
+      if (linea.liquidacionId.length) {
+        await ej.query(
+          `INSERT INTO liquidacion_linea
+             (tenant_id, liquidacion_id, contrato_id, periodo_id,
+              concepto, tipo, signo, monto, detalle)
+           SELECT $1, x.liquidacion_id, x.contrato_id, x.periodo_id,
+                  x.concepto, x.tipo, x.signo, x.monto, x.detalle
+             FROM unnest(
+                    $2::uuid[], $3::uuid[], $4::uuid[], $5::text[],
+                    $6::text[], $7::smallint[], $8::numeric[], $9::jsonb[]
+                  ) AS x(liquidacion_id, contrato_id, periodo_id, concepto,
+                         tipo, signo, monto, detalle)`,
+          [
+            tenantId,
+            linea.liquidacionId, linea.contratoId, linea.periodoId,
+            linea.concepto, linea.tipo, linea.signo, linea.monto, linea.detalle,
+          ],
+        );
+      }
+
+      // ── 5. Recalcular los totales desde las líneas, en una sola pasada ─────
+      //
+      // Los totales salen de la tabla, no de un acumulador de JavaScript: así
+      // los gastos que sobrevivieron al rearmado entran sin tener que volver a
+      // leerlos, y el total no puede quedar desincronizado de sus líneas.
+      await ej.query(
+        `UPDATE liquidacion l
+            SET total_bruto      = coalesce(t.bruto, 0),
+                total_honorarios = coalesce(t.honorarios, 0),
+                total_gastos     = coalesce(t.gastos, 0),
+                total_neto       = coalesce(t.bruto, 0)
+                                 - coalesce(t.honorarios, 0)
+                                 - coalesce(t.gastos, 0)
+           FROM unnest($1::uuid[]) AS objetivo(id)
+           LEFT JOIN (
+             SELECT liquidacion_id,
+                    sum(monto) FILTER (WHERE tipo = 'alquiler'   AND signo =  1) AS bruto,
+                    sum(monto) FILTER (WHERE tipo = 'honorarios' AND signo = -1) AS honorarios,
+                    sum(monto) FILTER (
+                      WHERE tipo NOT IN ('alquiler','honorarios') AND signo = -1
+                    ) AS gastos
+               FROM liquidacion_linea
+              WHERE liquidacion_id = ANY($1::uuid[])
+              GROUP BY liquidacion_id
+           ) t ON t.liquidacion_id = objetivo.id
+          WHERE l.id = objetivo.id`,
+        [ids],
+      );
+
+      return { generadas: aRearmar.length, omitidasCerradas };
     });
   }
 
-  async listar(tenantId: string, periodo?: string): Promise<Liquidacion[]> {
+  async listar(tenantId: string, f: FiltroLiquidacionesDto): Promise<Pagina<Liquidacion>> {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows } = await ej.query<FilaLiquidacion>(
-        `${SELECT_LIQUIDACION}
-          WHERE ($1::date IS NULL OR l.periodo = date_trunc('month', $1::date))
-          ORDER BY l.periodo DESC, pe.apellido, pe.nombre`,
-        [periodo ?? null],
+      const q = f.q ? `%${f.q.trim()}%` : null;
+      const params = [f.periodo ?? null, f.estado ?? null, q];
+
+      const donde = `
+        WHERE ($1::date IS NULL OR l.periodo = date_trunc('month', $1::date))
+          AND ($2::text IS NULL OR l.estado = $2)
+          AND ($3::text IS NULL
+               OR trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')) ILIKE $3)`;
+
+      // Contar sin el json_agg de líneas: son las líneas de TODAS las
+      // liquidaciones del tenant sólo para devolver un número.
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        `SELECT count(*)::text AS total
+           FROM liquidacion l
+           JOIN persona pe ON pe.id = l.propietario_id
+          ${donde}`,
+        params,
       );
-      return rows.map(aLiquidacion);
+
+      const { rows } = await ej.query<FilaLiquidacion>(
+        `${SELECT_LIQUIDACION} ${donde}
+          ORDER BY l.periodo DESC, pe.apellido, pe.nombre
+          LIMIT $4 OFFSET $5`,
+        [...params, f.porPagina, offset(f)],
+      );
+
+      return armarPagina(rows.map(aLiquidacion), Number(conteo[0].total), f);
     });
   }
 

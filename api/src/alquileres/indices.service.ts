@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import { BcraService } from './bcra.service';
+import type { FiltroIndicesDto } from './alquileres.dto';
 
 export type TipoIndicePublicado = 'ipc' | 'icl' | 'uva' | 'icp';
 
@@ -82,7 +84,26 @@ export class IndicesService {
     return salida;
   }
 
-  async listar(tipo?: TipoIndicePublicado, desde?: string): Promise<ValorIndice[]> {
+  /**
+   * Los índices NO están scopeados por tenant: son dato público y global. Pero
+   * son también la tabla que más rápido crece —cuatro índices por mes, para
+   * siempre— y devolverla entera hace más grande la respuesta cada mes que pasa.
+   */
+  async listar(f: FiltroIndicesDto): Promise<Pagina<ValorIndice>> {
+    const q = f.q ? `%${f.q.trim()}%` : null;
+    const params = [f.tipo ?? null, f.desde ?? null, q, f.hasta ?? null];
+
+    const donde = `
+      WHERE ($1::text IS NULL OR tipo = $1)
+        AND ($2::date IS NULL OR periodo >= $2)
+        AND ($3::text IS NULL OR tipo ILIKE $3 OR fuente ILIKE $3)
+        AND ($4::date IS NULL OR periodo <= $4)`;
+
+    const [conteo] = await this.db.query<{ total: string }>(
+      `SELECT count(*)::text AS total FROM indice_valor ${donde}`,
+      params,
+    );
+
     const filas = await this.db.query<{
       tipo: TipoIndicePublicado;
       periodo: string;
@@ -90,18 +111,20 @@ export class IndicesService {
       fuente: string;
     }>(
       `SELECT tipo, periodo, valor, fuente FROM indice_valor
-        WHERE ($1::text IS NULL OR tipo = $1)
-          AND ($2::date IS NULL OR periodo >= $2)
-        ORDER BY tipo, periodo DESC`,
-      [tipo ?? null, desde ?? null],
+       ${donde}
+        ORDER BY tipo, periodo DESC
+        LIMIT $5 OFFSET $6`,
+      [...params, f.porPagina, offset(f)],
     );
 
-    return filas.map((f) => ({
-      tipo: f.tipo,
-      periodo: iso(f.periodo),
-      valor: Number(f.valor),
-      fuente: f.fuente,
+    const items = filas.map((r) => ({
+      tipo: r.tipo,
+      periodo: iso(r.periodo),
+      valor: Number(r.valor),
+      fuente: r.fuente,
     }));
+
+    return armarPagina(items, Number(conteo.total), f);
   }
 
   /** El último período cargado de cada índice. Es lo que la UI muestra arriba. */

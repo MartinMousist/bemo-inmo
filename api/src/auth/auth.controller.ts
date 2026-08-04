@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { loadEnv } from '../config/env';
 import { AppError, ErrorCode } from '../common/app-error';
 import { AuthService, type Contexto, type Sesion } from './auth.service';
 import { ActorActual, Publico, type Actor } from './decoradores';
+import { LimiteIntentosGuard, POR_CUENTA, POR_IP, SinLimite } from './limite-intentos';
 import {
   AceptarInvitacionDto,
   LoginDto,
@@ -12,6 +14,11 @@ import {
 
 const COOKIE_REFRESH = 'bemo_inmo_rt';
 
+/**
+ * El límite de intentos se aplica a este controlador y a ninguno más: son las
+ * únicas rutas donde un desconocido puede probar credenciales.
+ */
+@UseGuards(LimiteIntentosGuard)
 @Controller('auth')
 export class AuthController {
   private readonly env = loadEnv();
@@ -19,6 +26,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Publico()
+  @Throttle({ [POR_IP]: { limit: () => loadEnv().RATE_LIMIT_REGISTRO_IP } })
   @Post('registrar')
   async registrar(
     @Body() dto: RegistrarDto,
@@ -38,7 +46,11 @@ export class AuthController {
     return this.responder(await this.auth.login(dto.email, dto.password, ctx(req)), res);
   }
 
+  // El refresh no lleva email: no hay cuenta que contar, sólo IP. Y va holgado
+  // porque lo dispara el front solo, no una persona tecleando.
   @Publico()
+  @SkipThrottle({ [POR_CUENTA]: true })
+  @Throttle({ [POR_IP]: { limit: () => loadEnv().RATE_LIMIT_REFRESH_IP } })
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.[COOKIE_REFRESH];
@@ -60,7 +72,11 @@ export class AuthController {
     }
   }
 
+  // Acá el identificador es el token de invitación, no un email: contar "por
+  // cuenta" no significaría nada. Queda el contador por IP, que es el que frena
+  // a alguien probando tokens al voleo.
   @Publico()
+  @SkipThrottle({ [POR_CUENTA]: true })
   @Post('invitacion/aceptar')
   async aceptarInvitacion(
     @Body() dto: AceptarInvitacionDto,
@@ -73,7 +89,10 @@ export class AuthController {
     );
   }
 
+  // Cerrar sesión no adivina nada. Limitarlo sólo lograría dejar a alguien con
+  // la sesión abierta sin poder cerrarla.
   @Publico()
+  @SinLimite()
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.auth.cerrarSesion(req.cookies?.[COOKIE_REFRESH], ctx(req));
@@ -86,6 +105,9 @@ export class AuthController {
    * con la cookie. Devuelve la sesión completa —nombres incluidos— para que el
    * front no tenga que pedir un refresh extra sólo para llenar el encabezado.
    */
+  // Sin esto, /yo queda limitado a 10 por ventana por IP — y el front lo llama en
+  // cada carga de página. Una oficina detrás de una IP se quedaría sin sesión.
+  @SinLimite()
   @Get('yo')
   async yo(@ActorActual() actor: Actor) {
     const { usuario, tenant } = await this.auth.quienSoy(actor.usuarioId, actor.tenantId);

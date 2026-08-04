@@ -2,11 +2,12 @@ import {
   Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query,
 } from '@nestjs/common';
 import { ContratosService } from './contratos.service';
-import { IndicesService, type TipoIndicePublicado } from './indices.service';
+import { IndicesService } from './indices.service';
 import { LiquidacionesService } from './liquidaciones.service';
 import {
   AgregarGastoDto, CargarIndiceDto, CargarIndicesLoteDto, CrearContratoDto,
-  FiltroContratosDto, GenerarLiquidacionesDto, GenerarPeriodosDto, RegistrarCobroDto,
+  FiltroContratosDto, FiltroIndicesDto, FiltroLiquidacionesDto,
+  GenerarLiquidacionesDto, GenerarPeriodosDto, RegistrarCobroDto,
 } from './alquileres.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
@@ -91,8 +92,8 @@ export class IndicesController {
   constructor(private readonly indices: IndicesService) {}
 
   @Get()
-  listar(@Query('tipo') tipo?: TipoIndicePublicado, @Query('desde') desde?: string) {
-    return this.indices.listar(tipo, desde);
+  listar(@Query() f: FiltroIndicesDto) {
+    return this.indices.listar(f);
   }
 
   /** Hasta qué mes hay datos de cada índice. Es lo primero que mira la pantalla. */
@@ -136,8 +137,8 @@ export class LiquidacionesController {
 
   @Get()
   @Roles('owner', 'admin', 'contable')
-  listar(@ActorActual() a: Actor, @Query('periodo') periodo?: string) {
-    return this.liquidaciones.listar(a.tenantId, periodo);
+  listar(@ActorActual() a: Actor, @Query() f: FiltroLiquidacionesDto) {
+    return this.liquidaciones.listar(a.tenantId, f);
   }
 
   @Get(':id')

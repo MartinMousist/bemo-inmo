@@ -156,12 +156,22 @@ export class ContratosService {
     for (const l of dto.locatarios ?? []) filas.push([l, 'locatario', null]);
     for (const g of dto.garantes ?? []) filas.push([g, 'garante', null]);
 
-    for (const [personaId, rol, pct] of filas) {
+    // Un solo INSERT para todas las partes. Un contrato con tres locadores en
+    // condominio, dos locatarios y dos garantes eran siete viajes a la base.
+    if (filas.length) {
       await ej.query(
         `INSERT INTO contrato_parte (tenant_id, contrato_id, persona_id, rol, porcentaje)
-         VALUES ($1,$2,$3,$4,$5)
+         SELECT $1, $2, x.persona_id, x.rol, x.porcentaje
+           FROM unnest($3::uuid[], $4::text[], $5::numeric[])
+                AS x(persona_id, rol, porcentaje)
          ON CONFLICT (contrato_id, persona_id, rol) DO NOTHING`,
-        [tenantId, contratoId, personaId, rol, pct],
+        [
+          tenantId,
+          contratoId,
+          filas.map((f) => f[0]),
+          filas.map((f) => f[1]),
+          filas.map((f) => f[2]),
+        ],
       );
     }
 

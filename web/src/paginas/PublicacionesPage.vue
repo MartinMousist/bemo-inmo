@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
+import SearchInput from '../componentes/SearchInput.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
+import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { fechaHora } from '../dominio/formato';
+import { consulta, type Pagina } from '../dominio/pagina';
 
 interface Publicacion {
   id: string; portal: string; estado: string; titulo: string | null;
@@ -26,7 +29,14 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   pausada: 'Pausada', error: 'Error', baja: 'De baja',
 };
 
+const POR_PAGINA = 25;
+
 const items = ref<Publicacion[]>([]);
+const total = ref(0);
+const paginas = ref(1);
+const pagina = ref(1);
+const q = ref('');
+const filtroPortal = ref('');
 const feed = ref<{ token: string; url: string } | null>(null);
 const abierta = ref<string | null>(null);
 const aviso = ref<Aviso | null>(null);
@@ -38,14 +48,36 @@ async function cargar() {
   cargando.value = true; error.value = '';
   try {
     const [p, f] = await Promise.all([
-      api<Publicacion[]>('/publicaciones'),
+      api<Pagina<Publicacion>>(
+        `/publicaciones?${consulta(
+          { pagina: pagina.value, porPagina: POR_PAGINA },
+          { q: q.value.trim(), portal: filtroPortal.value },
+        )}`,
+      ),
       api<{ token: string; url: string }>('/publicaciones/feed/token').catch(() => null),
     ]);
-    items.value = p; feed.value = f;
+    items.value = p.items;
+    total.value = p.total;
+    paginas.value = p.paginas;
+    feed.value = f;
   } catch (e) {
     error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las publicaciones.';
   } finally { cargando.value = false; }
 }
+
+let debounce: ReturnType<typeof setTimeout> | undefined;
+watch([q, filtroPortal], () => {
+  clearTimeout(debounce);
+  pagina.value = 1;
+  // Al cambiar el filtro se cierra el detalle abierto: la fila que se estaba
+  // mirando puede no estar más en la lista.
+  abierta.value = null;
+  debounce = setTimeout(cargar, 220);
+});
+watch(pagina, () => {
+  abierta.value = null;
+  void cargar();
+});
 
 async function abrir(id: string) {
   if (abierta.value === id) { abierta.value = null; return; }
@@ -88,8 +120,32 @@ onMounted(cargar);
     </div>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
+
+    <div class="filtros">
+      <SearchInput v-model="q" placeholder="Título del aviso, dirección o código…" />
+      <div class="segmented">
+        <button type="button" :class="{ activo: filtroPortal === '' }" @click="filtroPortal = ''">
+          Todos
+        </button>
+        <button
+          v-for="(nombre, clave) in NOMBRE_PORTAL"
+          :key="clave"
+          type="button"
+          :class="{ activo: filtroPortal === clave }"
+          @click="filtroPortal = clave"
+        >
+          {{ nombre }}
+        </button>
+      </div>
+    </div>
+
     <UiSkeleton v-if="cargando" :filas="3" :alto="64" />
 
+    <UiEmpty
+      v-else-if="!items.length && (q || filtroPortal)"
+      titulo="Ningún aviso coincide"
+      detalle="Probá con otro texto o sacá el filtro de portal."
+    />
     <UiEmpty v-else-if="!items.length" titulo="Todavía no hay avisos armados"
       detalle="Desde una operación disponible se genera el aviso para el portal que quieras. El texto sale listo con título, precio y atributos." />
 
@@ -121,10 +177,26 @@ onMounted(cargar);
         </div>
       </div>
     </article>
+
+    <UiPager
+      v-if="!cargando"
+      v-model:pagina="pagina"
+      :paginas="paginas"
+      :total="total"
+      :por-pagina="POR_PAGINA"
+      sustantivo="avisos"
+    />
   </div>
 </template>
 
 <style scoped>
+.filtros { display: flex; gap: var(--s-md); flex-wrap: wrap; }
+.filtros > :first-child { flex: 1; min-width: 220px; }
+.segmented { display: flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow-x: auto; background: var(--surface); }
+.segmented button { font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-lg); border: none; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.segmented button:last-child { border-right: none; }
+.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
+
 .feed { display: flex; align-items: center; justify-content: space-between; gap: var(--s-lg); flex-wrap: wrap; }
 .nota { margin: var(--s-xs) 0 0; font-size: 12px; color: var(--muted); max-width: 60ch; }
 .url { padding: var(--s-sm) var(--s-md); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 12px; }

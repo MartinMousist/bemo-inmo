@@ -320,11 +320,17 @@ export class PropiedadesService {
   ): Promise<void> {
     await ej.query('DELETE FROM titularidad WHERE propiedad_id = $1', [propiedadId]);
 
-    for (const t of titulares) {
+    if (titulares.length) {
       await ej.query(
         `INSERT INTO titularidad (tenant_id, propiedad_id, persona_id, porcentaje)
-         VALUES ($1,$2,$3,$4)`,
-        [tenantId, propiedadId, t.personaId, t.porcentaje],
+         SELECT $1, $2, x.persona_id, x.porcentaje
+           FROM unnest($3::uuid[], $4::numeric[]) AS x(persona_id, porcentaje)`,
+        [
+          tenantId,
+          propiedadId,
+          titulares.map((t) => t.personaId),
+          titulares.map((t) => t.porcentaje),
+        ],
       );
     }
 

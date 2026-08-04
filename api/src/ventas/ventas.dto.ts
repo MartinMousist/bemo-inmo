@@ -3,6 +3,9 @@ import {
   IsIn, IsISO8601, IsNumber, IsObject, IsOptional, IsString,
   IsUUID, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
+import { PaginacionDto } from '../common/paginacion';
+
+export const ESTADOS_VENTA = ['en_curso', 'boleto', 'escriturada', 'caida'] as const;
 
 export class ExternaDto {
   @IsString() @MaxLength(120) nombre!: string;
@@ -54,4 +57,9 @@ export class CerrarVentaDto {
 
 export class CobrarComisionDto {
   @IsOptional() @IsISO8601() fecha?: string;
+}
+
+/** `q` busca por código de propiedad, calle, localidad o nombre del comprador. */
+export class FiltroVentasDto extends PaginacionDto {
+  @IsOptional() @IsIn(ESTADOS_VENTA as unknown as string[]) estado?: string;
 }

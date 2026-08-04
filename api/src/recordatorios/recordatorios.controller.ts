@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { RecordatoriosService } from './recordatorios.service';
+import { FiltroAvisosDto } from './recordatorios.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
 @Controller('avisos')
@@ -13,8 +14,8 @@ export class RecordatoriosController {
   }
 
   @Get()
-  bandeja(@ActorActual() a: Actor, @Query('futuros') futuros?: string) {
-    return this.rec.bandeja(a.tenantId, futuros === 'true');
+  bandeja(@ActorActual() a: Actor, @Query() f: FiltroAvisosDto) {
+    return this.rec.bandeja(a.tenantId, f);
   }
 
   /**

@@ -43,26 +43,31 @@ export class PlantillasService {
    */
   async sembrar(tenantId: string): Promise<{ creadas: number; yaEstaban: number }> {
     return this.db.withTenant(tenantId, async (ej) => {
-      let creadas = 0;
-      let yaEstaban = 0;
+      // Un SELECT + un INSERT por plantilla eran dos viajes a la base por cada
+      // una. Acá el filtro va adentro del INSERT: se insertan de una las que no
+      // existen, y las creadas se cuentan por lo que devuelve el RETURNING.
+      const { rows: creadas } = await ej.query<{ id: string }>(
+        `INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido)
+         SELECT $1, x.tipo, x.nombre, x.contenido
+           FROM unnest($2::text[], $3::text[], $4::text[])
+                AS x(tipo, nombre, contenido)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM plantilla_doc d
+             WHERE d.tipo = x.tipo AND d.nombre = x.nombre
+          )
+         RETURNING id`,
+        [
+          tenantId,
+          PLANTILLAS_POR_DEFECTO.map((p) => p.tipo),
+          PLANTILLAS_POR_DEFECTO.map((p) => p.nombre),
+          PLANTILLAS_POR_DEFECTO.map((p) => p.contenido),
+        ],
+      );
 
-      for (const p of PLANTILLAS_POR_DEFECTO) {
-        const { rows } = await ej.query(
-          'SELECT 1 FROM plantilla_doc WHERE tipo = $1 AND nombre = $2',
-          [p.tipo, p.nombre],
-        );
-        if (rows.length) {
-          yaEstaban++;
-          continue;
-        }
-        await ej.query(
-          'INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido) VALUES ($1,$2,$3,$4)',
-          [tenantId, p.tipo, p.nombre, p.contenido],
-        );
-        creadas++;
-      }
-
-      return { creadas, yaEstaban };
+      return {
+        creadas: creadas.length,
+        yaEstaban: PLANTILLAS_POR_DEFECTO.length - creadas.length,
+      };
     });
   }
 

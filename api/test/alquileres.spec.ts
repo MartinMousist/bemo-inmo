@@ -392,7 +392,7 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
 
     const liqs = await http()
       .get('/v1/liquidaciones?periodo=2026-01-01').set(...como(inmo)).expect(200);
-    const mia = liqs.body.find(
+    const mia = liqs.body.items.find(
       (l: { propietario: { id: string } }) => l.propietario.id === dueno.id,
     );
 
@@ -435,8 +435,8 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     const liqs = await http().get('/v1/liquidaciones?periodo=2026-02-01')
       .set(...como(inmo)).expect(200);
 
-    const sesenta = liqs.body.find((l: { propietario: { id: string } }) => l.propietario.id === a.body.id);
-    const cuarenta = liqs.body.find((l: { propietario: { id: string } }) => l.propietario.id === b.body.id);
+    const sesenta = liqs.body.items.find((l: { propietario: { id: string } }) => l.propietario.id === a.body.id);
+    const cuarenta = liqs.body.items.find((l: { propietario: { id: string } }) => l.propietario.id === b.body.id);
 
     expect(sesenta.totalBruto).toBe(300000);      // 60% de 500.000
     expect(sesenta.totalHonorarios).toBe(30000);
@@ -466,7 +466,7 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
 
     const liqs = await http().get('/v1/liquidaciones?periodo=2026-03-01')
       .set(...como(inmo)).expect(200);
-    const mia = liqs.body.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
+    const mia = liqs.body.items.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
 
     const con = await http().post(`/v1/liquidaciones/${mia.id}/gastos`)
       .set(...como(inmo))
@@ -477,6 +477,28 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     expect(con.body.totalHonorarios).toBe(40000);
     expect(con.body.totalGastos).toBe(85000);
     expect(con.body.totalNeto).toBe(275000);
+
+    // Rearmar el período NO puede borrar un gasto cargado a mano. Generar es
+    // idempotente y se corre varias veces por mes; si el rearmado se llevara los
+    // gastos, el propietario cobraría 85.000 de más y nadie lo notaría hasta el
+    // reclamo.
+    await http().post('/v1/liquidaciones/generar')
+      .set(...como(inmo)).send({ periodo: '2026-03-01' }).expect(201);
+
+    const despues = await http().get(`/v1/liquidaciones/${mia.id}`)
+      .set(...como(inmo)).expect(200);
+
+    expect(despues.body.totalGastos).toBe(85000);
+    expect(despues.body.totalNeto).toBe(275000);
+    expect(
+      despues.body.lineas.some((l: { concepto: string }) =>
+        l.concepto.includes('termotanque'),
+      ),
+    ).toBe(true);
+
+    // Y no puede duplicar las líneas automáticas al rearmar.
+    const alquiler = despues.body.lineas.filter((l: { tipo: string }) => l.tipo === 'alquiler');
+    expect(alquiler).toHaveLength(1);
   });
 
   it('una liquidación cerrada no se modifica', async () => {
@@ -494,7 +516,7 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
 
     const liqs = await http().get('/v1/liquidaciones?periodo=2026-05-01')
       .set(...como(inmo)).expect(200);
-    const mia = liqs.body.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
+    const mia = liqs.body.items.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
 
     await http().post(`/v1/liquidaciones/${mia.id}/cerrar`).set(...como(inmo)).expect(201);
 
@@ -520,7 +542,7 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
 
     const liqs = await http().get('/v1/liquidaciones?periodo=2026-06-01')
       .set(...como(inmo)).expect(200);
-    const mia = liqs.body.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
+    const mia = liqs.body.items.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
     await http().post(`/v1/liquidaciones/${mia.id}/cerrar`).set(...como(inmo)).expect(201);
 
     // Regenerar el mismo período no puede duplicar lo ya rendido: al cerrar,
@@ -552,7 +574,7 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
 
     const liqs = await http().get('/v1/liquidaciones?periodo=2026-02-01')
       .set(...como(inmo)).expect(200);
-    const mia = liqs.body.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
+    const mia = liqs.body.items.find((l: { propietario: { id: string } }) => l.propietario.id === dueno.id);
     await http().post(`/v1/liquidaciones/${mia.id}/cerrar`).set(...como(inmo)).expect(201);
 
     const netoAlCerrar = (await http().get(`/v1/liquidaciones/${mia.id}`)
