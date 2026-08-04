@@ -29,8 +29,43 @@ jobs:
       JWT_SECRET: clave_de_ci_de_al_menos_treinta_y_dos_caracteres
       NODE_ENV: test
 
+      # S3 real (MinIO). Sin esto, los diez tests de fotos fallan — y entre
+      # ellos está el que verifica que un archivo se acepte por su FIRMA DE
+      # BYTES y no por su nombre, que es el que impide subir un ejecutable
+      # llamado `foto.jpg`. Un CI que no corre esos tests es un CI que da luz
+      # verde a un cambio que rompe esa validación.
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: bemo-inmo-ci
+      S3_ACCESS_KEY: ci_s3_access
+      S3_SECRET_KEY: ci_s3_secret_min8
+      S3_PUBLIC_URL: http://localhost:9000/bemo-inmo-ci
+
     steps:
       - uses: actions/checkout@v4
+
+      # MinIO va con `docker run` y no como `service`: la imagen necesita el
+      # comando `server /data`, y los `services` de Actions no permiten
+      # sobrescribir el comando — sólo el entrypoint, que acá no alcanza.
+      - name: Levantar MinIO
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=ci_s3_access \
+            -e MINIO_ROOT_PASSWORD=ci_s3_secret_min8 \
+            minio/minio:latest server /data
+
+          # Esperar a que responda antes de crear el bucket. Sin esto, `mc`
+          # corre contra un servidor que todavía no escucha y falla.
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break
+            sleep 1
+          done
+
+          # El bucket, una sola vez. Sin él la primera subida da NoSuchBucket y
+          # parece un bug de la app.
+          docker run --rm --network host \
+            -e MC_HOST_local=http://ci_s3_access:ci_s3_secret_min8@localhost:9000 \
+            minio/mc:latest mb --ignore-existing local/bemo-inmo-ci
 
       # Node 20, no la última: Node 26 inyecta un localStorage experimental que
       # rompe la suite del frontend con errores que no son bugs reales.
