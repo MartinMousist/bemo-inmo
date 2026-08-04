@@ -274,6 +274,141 @@ a un 403 con el mensaje que redacta la base — el límite vive en un solo lugar
 
 ---
 
+## Etapa 10 — Mejoras propuestas (2026-08-04)
+
+> Salieron de recorrer el código entero, no de una lista de ideas. Cada una dice
+> **por qué** y **cómo se sabe que está hecha**. Están ordenadas por lo que cuesta
+> si no se hacen, no por lo que cuesta hacerlas.
+>
+> Las nueve etapas anteriores siguen siendo el camino: esto es lo que se ve
+> desde acá arriba, con las etapas construidas.
+
+### 10.1 · Huecos del dominio — columnas que nadie lee
+
+Es el **error #3 del playbook** con nombre y apellido: hay columnas en la base que
+se escriben, se imprimen en el contrato y después nadie usa. Para el usuario, la
+feature no existe; para el que lee el schema, parece que sí.
+
+- [ ] **Punitorios por mora.** `contrato_alquiler.punitorio_diario_pct` se carga, se
+      guarda y **se imprime en el contrato** (`plantillas.defecto.ts`: «devengará un
+      interés punitorio del {{ }}% diario»), pero ningún código lo calcula sobre una
+      cuota vencida. El sistema está imprimiendo una cláusula legal que después no
+      aplica. Hace falta: el punitorio como línea de la cuota, con su memoria de
+      cálculo (días de mora × tasa × saldo), y la decisión de negocio de si se
+      condona o no — que hoy es una pregunta abierta en `CONTINUAR.md`.
+      **Hecho cuando**: una cuota con 20 días de mora muestra su punitorio calculado
+      y explicable, y se puede condonar dejando registro de quién lo hizo.
+
+- [ ] **Renovación de contrato.** `contrato_anterior_id` existe en el schema y **no
+      lo escribe nadie**. Un contrato que vence es el evento más frecuente de una
+      cartera de alquileres, y hoy renovar es cargar uno nuevo a mano y perder la
+      cadena. **Hecho cuando**: desde un contrato por vencer se genera el siguiente
+      con partes, índice y honorarios precargados, el anterior queda en `renovado`, y
+      la ficha muestra la cadena completa hacia atrás.
+
+- [ ] **Devolución del depósito.** `deposito` y `deposito_devuelto_el` existen; nada
+      los mueve. Es plata de un tercero retenida por la inmobiliaria y es la última
+      discusión de todo alquiler. **Hecho cuando**: al cerrar un contrato se registra
+      la devolución con sus descuentos (expensas impagas, reparaciones) y queda el
+      comprobante.
+
+- [ ] **Expensas: quién las cobra.** `periodo_alquiler.expensas` entra en el total de
+      la cuota, pero no está definido si la inmobiliaria las cobra y las pasa al
+      consorcio o si van aparte. Es una de las cinco preguntas abiertas del gate de
+      la etapa 0, y cambia el neto de la liquidación.
+      **Hecho cuando**: la regla está escrita en `spec.md` y hay un test con números
+      reales que la sostiene.
+
+- [ ] **Recibo de cobro.** Se registra el cobro y no sale ningún papel. El inquilino
+      pide comprobante. El motor de plantillas ya existe: falta la plantilla y el
+      botón. **Hecho cuando**: se registra un cobro y se imprime su recibo.
+
+### 10.2 · Auditoría de la plata
+
+Hoy `cobro.registrado_por` y `contrato_ajuste.confirmado_por` guardan el autor, pero
+`liquidacion` sólo tiene `cerrada_el` y `pagada_el`: **no quién**. Cerrar una
+liquidación es el acto que congela lo que se le transfiere a un propietario, y es
+justo el que no tiene firma.
+
+- [ ] `cerrada_por` y `pagada_por` en `liquidacion`.
+- [ ] Una vista o tabla de auditoría de los movimientos de plata: cobro, ajuste
+      confirmado, liquidación cerrada, comisión cobrada, gasto agregado. Con quién,
+      cuándo y desde qué IP — ya se guarda para las sesiones.
+      **Hecho cuando**: ante «¿quién cerró esto y cuándo?» hay una pantalla, no un
+      `SELECT` a mano.
+
+### 10.3 · Lo que se rompe con volumen
+
+- [ ] **La segunda tanda de paginación.** La primera cerró cinco endpoints. Quedan
+      sin paginar: `GET /contratos/vencimientos` (un `UNION ALL` de tres tablas sin
+      `LIMIT`), `/contratos/:id/periodos`, `/contratos/:id/ajustes`,
+      `/ventas/comisiones/por-agente`, `/equipo` y `/plantillas`. Los tres primeros
+      crecen con el tiempo, no con la cartera: un contrato de tres años son 36
+      cuotas, y `vencimientos` con 200 contratos devuelve todo junto.
+      **Hecho cuando**: la suite de `paginacion.spec.ts` los incluye en su tabla.
+
+- [ ] **Los agregados de la cartera se calculan sobre todo el tenant.** El CTE de
+      `cartera.service.ts` agrupa las cuotas de **todos** los contratos para
+      devolver una página de 50. Con 500 contratos × 36 cuotas son 18.000 filas
+      agregadas en cada request. Hoy no duele; hay que medirlo antes de que duela.
+      **Hecho cuando**: hay un `EXPLAIN ANALYZE` con 500 contratos cargados y, si
+      hace falta, los totales por contrato viven en una vista materializada.
+
+- [ ] **El límite de intentos vive en la memoria del proceso.** Con una sola
+      instancia alcanza. Con dos réplicas detrás de un balanceador, cada una lleva su
+      contador y el límite efectivo se duplica. Hay un comentario en
+      `limite-intentos.ts` que lo dice.
+      **Hecho cuando**: hay storage compartido, o está escrito que se despliega una
+      sola instancia y por qué.
+
+- [ ] **Archivar en vez de acumular.** Contratos rescindidos, oportunidades perdidas
+      y avisos vistos siguen entrando en todas las consultas. Falta decidir qué se
+      archiva y cómo se lo sigue pudiendo consultar.
+
+### 10.4 · Que se pueda diagnosticar en producción
+
+Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas juntas.
+
+- [ ] **Request-id y logging estructurado.** Hoy diagnosticar sería `grep` sobre logs
+      sueltos, sin forma de atar los renglones de un mismo request.
+- [ ] **El backup no corre solo.** El script existe y lo ejecuta una persona; un
+      backup que depende de que alguien se acuerde no es un backup.
+      **Hecho cuando**: corre solo, y hay una **restauración probada** — un backup
+      que nunca se restauró es una hipótesis.
+- [ ] **Deploy.** No hay servidor, dominio ni TLS. El `Dockerfile` de producción está
+      listo. Con `docker compose` + Caddy alcanza para empezar.
+- [ ] **Tests de frontend: hoy hay cero.** Los cuatro bugs de UI de la construcción
+      anterior —y los dos de ésta— se encontraron mirando el navegador a mano.
+      Cubrir primero lo que ya tuvo un bug: `dominio/formato.ts` (tuvo uno de zona
+      horaria), el refresh single-flight, el importador y la galería de fotos.
+- [ ] **CI sin verificar**: el workflow existe y nunca corrió, porque no hay repo
+      remoto.
+
+### 10.5 · Producto — lo que pide quien ya lo usa
+
+- [ ] **Portal del propietario.** Un acceso de sólo lectura donde el dueño ve sus
+      liquidaciones y el estado de cobranza de su propiedad. Es lo que más llamados
+      ahorra, y todo el dato ya existe: es una pantalla y un rol.
+- [ ] **Cobranza que se explique sola al inquilino.** Un enlace con el detalle de la
+      cuota, el aumento aplicado y su memoria de cálculo. La regla «todo cálculo se
+      puede explicar» hoy termina en la pantalla del administrador.
+- [ ] **Vista de caja del día.** Qué entró hoy, por qué medio y quién lo registró.
+      Los datos están en `cobro`; falta la pantalla.
+- [ ] **Notas y seguimiento en el contrato.** Hoy el ida y vuelta con el inquilino
+      vive en WhatsApp, que es exactamente de donde este producto viene a sacarlo.
+- [ ] **Comparar contra el año pasado.** Cartera, cobranza y morosidad mes contra
+      mes. **Sin gráficos decorativos**: números y variación, según `DESIGN.md`.
+
+### 10.6 · Accesibilidad y detalles que quedaron pendientes
+
+- [ ] Revisar la app entera a 375px. Se verificaron el inicio, la cartera y la
+      portada; el resto sólo tiene los breakpoints declarados.
+- [ ] Contraste en modo oscuro y navegación por teclado en las tablas.
+- [ ] Estados de carga por fila, no sólo skeletons de pantalla completa.
+- [ ] La paleta ⌘K sólo busca propiedades y personas: falta contratos y liquidaciones.
+
+---
+
 ## Cómo se construye cada feature, siempre igual
 
 ```

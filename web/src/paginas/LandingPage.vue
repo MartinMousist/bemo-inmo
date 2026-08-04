@@ -147,7 +147,9 @@ const contraste = [
   },
   {
     hoy: 'Si alguien se va, la información se va con él.',
-    aca: 'Todo queda en la cuenta de la inmobiliaria, con quién hizo cada cosa.',
+    // "con quién hizo cada cosa" a secas sería más de lo que hoy se guarda:
+    // cobros y aumentos sí llevan autor; cerrar una liquidación todavía no.
+    aca: 'Todo queda en la cuenta de la inmobiliaria, y cada cobro y cada aumento con quién lo hizo.',
   },
 ];
 
@@ -183,7 +185,10 @@ const preguntas = [
   },
   {
     q: '¿Sirve si los contratos tienen índices distintos?',
-    a: 'Es exactamente para eso. Desde que los contratos son de forma libre, cada uno puede tener su índice (IPC, ICL, UVA, ICP, dólar o un porcentaje fijo) y su periodicidad. El sistema los maneja por contrato, no por regla general.',
+    // Decía "…IPC, ICL, UVA, ICP, dólar o un porcentaje fijo…" y el dólar NO es
+    // uno de los índices que el sistema maneja (ver INDICES en alquileres.dto).
+    // Prometer un índice que no existe es el mismo error que un precio inventado.
+    a: 'Es exactamente para eso. Desde que los contratos son de forma libre, cada uno puede tener su índice —IPC, ICL, UVA, Casa Propia o un porcentaje fijo— y su periodicidad. El sistema los maneja por contrato, no por regla general. Un contrato en dólares se carga en dólares y sin índice, que es como se firman.',
   },
   {
     q: '¿Puedo migrar lo que tengo hoy?',

@@ -3,7 +3,7 @@
 > Documento de traspaso. Si arrancás una sesión nueva, **leé esto primero** y
 > después `CLAUDE.md`, `DESIGN.md` y `docs/roadmap.md`.
 >
-> Última actualización: 2026-08-04.
+> Última actualización: 2026-08-04 (segunda sesión del día).
 
 ---
 
@@ -38,12 +38,11 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 
 | | |
 |---|---|
-| Commits | 12 |
+| Commits | 19 |
 | Migraciones | 12 |
-| Tests | **300, en verde**, contra Postgres real |
-| Rutas de API | 134 |
-| Pantallas | 25 |
-| Líneas (sin tests) | ~15.900 |
+| Tests | **359, en verde**, contra Postgres real |
+| Rutas de API | 142 |
+| Pantallas | 26 |
 
 ### Etapas
 
@@ -69,7 +68,7 @@ cerrado un gate cuya evidencia no existe es el error #2 del playbook con otra ca
 |---|---|
 | **BCRA** (ICL + UVA) | ✅ **Funcionando.** Contrato verificado contra la API real (v4.0, variables 40 y 31). 74 períodos cargados de cada uno. Idempotente. `POST /v1/indices/sincronizar` |
 | **INDEC** (IPC) | ❌ Manual **a propósito**. No hay API estable; raspar un HTML que cambia sin aviso pondría un número equivocado en un aviso de aumento |
-| **Google Maps** | ⚙️ Código listo, **falta la API key**. Sin ella la app no inventa coordenadas: ofrece cargarlas a mano y dice por qué |
+| **Google Maps** | ⚙️ Todo el circuito listo, **falta sólo la API key**. Con la key puesta en `.env` ya llega al contenedor (antes el compose no la pasaba), hay diagnóstico que le pega a Google de verdad y un backfill de las propiedades cargadas antes. Sin key no inventa coordenadas: ofrece cargarlas a mano y dice por qué |
 | **S3** (fotos) | ✅ Funcionando con MinIO en dev. Mismo protocolo que S3/R2/Spaces |
 | **Portales** | ⛔ Bloqueado por convenio comercial. El generador de aviso funciona hoy (copiar y pegar) |
 | **WhatsApp / email** | ⛔ Los avisos se generan y se ven; el envío necesita verificación de negocio |
@@ -114,6 +113,12 @@ Cada una costó un rato de diagnóstico:
 | Arnés sin `helmet` | Los tests pasaban sin headers de seguridad | Configuración duplicada entre `main.ts` y el arnés |
 | `BODY_LIMIT` 1 MB | Ninguna foto real entraba | El test usaba un PNG de 2×2 |
 | Prototipos en plantillas | `{{ constructor }}` devolvía internals de JS | Acceso normal sube por la cadena de prototipos |
+| `@SkipThrottle()` sin argumentos | Saltaba el contador `default`, y los nuestros se llaman `ip` y `cuenta`: no saltaba nada. `/auth/yo` habría quedado limitado a 10 por ventana, y el front lo llama en cada carga | Los contadores con nombre no participan del `default` |
+| Rearmar una liquidación | Borraba **todas** las líneas y después sumaba los gastos de la tabla que acababa de vaciar: `totalGastos` daba siempre 0 | El `DELETE` no filtraba por tipo. Un gasto adelantado se le transfería de más al propietario |
+| `unnest` y el orden del `RETURNING` | — | El orden de las filas que devuelve un `INSERT` no lo garantiza el motor. En `ventas` el encadenado padre→hijo se mapea por `punta`, no por posición |
+| Índices en los tests | Un test cargó `icp` "porque estaba vacío" y rompió otro que afirmaba que `icp` no tiene valores | Los índices son **globales** y no se limpian entre corridas. Cada suite usa su propio año y acota con `desde`+`hasta` |
+| El índice del ajuste | Cargar el IPC sólo de los meses del ajuste no proyecta nada | El motor usa el índice del **mes anterior**: el IPC de un mes se publica a mediados del siguiente |
+| `GOOGLE_MAPS_API_KEY` | Con la key en `.env`, la API seguía sin verla | El `docker-compose.yml` no la pasaba al servicio `api` |
 
 ---
 
@@ -135,102 +140,50 @@ Lo que no sé y estoy interpretando:
 
 ---
 
-### 🟠 Prioridad 1 — fallan solas, no hipotéticamente
+### ✅ Hecho en esta sesión
 
-**1.1 · Límite de intentos en el login.**
-Verificado: **no hay ninguno**. `bcrypt` costo 12 hace lento cada intento pero no
-frena un ataque sostenido.
-→ `@nestjs/throttler` en `POST /auth/login`, `/auth/refresh` y
-`/auth/invitacion/aceptar`. Sugerido: 10 intentos por IP cada 15 min.
-→ Test: el intento 11 devuelve 429.
+Todo lo que era prioridad 1 y 2 está cerrado, con tests. El detalle de cada
+decisión está en los mensajes de commit; acá va sólo el titular y lo que
+apareció en el camino.
 
-**1.2 · Paginación en cinco endpoints que devuelven todo.**
-Sin paginar: `ventas`, `liquidaciones`, `publicaciones`, `avisos`, `indices`.
-El plan Medio permite **500 propiedades**, así que esto se rompe **dentro del
-límite que vendemos**.
-→ Usar `PaginacionDto` + `armarPagina` de `src/common/paginacion.ts`, que ya
-existen y se usan en personas, propiedades, oportunidades y contratos.
-
-**1.3 · Cinco consultas dentro de bucles (N+1).**
-La peor: `liquidaciones.service.ts` hace una consulta por línea. Cerrar el mes con
-200 contratos se vuelve lento justo el día que más se usa.
-Archivos: `planes.service.ts:53`, `contratos.service.ts:159`,
-`ventas.service.ts:156`, `propiedades.service.ts:323`, `plantillas.service.ts:49`.
-→ Insertar en lote con `unnest()` o `INSERT ... SELECT`.
+| | Qué | Lo que apareció al hacerlo |
+|---|---|---|
+| 1.1 | Límite de intentos en `/auth`: por IP **y** por cuenta | `@SkipThrottle()` pelado no salta contadores con nombre. Habría limitado `/auth/yo` |
+| 1.2 | Paginación en los cinco endpoints + `UiPager` | `avisos` tenía un `LIMIT 200` pelado: eso no es paginar, es truncar en silencio |
+| 1.3 | Seis N+1 pasados a lote | **Bug de plata**: rearmar una liquidación borraba los gastos cargados a mano y se los transfería de más al propietario |
+| 2.1 | Pantalla de inicio en `/` | Los bloques de plata vienen en `null` para el asesor, no en cero |
+| 2.2 | Cartera de alquileres con acciones en línea y en lote | Un aumento confirmado y en vigencia **no** es el "próximo aumento" |
+| 2.3 | Portada: el problema, las garantías y el cierre | La portada prometía el **dólar como índice**, que no existe. Corregido |
+| 2.4 | `UiToasts` + `UiConfirm` como promesa | — |
+| — | Google Maps: diagnóstico + backfill | El compose **nunca** le pasaba la key al contenedor |
 
 ---
 
-### 🟡 Prioridad 2 — lo que pediste
+### 🟠 Lo que sigue
 
-**2.1 · Pantalla de inicio (dashboard).**
-Hoy se entra a Propiedades, que es un archivo. Un administrador abre el sistema
-para saber **qué tiene que hacer hoy**. Los datos ya existen todos.
+Está todo en **`docs/roadmap.md`, etapa 10**, con el porqué de cada uno y cómo se
+sabe que está hecho. El titular:
 
-Contenido propuesto:
-- Qué vence esta semana (de `GET /v1/contratos/vencimientos`)
-- Aumentos por confirmar, con el monto (de `contrato_ajuste` en estado `proyectado`)
-- Cuotas impagas y el total adeudado
-- Liquidaciones del mes en borrador
-- Oportunidades sin contactar hace más de N días
-- Cuatro números arriba: cartera, contratos vigentes, cobrado del mes, por cobrar
-
-Ruta `/` cuando hay sesión (hoy redirige a `/propiedades`).
-**Nada de gráficos decorativos**: números y listas accionables, cada una con su link.
-
-**2.2 · Gestión de alquileres en formato lista.**
-Hoy `ContratosPage` es una tabla básica. Falta:
-- Vista de **cartera de alquileres** con una fila por contrato y sus columnas de
-  gestión: próximo aumento, última cuota, saldo, estado de cobranza
-- Filtros por estado de cobranza, índice, mes de vencimiento
-- Acciones en línea sin entrar a la ficha: confirmar aumento, registrar cobro
-- Selección múltiple para generar cuotas o proyectar ajustes en tanda
-- Alternar entre lista compacta y tarjetas
-
-**2.3 · Landing como appmiti.**
-⚠️ **No pude ver appmiti**: la navegación fue denegada y `appmiti.com` devuelve
-**403** a la descarga. La portada actual (`web/src/paginas/LandingPage.vue`) es un
-diseño propio con la estructura estándar del género.
-→ **Hace falta que pases capturas** de `appmiti.com` y `appmiti.com/login`. Con eso
-se replica la arquitectura visual, con copy y marca propios (copiar textos e
-imágenes de otra empresa deja expuesto legalmente y diría cosas que no son de este
-producto).
-
-**2.4 · Estética, siguiente pasada.**
-- Un `UiToasts` + store de UI: hoy los errores se muestran como bloques rojos
-  dentro de la página. Un toast con detalle (*"Cobro registrado · ARS 485.000"*)
-  es lo que falta.
-- `UiConfirm` como promesa (`await ui.confirm({...})`) para lo destructivo: hoy
-  borrar no pide confirmación en ningún lado.
-- Estados de carga por fila, no sólo skeletons de pantalla completa.
-- Revisar la app entera a 375px: sólo se verificó que los breakpoints existan.
-- Pasada de accesibilidad: foco visible ya está, falta revisar contraste en modo
-  oscuro y navegación por teclado en las tablas.
+- **10.1 · Huecos del dominio.** Columnas que se escriben y nadie lee: punitorios
+  (¡que se imprimen en el contrato!), renovación, devolución del depósito.
+- **10.2 · Auditoría de la plata.** Cerrar una liquidación no guarda quién la cerró.
+- **10.3 · Lo que se rompe con volumen.** La segunda tanda de paginación y los
+  agregados de la cartera.
+- **10.4 · Diagnóstico en producción.** Request-id, backup automático con
+  restauración probada, deploy, tests de frontend.
+- **10.5 · Producto.** Portal del propietario, caja del día.
 
 ---
 
-### 🟢 Prioridad 3 — sostenibilidad
+### 🔑 Lo único que está esperando algo tuyo
 
-**3.1 · Tests de frontend.** Hoy hay **cero**. Los cuatro bugs de UI de esta
-construcción se encontraron mirando el navegador a mano.
-→ Vitest + Testing Library. Cubrir: login y refresh single-flight, ⌘K, el
-importador, la galería de fotos, y el formateo de `dominio/formato.ts` (que ya tuvo
-un bug de zona horaria).
-
-**3.2 · Observabilidad.** No hay request-id ni logging estructurado. Diagnosticar
-algo en producción sería `grep` sobre logs sueltos.
-→ Middleware de request-id + logger JSON. Después, un servicio de errores.
-
-**3.3 · El backup no corre solo.** El script existe y lo ejecuta una persona.
-→ Cron en el servidor, o un contenedor con `ofelia`/`cron`.
-
-**3.4 · Deploy.** No hay servidor, dominio ni TLS. El `Dockerfile` de producción
-está listo (multi-stage, sin devDeps, usuario sin privilegios).
-→ Decidir dónde. Con `docker compose` + Caddy alcanza para empezar.
-
-**3.5 · Google Maps.** El código está; falta la key.
-→ Crear el proyecto, habilitar **Geocoding API** y **Maps Embed**, restringir por
-dominio y poner `GOOGLE_MAPS_API_KEY` en `.env`. Ojo con el costo: ya está resuelto
-que se geocodifica una vez y el mapa interactivo va bajo demanda.
+1. **El precio.** Sigue siendo el gate de la etapa 0 y no lo destraba ningún código.
+2. **La API key de Google Maps.** El circuito completo está listo y probado sin key;
+   con la key puesta en `.env` (ver `.env.example`, tiene los tres pasos) funciona
+   solo. Ojo: la restricción va **por IP**, no por referrer HTTP.
+3. **Capturas de `appmiti.com`.** No pude verlo: el dominio resuelve pero el servidor
+   no responde desde acá, ni por navegador, ni por `curl`, ni por búsqueda. La
+   portada de hoy es la arquitectura estándar del género con marca propia.
 
 ---
 
@@ -240,7 +193,7 @@ que se geocodifica una vez y el mapa interactivo va bajo demanda.
 Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 
 Leé docs/CONTINUAR.md y después CLAUDE.md, DESIGN.md y docs/roadmap.md.
-Ya están las nueve etapas construidas y 300 tests en verde.
+Ya están las nueve etapas construidas y 359 tests en verde.
 
 Trabajamos como siempre:
 - Cada feature va completa: migración con RLS, servicio, controlador con roles,
@@ -249,7 +202,7 @@ Trabajamos como siempre:
 - Si algo queda sin hacer o no lo pudiste probar, decímelo explícitamente.
 - Nada de datos falsos: lo que no existe se marca "en desarrollo" con el motivo.
 
-Empezá por [la prioridad que elijas de la sección 5].
+Empezá por [el punto que elijas de la etapa 10 del roadmap].
 ```
 
 ---
@@ -262,10 +215,12 @@ api/src/
   common/               error RFC 9457, paginación, CSV
   auth/                 login, refresh con rotación, guards, roles
   personas/  propiedades/  oportunidades/     ← espina compartida (etapa 3)
+  inicio/               el tablero del día: un endpoint, una vuelta
   alquileres/
     ajustes.motor.ts    el cálculo del aumento. PURO, 17 tests de papel
     bcra.service.ts     ICL y UVA. Contrato verificado
     contratos.service.ts  contratos, ajustes, cuotas, cobros, vencimientos
+    cartera.service.ts  la vista de gestión + las acciones en lote
     liquidaciones.service.ts
   ventas/
     comisiones.motor.ts los TRES niveles de reparto. PURO, 11 tests
@@ -281,8 +236,10 @@ api/src/
 web/src/
   dominio/formato.ts    money/fecha/periodo. Reglas de negocio, no cosmética
   api/cliente.ts        refresh single-flight + descarga autenticada
-  componentes/          AppShell, CommandPalette, GaleriaFotos, primitivos
-  paginas/              25 pantallas
+  dominio/pagina.ts     la forma de una lista paginada, igual que en el back
+  stores/ui.ts          toasts + confirmar() como promesa
+  componentes/          AppShell, CommandPalette, GaleriaFotos, UiPager, primitivos
+  paginas/              26 pantallas
 ```
 
 **Los cuatro motores puros** (`ajustes`, `comisiones`, `aviso`, `plantillas`) no
