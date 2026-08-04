@@ -223,7 +223,8 @@ Marcado con ⏳ en el roadmap. **Nada de esto se destraba escribiendo código**:
 ```
 Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 
-Leé docs/CONTINUAR.md y después CLAUDE.md, DESIGN.md y docs/roadmap.md.
+Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
+docs/roadmap.md.
 Ya están las diez etapas construidas: 437 tests de API y 45 de front, en verde.
 
 Trabajamos como siempre:

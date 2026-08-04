@@ -13,6 +13,7 @@ real, las decisiones ya tomadas, las trampas descubiertas y qué sigue en orden.
 
 Documentos clave:
 - `docs/CONTINUAR.md` — **traspaso entre sesiones**. Empezá por acá.
+- `PLAYBOOK.md` — el método: etapas con gates y los siete errores conocidos.
 - `docs/spec.md` — spec técnico: modelo de datos, permisos, reglas de negocio, criterios de aceptación.
 - `docs/roadmap.md` — las etapas con sus gates. No se pasa de etapa sin cerrar el gate.
 - `docs/suite.md` — arquitectura del grupo BEMO y convenciones de nombres.
@@ -21,8 +22,13 @@ Documentos clave:
 Stack: **Vue 3 + Vite + Pinia** (front) · **NestJS** (back) · **PostgreSQL 16 con RLS** ·
 Docker Compose para dev. Node 20 en todos los contenedores.
 
-El playbook (`PLAYBOOK.md`) se sigue **al pie de la letra**. Bemo MED corre otro stack
-(Spring + MariaDB); es historia de MED y no condiciona nada acá.
+El playbook (`PLAYBOOK.md`) se sigue **al pie de la letra**. Está en la raíz del
+repositorio: es una reconstrucción del original de Bemo MED, hecha con lo que este
+repo ya afirma, porque el original no estaba versionado acá y sus errores se citan
+por número desde el roadmap, las migraciones y el código.
+
+Bemo MED corre otro stack (Spring + MariaDB); es historia de MED y no condiciona
+nada acá — y esa línea es la que el playbook original tenía mal (ver `docs/suite.md`, G5).
 
 ## Cómo se trabaja acá
 

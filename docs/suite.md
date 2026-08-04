@@ -111,7 +111,7 @@ Conviene no venderlo, porque no existe y construirlo costaría caro:
 | G2 | Definir el rango de acentos disponible para futuras verticales, para que no colisionen entre sí ni con los semánticos. | Nada urgente |
 | G3 | Registrar `bemo.com.ar` y los subdominios por vertical. | La etapa 8 de INMO |
 | G4 | Verificar disponibilidad de la marca "BEMO" en la clase que corresponda (INPI). | Antes de gastar en material de marca |
-| G5 | Corregir `PLAYBOOK.md`: dice que bemo es "Vue 3 + NestJS + Postgres" y el proyecto del que sale (Bemo MED) es Spring Boot + MariaDB. El método es correcto; la línea del stack no. | Nada, pero cuesta cinco minutos y evita repetir la confusión |
+| G5 | ~~Corregir `PLAYBOOK.md`~~ **Hecho el 2026-08-04**: el playbook no estaba versionado en este repo aunque `CLAUDE.md` lo daba por existente. Se reconstruyó en la raíz, sin la línea del stack — el método no depende del stack. Si aparece el original de Bemo MED, reemplazalo. | — |
 
 **G4 no es un detalle.** Es más barato descubrir hoy que el nombre está tomado que después
 de haber armado la identidad de tres productos.
