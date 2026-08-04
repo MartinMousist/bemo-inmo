@@ -3,6 +3,7 @@ import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import { round2 } from './ajustes.motor';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 import type { FiltroLiquidacionesDto } from './alquileres.dto';
 
 export interface LineaLiquidacion {
@@ -49,7 +50,10 @@ export interface Liquidacion {
 export class LiquidacionesService {
   private readonly logger = new Logger('Liquidaciones');
 
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
   /**
    * Arma (o rearma) las liquidaciones borrador de un período.
@@ -80,6 +84,8 @@ export class LiquidacionesService {
         locador_id: string;
         locador_nombre: string;
         porcentaje: string | null;
+        imputacion: string;
+        punitorio_para: string;
       }>(
         `SELECT co.id AS cobro_id, co.monto, co.moneda,
                 c.id AS contrato_id, c.honorarios_pct,
@@ -87,7 +93,8 @@ export class LiquidacionesService {
                 pr.codigo AS propiedad_codigo, pr.calle, pr.numero,
                 cp.persona_id AS locador_id,
                 trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')) AS locador_nombre,
-                cp.porcentaje
+                cp.porcentaje,
+                co.imputacion, c.punitorio_para
            FROM cobro co
            JOIN periodo_alquiler p ON p.id = co.periodo_id
            JOIN contrato_alquiler c ON c.id = p.contrato_id
@@ -97,6 +104,11 @@ export class LiquidacionesService {
           WHERE p.periodo = $1
             AND co.liquidacion_id IS NULL
             AND c.administrado = true
+            -- El punitorio que queda para la inmobiliaria no se le rinde a
+            -- nadie, así que no entra al circuito. Si entrara sin generar
+            -- línea, quedaría sin liquidacion_id para siempre y volvería a
+            -- leerse en cada rearmado, todos los meses.
+            AND NOT (co.imputacion = 'punitorio' AND c.punitorio_para = 'inmobiliaria')
           ORDER BY pr.codigo, p.periodo`,
         [mes],
       );
@@ -180,7 +192,7 @@ export class LiquidacionesService {
       await ej.query(
         `DELETE FROM liquidacion_linea
           WHERE liquidacion_id = ANY($1::uuid[])
-            AND tipo IN ('alquiler','honorarios')`,
+            AND tipo IN ('alquiler','honorarios','punitorio')`,
         [ids],
       );
 
@@ -207,6 +219,37 @@ export class LiquidacionesService {
           const etiqueta = `PROP-${String(f.propiedad_codigo).padStart(4, '0')}`;
           const dir = [f.calle, f.numero].filter(Boolean).join(' ');
           const sufijo = pct === 100 ? '' : ` · ${pct}% de titularidad`;
+
+          // ── Punitorio ──────────────────────────────────────────────────────
+          //
+          // A quién le corresponde el interés por mora lo decide el CONTRATO,
+          // no una regla global: en la mayoría compensa al propietario por la
+          // plata que no cobró a tiempo, pero es negociable.
+          //
+          // Cuando queda para la inmobiliaria simplemente no se genera línea, y
+          // el cobro igual se marca como liquidado para que no vuelva a entrar
+          // en el próximo rearmado.
+          if (f.imputacion === 'punitorio') {
+            linea.liquidacionId.push(id);
+            linea.contratoId.push(f.contrato_id);
+            linea.periodoId.push(f.periodo_id);
+            linea.concepto.push(`Punitorio ${etiqueta} · ${dir}${sufijo}`);
+            linea.tipo.push('punitorio');
+            linea.signo.push(1);
+            linea.monto.push(parteCobro);
+            linea.detalle.push(
+              JSON.stringify({
+                cobroId: f.cobro_id,
+                cobroTotal: Number(f.monto),
+                porcentajeTitularidad: pct,
+                concepto: 'interés por mora',
+              }),
+            );
+            // Sobre el punitorio NO se cobran honorarios: los honorarios son un
+            // porcentaje del alquiler pactado, no de la mora. Cobrarlos sobre el
+            // interés sería cobrar dos veces por el mismo atraso.
+            continue;
+          }
 
           linea.liquidacionId.push(id);
           linea.contratoId.push(f.contrato_id);
@@ -274,10 +317,15 @@ export class LiquidacionesService {
            FROM unnest($1::uuid[]) AS objetivo(id)
            LEFT JOIN (
              SELECT liquidacion_id,
-                    sum(monto) FILTER (WHERE tipo = 'alquiler'   AND signo =  1) AS bruto,
+                    -- El punitorio suma al bruto: es plata que se le rinde al
+                    -- propietario igual que el alquiler.
+                    sum(monto) FILTER (
+                      WHERE tipo IN ('alquiler','punitorio') AND signo = 1
+                    ) AS bruto,
                     sum(monto) FILTER (WHERE tipo = 'honorarios' AND signo = -1) AS honorarios,
                     sum(monto) FILTER (
-                      WHERE tipo NOT IN ('alquiler','honorarios') AND signo = -1
+                      WHERE tipo NOT IN ('alquiler','honorarios','punitorio')
+                        AND signo = -1
                     ) AS gastos
                FROM liquidacion_linea
               WHERE liquidacion_id = ANY($1::uuid[])
@@ -339,6 +387,8 @@ export class LiquidacionesService {
     tenantId: string,
     id: string,
     g: { concepto: string; tipo: string; monto: number },
+    usuarioId: string,
+    ip?: string,
   ): Promise<Liquidacion> {
     return this.db.withTenant(tenantId, async (ej) => {
       await this.exigirBorrador(ej, id);
@@ -355,7 +405,20 @@ export class LiquidacionesService {
         `${SELECT_LIQUIDACION} WHERE l.id = $1`,
         [id],
       );
-      return aLiquidacion(rows[0]);
+      const liq = aLiquidacion(rows[0]);
+
+      await this.auditoria.anotar(ej, tenantId, {
+        accion: 'gasto_agregado',
+        usuarioId,
+        entidadTipo: 'liquidacion',
+        entidadId: id,
+        monto: g.monto,
+        moneda: liq.moneda,
+        ip,
+        detalle: { concepto: g.concepto, tipo: g.tipo, netoDespues: liq.totalNeto },
+      });
+
+      return liq;
     });
   }
 
@@ -363,28 +426,126 @@ export class LiquidacionesService {
    * Cerrar marca los cobros como liquidados: dejan de entrar en liquidaciones
    * futuras. A partir de acá los números no se tocan.
    */
-  async cerrar(tenantId: string, id: string): Promise<Liquidacion> {
+  async cerrar(
+    tenantId: string,
+    id: string,
+    usuarioId: string,
+    ip?: string,
+  ): Promise<Liquidacion> {
     return this.db.withTenant(tenantId, async (ej) => {
       await this.exigirBorrador(ej, id);
 
       await ej.query(
         `UPDATE cobro SET liquidacion_id = $1
           WHERE id IN (SELECT (detalle->>'cobroId')::uuid FROM liquidacion_linea
-                        WHERE liquidacion_id = $1 AND tipo = 'alquiler'
+                        WHERE liquidacion_id = $1
+                          -- También los de punitorio: si sólo se marcaran los
+                          -- de alquiler, el cobro del interés volvería a entrar
+                          -- en la liquidación del mes siguiente. Y del siguiente.
+                          AND tipo IN ('alquiler','punitorio')
                           AND detalle ? 'cobroId')`,
         [id],
       );
 
       await ej.query(
-        `UPDATE liquidacion SET estado = 'cerrada', cerrada_el = now() WHERE id = $1`,
-        [id],
+        `UPDATE liquidacion
+            SET estado = 'cerrada', cerrada_el = now(), cerrada_por = $2
+          WHERE id = $1`,
+        [id, usuarioId],
       );
 
       const { rows } = await ej.query<FilaLiquidacion>(
         `${SELECT_LIQUIDACION} WHERE l.id = $1`,
         [id],
       );
-      return aLiquidacion(rows[0]);
+      const liq = aLiquidacion(rows[0]);
+
+      // Es el acto que congela lo que se le transfiere a un propietario, y hasta
+      // ahora era el único movimiento de plata sin firma.
+      await this.auditoria.anotar(ej, tenantId, {
+        accion: 'liquidacion_cerrada',
+        usuarioId,
+        entidadTipo: 'liquidacion',
+        entidadId: id,
+        monto: liq.totalNeto,
+        moneda: liq.moneda,
+        ip,
+        detalle: {
+          propietario: liq.propietario.nombre,
+          periodo: liq.periodo,
+          totalBruto: liq.totalBruto,
+          totalHonorarios: liq.totalHonorarios,
+          totalGastos: liq.totalGastos,
+        },
+      });
+
+      return liq;
+    });
+  }
+
+  /**
+   * El propietario ya cobró.
+   *
+   * El estado `pagada` existía en el schema desde la etapa 4 y **nada lo
+   * escribía**: una liquidación cerrada y una ya transferida se veían igual, que
+   * es justo lo que hace que a alguien se le pague dos veces.
+   */
+  async marcarPagada(
+    tenantId: string,
+    id: string,
+    usuarioId: string,
+    ip?: string,
+  ): Promise<Liquidacion> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows: actual } = await ej.query<{ estado: string }>(
+        'SELECT estado FROM liquidacion WHERE id = $1 FOR UPDATE',
+        [id],
+      );
+      if (!actual.length) throw AppError.notFound('No se encontró esa liquidación.');
+
+      if (actual[0].estado === 'pagada') {
+        throw new AppError(
+          409,
+          ErrorCode.OPERACION_DUPLICADA,
+          'Esta liquidación ya figura como pagada.',
+          'Conflict',
+        );
+      }
+      if (actual[0].estado !== 'cerrada') {
+        throw new AppError(
+          422,
+          ErrorCode.ESTADO_INVALIDO,
+          'Sólo se marca como pagada una liquidación cerrada: mientras está en ' +
+            'borrador los números todavía pueden cambiar.',
+          'Unprocessable Entity',
+        );
+      }
+
+      await ej.query(
+        `UPDATE liquidacion
+            SET estado = 'pagada', pagada_el = now(), pagada_por = $2
+          WHERE id = $1`,
+        [id, usuarioId],
+      );
+
+      const { rows } = await ej.query<FilaLiquidacion>(
+        `${SELECT_LIQUIDACION} WHERE l.id = $1`,
+        [id],
+      );
+      const liq = aLiquidacion(rows[0]);
+
+      await this.auditoria.anotar(ej, tenantId, {
+        accion: 'liquidacion_pagada',
+        usuarioId,
+        entidadTipo: 'liquidacion',
+        entidadId: id,
+        monto: liq.totalNeto,
+        moneda: liq.moneda,
+        ip,
+        detalle: { propietario: liq.propietario.nombre, periodo: liq.periodo },
+      });
+
+      return liq;
     });
   }
 

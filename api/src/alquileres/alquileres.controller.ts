@@ -1,14 +1,18 @@
 import {
-  Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query,
+  Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query, Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ContratosService } from './contratos.service';
 import { CarteraService } from './cartera.service';
+import { CicloService } from './ciclo.service';
 import { IndicesService } from './indices.service';
 import { LiquidacionesService } from './liquidaciones.service';
 import {
-  AgregarGastoDto, CargarIndiceDto, CargarIndicesLoteDto, CrearContratoDto,
+  AgregarGastoDto, CargarIndiceDto, CargarIndicesLoteDto, CondonarPunitorioDto,
+  CrearContratoDto, DevolverDepositoDto,
   FiltroCarteraDto, FiltroContratosDto, FiltroIndicesDto, FiltroLiquidacionesDto,
   GenerarLiquidacionesDto, GenerarPeriodosDto, LoteContratosDto, RegistrarCobroDto,
+  RenovarContratoDto,
 } from './alquileres.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
@@ -18,6 +22,7 @@ export class ContratosController {
     private readonly contratos: ContratosService,
     // `cartera_` con guión bajo para no chocar con el método `cartera()`.
     private readonly cartera_: CarteraService,
+    private readonly ciclo: CicloService,
   ) {}
 
   @Get()
@@ -83,6 +88,40 @@ export class ContratosController {
     return this.contratos.listarPeriodos(a.tenantId, id);
   }
 
+  /** La cadena de renovaciones, del contrato más viejo al más nuevo. */
+  @Get(':id/cadena')
+  cadena(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.ciclo.cadena(a.tenantId, id);
+  }
+
+  /**
+   * Crea el contrato que sigue con todo lo del anterior ya cargado, y deja el
+   * anterior en `renovado` — que no es lo mismo que `vencido`: uno es una
+   * propiedad que se desocupó, el otro es el mismo inquilino que sigue.
+   */
+  @Post(':id/renovar')
+  @Roles('owner', 'admin')
+  renovar(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RenovarContratoDto,
+    @Req() req: Request,
+  ) {
+    return this.ciclo.renovar(a.tenantId, id, dto, a.usuarioId, req.ip);
+  }
+
+  /** Devolución del depósito en garantía, con el detalle de los descuentos. */
+  @Post(':id/deposito/devolver')
+  @Roles('owner', 'admin')
+  devolverDeposito(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DevolverDepositoDto,
+    @Req() req: Request,
+  ) {
+    return this.ciclo.devolverDeposito(a.tenantId, id, dto, a.usuarioId, req.ip);
+  }
+
   @Post(':id/periodos/generar')
   @Roles('owner', 'admin')
   generarPeriodos(
@@ -101,8 +140,36 @@ export class AjustesController {
   /** Confirmar es el acto de una persona que se hace cargo del número. */
   @Post(':id/confirmar')
   @Roles('owner', 'admin')
-  confirmar(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.contratos.confirmarAjuste(a.tenantId, id, a.usuarioId);
+  confirmar(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
+  ) {
+    return this.contratos.confirmarAjuste(a.tenantId, id, a.usuarioId, req.ip);
+  }
+}
+
+@Controller('cuotas')
+export class CuotasController {
+  constructor(private readonly contratos: ContratosService) {}
+
+  /**
+   * Perdona el interés por mora de una cuota.
+   *
+   * Es plata que se resigna en nombre del propietario, así que sólo titular y
+   * administración, y siempre con motivo.
+   */
+  @Post(':id/condonar-punitorio')
+  @Roles('owner', 'admin')
+  condonar(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CondonarPunitorioDto,
+    @Req() req: Request,
+  ) {
+    return this.contratos.condonarPunitorio(
+      a.tenantId, id, dto.motivo, a.usuarioId, req.ip,
+    );
   }
 }
 
@@ -112,8 +179,12 @@ export class CobrosController {
 
   @Post()
   @Roles('owner', 'admin')
-  registrar(@ActorActual() a: Actor, @Body() dto: RegistrarCobroDto) {
-    return this.contratos.registrarCobro(a.tenantId, dto, a.usuarioId);
+  registrar(
+    @ActorActual() a: Actor,
+    @Body() dto: RegistrarCobroDto,
+    @Req() req: Request,
+  ) {
+    return this.contratos.registrarCobro(a.tenantId, dto, a.usuarioId, req.ip);
   }
 }
 
@@ -189,13 +260,29 @@ export class LiquidacionesController {
     @ActorActual() a: Actor,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AgregarGastoDto,
+    @Req() req: Request,
   ) {
-    return this.liquidaciones.agregarGasto(a.tenantId, id, dto);
+    return this.liquidaciones.agregarGasto(a.tenantId, id, dto, a.usuarioId, req.ip);
   }
 
   @Post(':id/cerrar')
   @Roles('owner', 'admin')
-  cerrar(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.liquidaciones.cerrar(a.tenantId, id);
+  cerrar(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
+  ) {
+    return this.liquidaciones.cerrar(a.tenantId, id, a.usuarioId, req.ip);
+  }
+
+  /** El propietario ya cobró. Es lo que evita que se le pague dos veces. */
+  @Post(':id/pagada')
+  @Roles('owner', 'admin', 'contable')
+  pagada(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
+  ) {
+    return this.liquidaciones.marcarPagada(a.tenantId, id, a.usuarioId, req.ip);
   }
 }

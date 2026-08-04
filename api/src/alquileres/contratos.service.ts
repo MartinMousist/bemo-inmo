@@ -3,6 +3,8 @@ import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import { IndicesService } from './indices.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
+import { calcularPunitorio } from './punitorios.motor';
 import {
   AjusteImposible,
   calcularAjuste,
@@ -47,6 +49,7 @@ export class ContratosService {
   constructor(
     private readonly db: DbService,
     private readonly indices: IndicesService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
   // ── Contratos ──────────────────────────────────────────────────────────────
@@ -98,8 +101,8 @@ export class ContratosService {
              tenant_id, propiedad_id, operacion_id, fecha_inicio, fecha_fin,
              dia_vencimiento, monto_inicial, moneda, indice, indice_porcentaje,
              periodicidad_meses, mes_base, administrado, deposito, deposito_moneda,
-             honorarios_pct, punitorio_diario_pct, estado, notas)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+             honorarios_pct, punitorio_diario_pct, punitorio_para, estado, notas)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
            RETURNING id`,
           [
             tenantId, dto.propiedadId, dto.operacionId ?? null,
@@ -112,6 +115,7 @@ export class ContratosService {
             dto.administrado ?? true,
             dto.deposito ?? null, dto.depositoMoneda ?? dto.moneda,
             dto.honorariosPct ?? 0, dto.punitorioDiarioPct ?? 0,
+            dto.punitorioPara ?? 'propietario',
             dto.estado ?? 'vigente', dto.notas ?? null,
           ],
         );
@@ -309,13 +313,17 @@ export class ContratosService {
     tenantId: string,
     ajusteId: string,
     usuarioId: string,
+    ip?: string,
   ): Promise<{ id: string; estado: string; montoNuevo: number }> {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows } = await ej.query<{ estado: string; monto_nuevo: string }>(
+      const { rows } = await ej.query<{
+        estado: string; monto_nuevo: string; monto_anterior: string;
+        moneda: string; contrato_id: string; vigente_desde: string;
+      }>(
         `UPDATE contrato_ajuste
             SET estado = 'confirmado', confirmado_por = $2, confirmado_el = now()
           WHERE id = $1 AND estado = 'proyectado'
-          RETURNING estado, monto_nuevo`,
+          RETURNING estado, monto_nuevo, monto_anterior, moneda, contrato_id, vigente_desde`,
         [ajusteId, usuarioId],
       );
 
@@ -330,6 +338,21 @@ export class ContratosService {
             )
           : AppError.notFound('No se encontró ese ajuste.');
       }
+
+      await this.auditoria.anotar(ej, tenantId, {
+        accion: 'ajuste_confirmado',
+        usuarioId,
+        entidadTipo: 'contrato_ajuste',
+        entidadId: ajusteId,
+        monto: Number(rows[0].monto_nuevo),
+        moneda: rows[0].moneda,
+        ip,
+        detalle: {
+          contratoId: rows[0].contrato_id,
+          montoAnterior: Number(rows[0].monto_anterior),
+          vigenteDesde: iso(rows[0].vigente_desde),
+        },
+      });
 
       return { id: ajusteId, estado: rows[0].estado, montoNuevo: Number(rows[0].monto_nuevo) };
     });
@@ -434,25 +457,107 @@ export class ContratosService {
 
   async listarPeriodos(tenantId: string, contratoId: string) {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows } = await ej.query(
+      const { rows } = await ej.query<FilaPeriodo>(
         `SELECT p.id, p.periodo, p.vence_el AS "venceEl",
                 p.monto_alquiler AS "montoAlquiler", p.expensas, p.otros,
                 p.total, p.moneda, p.estado,
-                coalesce((SELECT sum(monto) FROM cobro c WHERE c.periodo_id = p.id), 0) AS cobrado
+                p.punitorio_cobrado AS "punitorioCobrado",
+                p.punitorio_condonado_el AS "punitorioCondonadoEl",
+                p.punitorio_condonado_motivo AS "punitorioCondonadoMotivo",
+                c.punitorio_diario_pct AS "tasaPunitoria",
+                coalesce((SELECT sum(co.monto) FROM cobro co
+                           WHERE co.periodo_id = p.id
+                             AND co.imputacion = 'alquiler'), 0) AS cobrado
            FROM periodo_alquiler p
+           JOIN contrato_alquiler c ON c.id = p.contrato_id
           WHERE p.contrato_id = $1
           ORDER BY p.periodo DESC`,
         [contratoId],
       );
-      return rows.map((r) => ({
-        ...r,
-        montoAlquiler: Number(r.montoAlquiler),
-        expensas: Number(r.expensas),
-        otros: Number(r.otros),
-        total: Number(r.total),
-        cobrado: Number(r.cobrado),
-        saldo: round2(Number(r.total) - Number(r.cobrado)),
-      }));
+      return rows.map(aPeriodo);
+    });
+  }
+
+  /**
+   * Perdona el interés por mora de una cuota.
+   *
+   * Es una decisión comercial de todos los días —el inquilino bueno que se
+   * atrasó una semana— y **deja rastro**: es plata que alguien resigna en nombre
+   * del propietario, así que queda quién, cuándo y por qué.
+   */
+  async condonarPunitorio(
+    tenantId: string,
+    periodoId: string,
+    motivo: string,
+    usuarioId: string,
+    ip?: string,
+  ) {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{
+        id: string; vence_el: string; total: string; moneda: string;
+        tasa: string; condonado_el: Date | null; contrato_id: string; cobrado: string;
+      }>(
+        `SELECT p.id, p.vence_el, p.total, p.moneda, p.contrato_id,
+                c.punitorio_diario_pct AS tasa,
+                p.punitorio_condonado_el AS condonado_el,
+                coalesce((SELECT sum(co.monto) FROM cobro co
+                           WHERE co.periodo_id = p.id
+                             AND co.imputacion = 'alquiler'), 0) AS cobrado
+           FROM periodo_alquiler p
+           JOIN contrato_alquiler c ON c.id = p.contrato_id
+          WHERE p.id = $1
+          FOR UPDATE OF p`,
+        [periodoId],
+      );
+      if (!rows.length) throw AppError.notFound('No se encontró esa cuota.');
+
+      const p = rows[0];
+      if (p.condonado_el) {
+        throw new AppError(
+          409,
+          ErrorCode.OPERACION_DUPLICADA,
+          'El punitorio de esta cuota ya estaba condonado.',
+          'Conflict',
+        );
+      }
+
+      // Se guarda cuánto se perdonó, calculado al momento de perdonarlo. Sin el
+      // monto, el asiento dice "se condonó" sin decir cuánto, que para una
+      // auditoría de plata es no decir nada.
+      const punitorio = calcularPunitorio({
+        saldo: round2(Number(p.total) - Number(p.cobrado)),
+        moneda: p.moneda,
+        venceEl: iso(p.vence_el),
+        hasta: hoyIso(),
+        tasaDiariaPct: Number(p.tasa),
+      });
+
+      await ej.query(
+        `UPDATE periodo_alquiler
+            SET punitorio_condonado_el = now(),
+                punitorio_condonado_por = $2,
+                punitorio_condonado_motivo = $3
+          WHERE id = $1`,
+        [periodoId, usuarioId, motivo],
+      );
+
+      await this.auditoria.anotar(ej, tenantId, {
+        accion: 'punitorio_condonado',
+        usuarioId,
+        entidadTipo: 'periodo_alquiler',
+        entidadId: periodoId,
+        monto: punitorio.monto,
+        moneda: p.moneda,
+        ip,
+        detalle: {
+          motivo,
+          contratoId: p.contrato_id,
+          explicacion: punitorio.explicacion,
+          memoria: punitorio.memoria,
+        },
+      });
+
+      return { id: periodoId, condonado: true, montoCondonado: punitorio.monto };
     });
   }
 
@@ -462,26 +567,45 @@ export class ContratosService {
     tenantId: string,
     dto: RegistrarCobroDto,
     usuarioId: string,
-  ): Promise<{ id: string; estadoPeriodo: string; saldo: number }> {
+    ip?: string,
+  ): Promise<{
+    id: string;
+    estadoPeriodo: string;
+    saldo: number;
+    imputacion: string;
+    punitorioCobrado: number;
+  }> {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows: per } = await ej.query<{ total: string; moneda: string; estado: string }>(
-        'SELECT total, moneda, estado FROM periodo_alquiler WHERE id = $1 FOR UPDATE',
+      const { rows: per } = await ej.query<{
+        total: string; moneda: string; estado: string; contrato_id: string;
+        punitorio_cobrado: string;
+      }>(
+        `SELECT total, moneda, estado, contrato_id, punitorio_cobrado
+           FROM periodo_alquiler WHERE id = $1 FOR UPDATE`,
         [dto.periodoId],
       );
       if (!per.length) throw AppError.notFound('No se encontró ese período.');
 
+      const imputacion = dto.imputacion ?? 'alquiler';
+
       const { rows: ins } = await ej.query<{ id: string }>(
-        `INSERT INTO cobro (tenant_id, periodo_id, monto, moneda, fecha, medio, comprobante, registrado_por)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        `INSERT INTO cobro (tenant_id, periodo_id, monto, moneda, fecha, medio,
+                            comprobante, registrado_por, imputacion)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
         [
           tenantId, dto.periodoId, dto.monto, per[0].moneda,
-          dto.fecha ?? new Date().toISOString().slice(0, 10),
+          dto.fecha ?? hoyIso(),
           dto.medio ?? 'transferencia', dto.comprobante ?? null, usuarioId,
+          imputacion,
         ],
       );
 
+      // El saldo de la cuota sólo mira lo imputado a ALQUILER. Si el punitorio
+      // contara, cobrar el interés dejaría la cuota como saldada sin que el
+      // alquiler se hubiera terminado de pagar.
       const { rows: sum } = await ej.query<{ cobrado: string }>(
-        'SELECT coalesce(sum(monto),0) AS cobrado FROM cobro WHERE periodo_id = $1',
+        `SELECT coalesce(sum(monto),0) AS cobrado FROM cobro
+          WHERE periodo_id = $1 AND imputacion = 'alquiler'`,
         [dto.periodoId],
       );
 
@@ -490,12 +614,44 @@ export class ContratosService {
       const saldo = round2(total - cobrado);
       const estado = saldo <= 0 ? 'pagado' : cobrado > 0 ? 'parcial' : 'pendiente';
 
-      await ej.query('UPDATE periodo_alquiler SET estado = $2 WHERE id = $1', [
-        dto.periodoId,
-        estado,
-      ]);
+      // El punitorio cobrado se acumula en la cuota y NO se recalcula después:
+      // el interés se congela el día que se cobra. Recalcularlo en cada lectura
+      // haría que una cuota ya saldada mostrara otro número mañana, porque los
+      // días de mora siguen corriendo.
+      const punitorioCobrado =
+        imputacion === 'punitorio'
+          ? round2(Number(per[0].punitorio_cobrado) + dto.monto)
+          : Number(per[0].punitorio_cobrado);
 
-      return { id: ins[0].id, estadoPeriodo: estado, saldo };
+      await ej.query(
+        `UPDATE periodo_alquiler SET estado = $2, punitorio_cobrado = $3 WHERE id = $1`,
+        [dto.periodoId, estado, punitorioCobrado],
+      );
+
+      await this.auditoria.anotar(ej, tenantId, {
+        accion: 'cobro_registrado',
+        usuarioId,
+        entidadTipo: 'cobro',
+        entidadId: ins[0].id,
+        monto: dto.monto,
+        moneda: per[0].moneda,
+        ip,
+        detalle: {
+          periodoId: dto.periodoId,
+          contratoId: per[0].contrato_id,
+          imputacion,
+          medio: dto.medio ?? 'transferencia',
+          saldoDespues: saldo,
+        },
+      });
+
+      return {
+        id: ins[0].id,
+        estadoPeriodo: estado,
+        saldo,
+        imputacion,
+        punitorioCobrado,
+      };
     });
   }
 
@@ -689,6 +845,84 @@ function aContrato(f: FilaContrato): Contrato {
     proximoAjuste: f.proximo_ajuste ? iso(f.proximo_ajuste) : null,
     diasParaVencer: Number(f.dias_para_vencer),
   };
+}
+
+interface FilaPeriodo {
+  id: string;
+  periodo: string;
+  venceEl: string;
+  montoAlquiler: string;
+  expensas: string;
+  otros: string;
+  total: string;
+  moneda: string;
+  estado: string;
+  cobrado: string;
+  punitorioCobrado: string;
+  punitorioCondonadoEl: Date | null;
+  punitorioCondonadoMotivo: string | null;
+  tasaPunitoria: string;
+}
+
+/**
+ * Arma la cuota con su punitorio **calculado al momento de leerla**.
+ *
+ * Es derivado y no una columna a propósito: los días de mora corren solos, y una
+ * cuota impaga debe más hoy que ayer. Lo que sí se congela es lo ya cobrado
+ * (`punitorio_cobrado`), que no se recalcula nunca.
+ */
+function aPeriodo(f: FilaPeriodo) {
+  const total = Number(f.total);
+  const cobrado = Number(f.cobrado);
+  const saldo = round2(total - cobrado);
+  const condonado = f.punitorioCondonadoEl !== null;
+
+  const punitorio = calcularPunitorio({
+    saldo,
+    moneda: f.moneda,
+    venceEl: iso(f.venceEl),
+    hasta: hoyIso(),
+    tasaDiariaPct: Number(f.tasaPunitoria),
+  });
+
+  return {
+    id: f.id,
+    periodo: iso(f.periodo),
+    venceEl: iso(f.venceEl),
+    montoAlquiler: Number(f.montoAlquiler),
+    expensas: Number(f.expensas),
+    otros: Number(f.otros),
+    total,
+    moneda: f.moneda,
+    estado: f.estado,
+    cobrado,
+    saldo,
+    punitorio: {
+      // Condonado es CERO devengado, pero se sigue informando cuánto se perdonó:
+      // esconderlo haría que el propietario no vea nunca esa decisión.
+      devengado: condonado ? 0 : punitorio.monto,
+      condonado,
+      condonadoMotivo: f.punitorioCondonadoMotivo,
+      montoCondonado: condonado ? punitorio.monto : 0,
+      cobrado: Number(f.punitorioCobrado),
+      diasDeMora: punitorio.diasDeMora,
+      tasaDiariaPct: Number(f.tasaPunitoria),
+      explicacion: punitorio.explicacion,
+      // Lo que falta cobrar de interés. Nunca negativo: si se cobró de más, la
+      // diferencia es un tema de la liquidación, no un saldo a favor acá.
+      saldo: condonado
+        ? 0
+        : Math.max(0, round2(punitorio.monto - Number(f.punitorioCobrado))),
+    },
+  };
+}
+
+/** Hoy en `YYYY-MM-DD` local, sin pasar por UTC. */
+function hoyIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
 }
 
 function iso(d: Date | string): string {

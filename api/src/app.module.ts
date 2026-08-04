@@ -24,11 +24,15 @@ import {
   AjustesController,
   CobrosController,
   ContratosController,
+  CuotasController,
   IndicesController,
   LiquidacionesController,
 } from './alquileres/alquileres.controller';
 import { ContratosService } from './alquileres/contratos.service';
 import { CarteraService } from './alquileres/cartera.service';
+import { CicloService } from './alquileres/ciclo.service';
+import { AuditoriaController } from './auditoria/auditoria.controller';
+import { AuditoriaService } from './auditoria/auditoria.service';
 import { IndicesService } from './alquileres/indices.service';
 import { BcraService } from './alquileres/bcra.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
@@ -68,6 +72,7 @@ import { InicioService } from './inicio/inicio.service';
     HealthController,
     AuthController,
     InicioController,
+    AuditoriaController,
     EquipoController,
     PersonasController,
     PropiedadesController,
@@ -75,6 +80,7 @@ import { InicioService } from './inicio/inicio.service';
     ReservasController,
     ContratosController,
     AjustesController,
+    CuotasController,
     CobrosController,
     IndicesController,
     LiquidacionesController,
@@ -102,6 +108,8 @@ import { InicioService } from './inicio/inicio.service';
     OportunidadesService,
     ContratosService,
     CarteraService,
+    CicloService,
+    AuditoriaService,
     IndicesService,
     BcraService,
     LiquidacionesService,

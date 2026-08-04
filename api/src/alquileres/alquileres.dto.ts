@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, IsArray, IsBoolean, IsIn, IsISO8601, IsInt, IsNumber, IsOptional,
-  IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested,
+  IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import { PaginacionDto } from '../common/paginacion';
 
@@ -40,6 +40,16 @@ export class CrearContratoDto {
   honorariosPct?: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0)
   punitorioDiarioPct?: number;
+
+  /**
+   * A quién le corresponde el interés por mora. Va por contrato y no como regla
+   * global porque no hay una sola respuesta: en la mayoría compensa al
+   * propietario por la plata que no cobró a tiempo, pero es negociable.
+   *
+   * El default 'propietario' es el que NO le da plata extra a quien administra
+   * sin que el dueño lo haya acordado.
+   */
+  @IsOptional() @IsIn(['propietario', 'inmobiliaria']) punitorioPara?: string;
 
   @IsOptional() @IsIn(['borrador', 'por_iniciar', 'vigente']) estado?: string;
   @IsOptional() @IsString() @MaxLength(4000) notas?: string;
@@ -94,6 +104,14 @@ export class GenerarPeriodosDto {
 export class RegistrarCobroDto {
   @IsUUID() periodoId!: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) monto!: number;
+
+  /**
+   * A qué se imputa el pago. Por defecto al alquiler.
+   *
+   * Sin esto, cobrar el interés por mora obligaría a inflar el monto de la cuota
+   * y el saldo dejaría de cuadrar contra lo pactado.
+   */
+  @IsOptional() @IsIn(['alquiler', 'punitorio']) imputacion?: 'alquiler' | 'punitorio';
   @IsOptional() @IsISO8601() fecha?: string;
   @IsOptional() @IsIn(['efectivo', 'transferencia', 'cheque', 'debito', 'otro']) medio?: string;
   @IsOptional() @IsString() @MaxLength(80) comprobante?: string;
@@ -120,6 +138,48 @@ export class AgregarGastoDto {
   @IsString() @MaxLength(160) concepto!: string;
   @IsIn(['expensas', 'reparacion', 'impuesto', 'ajuste', 'otro']) tipo!: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) monto!: number;
+}
+
+/**
+ * Renovar hereda todo lo que no cambia (partes, índice, honorarios, punitorio,
+ * depósito). Acá va sólo lo que se negocia.
+ */
+export class RenovarContratoDto {
+  @IsISO8601() fechaInicio!: string;
+  @IsISO8601() fechaFin!: string;
+
+  /** Si no viene, se arranca del alquiler VIGENTE, no del inicial del anterior. */
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01)
+  montoInicial?: number;
+
+  @IsOptional() @IsIn(INDICES as unknown as string[]) indice?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(24) periodicidadMeses?: number;
+  @IsOptional() @IsString() @MaxLength(2000) notas?: string;
+}
+
+export class DescuentoDepositoDto {
+  @IsString() @Length(3, 160) concepto!: string;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) monto!: number;
+}
+
+export class DevolverDepositoDto {
+  @IsOptional() @IsISO8601() fecha?: string;
+
+  /**
+   * Cada descuento con su concepto. El detalle y no sólo el neto: "te devolví
+   * menos" sin decir por qué es la palabra de uno contra la del otro.
+   */
+  @IsOptional() @IsArray() @ArrayMaxSize(50)
+  @ValidateNested({ each: true }) @Type(() => DescuentoDepositoDto)
+  descuentos?: DescuentoDepositoDto[];
+}
+
+export class CondonarPunitorioDto {
+  /**
+   * Obligatorio a propósito: es plata que alguien resigna en nombre del
+   * propietario, y "porque sí" no es una respuesta que se le pueda dar después.
+   */
+  @IsString() @Length(3, 300) motivo!: string;
 }
 
 export const ESTADOS_LIQUIDACION = ['borrador', 'cerrada', 'pagada'] as const;
