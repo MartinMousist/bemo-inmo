@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from './stores/auth';
 import { cuandoSePierdaLaSesion } from './api/cliente';
 import AppShell from './componentes/AppShell.vue';
+import UiToasts from './componentes/UiToasts.vue';
+import UiConfirm from './componentes/UiConfirm.vue';
 
 const auth = useAuth();
 const router = useRouter();
@@ -29,4 +31,9 @@ const sinShell = computed(() => route.meta.publica === true);
   <AppShell v-else>
     <RouterView />
   </AppShell>
+
+  <!-- Fuera del shell: los avisos y las confirmaciones también tienen que
+       funcionar en el login y en la portada. -->
+  <UiToasts />
+  <UiConfirm />
 </template>

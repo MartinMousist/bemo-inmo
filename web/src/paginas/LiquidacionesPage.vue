@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { api, ApiError, descargar } from '../api/cliente';
+import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import StatusChip from '../componentes/StatusChip.vue';
@@ -19,6 +20,7 @@ interface Liquidacion {
 
 const POR_PAGINA = 25;
 
+const ui = useUi();
 const items = ref<Liquidacion[]>([]);
 const total = ref(0);
 const paginas = ref(1);
@@ -60,17 +62,49 @@ watch(pagina, () => void cargar());
 async function generar() {
   error.value = '';
   try {
-    await api('/liquidaciones/generar', {
-      method: 'POST', body: JSON.stringify({ periodo: `${mes.value}-01` }),
-    });
+    const r = await api<{ generadas: number; omitidasCerradas: number }>(
+      '/liquidaciones/generar',
+      { method: 'POST', body: JSON.stringify({ periodo: `${mes.value}-01` }) },
+    );
     await cargar();
-  } catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo generar.'; }
+    ui.ok(
+      `${r.generadas} liquidación(es) armada(s)`,
+      r.omitidasCerradas
+        ? `${r.omitidasCerradas} ya estaban cerradas y no se tocaron`
+        : `período ${fmtPeriodo(`${mes.value}-01`)}`,
+    );
+  } catch (e) {
+    const detalle = e instanceof ApiError ? e.detail : 'No se pudo generar.';
+    error.value = detalle;
+    ui.error('No se pudo generar el período', detalle);
+  }
 }
 
+/** Cerrar es irreversible por trigger: los números quedan congelados. */
 async function cerrar(id: string) {
   error.value = '';
-  try { await api(`/liquidaciones/${id}/cerrar`, { method: 'POST' }); await cargar(); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo cerrar.'; }
+  const l = items.value.find((x) => x.id === id);
+
+  const ok = await ui.confirmar({
+    titulo: '¿Cerrar la liquidación?',
+    detalle: l
+      ? `Quedan congelados ${money(l.totalNeto, l.moneda)} a nombre de ` +
+        `${l.propietario.nombre}. Después no se modifica: un pago tardío de ese ` +
+        'mes va a la liquidación siguiente.'
+      : 'Después de cerrarla, los números no se modifican.',
+    confirmar: 'Cerrar la liquidación',
+  });
+  if (!ok) return;
+
+  try {
+    await api(`/liquidaciones/${id}/cerrar`, { method: 'POST' });
+    await cargar();
+    ui.ok('Liquidación cerrada', l ? money(l.totalNeto, l.moneda) : undefined);
+  } catch (e) {
+    const detalle = e instanceof ApiError ? e.detail : 'No se pudo cerrar.';
+    error.value = detalle;
+    ui.error('No se pudo cerrar la liquidación', detalle);
+  }
 }
 
 async function exportar() {

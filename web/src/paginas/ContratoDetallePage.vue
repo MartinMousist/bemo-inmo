@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, ApiError } from '../api/cliente';
+import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
@@ -27,6 +28,7 @@ interface Contrato {
 }
 
 const route = useRoute();
+const ui = useUi();
 const id = route.params.id as string;
 
 const c = ref<Contrato | null>(null);
@@ -71,10 +73,35 @@ async function proyectar() {
   } catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo proyectar.'; }
 }
 
+/**
+ * Confirmar un ajuste es **irreversible por trigger**: los números quedan
+ * congelados aunque INDEC después revise el índice. Es un acto en el que una
+ * persona se hace cargo del número, así que se confirma con el número a la vista.
+ */
 async function confirmar(ajusteId: string) {
   error.value = '';
-  try { await api(`/ajustes/${ajusteId}/confirmar`, { method: 'POST' }); await cargar(); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo confirmar.'; }
+  const a = ajustes.value.find((x) => x.id === ajusteId);
+
+  const ok = await ui.confirmar({
+    titulo: '¿Confirmar el aumento?',
+    detalle: a
+      ? `Pasa de ${money(a.montoAnterior, a.moneda)} a ${money(a.montoNuevo, a.moneda)} ` +
+        `desde el ${fecha(a.vigenteDesde)}. Una vez confirmado no se recalcula, ` +
+        'ni siquiera si después se corrige el índice.'
+      : 'Una vez confirmado no se recalcula.',
+    confirmar: 'Confirmar el aumento',
+  });
+  if (!ok) return;
+
+  try {
+    await api(`/ajustes/${ajusteId}/confirmar`, { method: 'POST' });
+    await cargar();
+    ui.ok('Aumento confirmado', a ? money(a.montoNuevo, a.moneda) : undefined);
+  } catch (e) {
+    const detalle = e instanceof ApiError ? e.detail : 'No se pudo confirmar.';
+    error.value = detalle;
+    ui.error('No se pudo confirmar el aumento', detalle);
+  }
 }
 
 async function generarPeriodos() {
@@ -85,14 +112,24 @@ async function generarPeriodos() {
 
 async function cobrar(periodoId: string) {
   error.value = '';
+  const monto = Number(montoCobro.value);
+  const p = periodos.value.find((x) => x.id === periodoId);
+
   try {
     await api('/cobros', {
       method: 'POST',
-      body: JSON.stringify({ periodoId, monto: Number(montoCobro.value) }),
+      body: JSON.stringify({ periodoId, monto }),
     });
     cobrando.value = null; montoCobro.value = '';
     await cargar();
-  } catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo registrar el cobro.'; }
+    // El toast lleva el MONTO: es lo que permite ver un cero de más ahora y no
+    // a fin de mes, cuando ya se liquidó.
+    ui.ok('Cobro registrado', money(monto, p?.moneda ?? c.value?.moneda ?? 'ARS'));
+  } catch (e) {
+    const detalle = e instanceof ApiError ? e.detail : 'No se pudo registrar el cobro.';
+    error.value = detalle;
+    ui.error('No se pudo registrar el cobro', detalle);
+  }
 }
 onMounted(cargar);
 </script>

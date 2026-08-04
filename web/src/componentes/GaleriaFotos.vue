@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError } from '../api/cliente';
+import { useUi } from '../stores/ui';
 import UiIcon from './UiIcon.vue';
 import StatusChip from './StatusChip.vue';
 
 interface Foto { id: string; url: string; orden: number; esPortada: boolean }
 
 const props = defineProps<{ propiedadId: string; habilitado: boolean }>();
+const ui = useUi();
 
 const fotos = ref<Foto[]>([]);
 const cargando = ref(true);
@@ -56,10 +58,24 @@ async function portada(id: string) {
 }
 
 async function borrar(id: string) {
+  // Una foto borrada no vuelve: el archivo se va de S3.
+  const ok = await ui.confirmar({
+    titulo: '¿Borrar esta foto?',
+    detalle: 'Se elimina del almacenamiento y de los avisos que la usen. No se puede deshacer.',
+    confirmar: 'Borrar la foto',
+    peligroso: true,
+  });
+  if (!ok) return;
+
   try {
     await api(`/propiedades/${props.propiedadId}/fotos/${id}`, { method: 'DELETE' });
     await cargar();
-  } catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo borrar.'; }
+    ui.ok('Foto borrada');
+  } catch (e) {
+    const detalle = e instanceof ApiError ? e.detail : 'No se pudo borrar.';
+    error.value = detalle;
+    ui.error('No se pudo borrar la foto', detalle);
+  }
 }
 
 async function soltar(sobre: string) {
