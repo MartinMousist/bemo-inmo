@@ -78,6 +78,10 @@ jobs:
       - name: Typecheck
         run: npx vue-tsc --noEmit
         working-directory: web
+      # Antes del build: si un test falla, no tiene sentido gastar el build.
+      - name: Tests
+        run: npm test
+        working-directory: web
       - name: Build
         run: npx vite build
         working-directory: web
