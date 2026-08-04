@@ -37,8 +37,8 @@ sobre una hipótesis sin verificar.
 - [x] Jest + Supertest contra Postgres real
 - [x] gitleaks en pre-commit
 - [x] CI en `.github/workflows/ci.yml`: Postgres real, migraciones de producción,
-      typecheck de las dos puntas, build del front y gitleaks. **Sin verificar**: no hay
-      repo remoto donde correrlo
+      typecheck de las dos puntas, build del front y gitleaks. **Verificado el
+      2026-08-04**: la primera corrida encontró que faltaba MinIO
 - [x] Tokens CSS + modo oscuro + script anti-flash en el `<head>`
 
 **Gate**: `docker compose up` levanta todo en menos de 5 minutos, en una máquina limpia.

@@ -45,7 +45,7 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 
 | | |
 |---|---|
-| Commits | 28 |
+| Commits | 31 |
 | Migraciones | 15 |
 | Tests | **437 de API** contra Postgres real + **45 de front**. Todo en verde |
 | Rutas de API | 170 |
@@ -56,7 +56,7 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | # | Etapa | Estado | Qué falta para cerrarla |
 |---|---|---|---|
 | 0 | Validación | ⚠️ **ABIERTA** | Que alguien diga un precio concreto |
-| 1 | Fundaciones | ✅ | CI sin verificar: falta repo remoto |
+| 1 | Fundaciones | ✅ | — |
 | 2 | Auth y aislamiento | ✅ | — |
 | 3 | Espina compartida | ✅ | — |
 | 4 | Alquileres | ⚠️ construida | **Tres liquidaciones reales tuyas** |
