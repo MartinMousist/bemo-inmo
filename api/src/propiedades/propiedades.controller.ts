@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { PropiedadesService } from './propiedades.service';
 import { GeocodingService } from './geocoding.service';
+import { AlmacenamientoService } from '../archivos/almacenamiento.service';
 import {
   CrearOperacionDto,
   CrearPropiedadDto,
@@ -26,6 +27,7 @@ export class PropiedadesController {
   constructor(
     private readonly propiedades: PropiedadesService,
     private readonly geo: GeocodingService,
+    private readonly almacen: AlmacenamientoService,
   ) {}
 
   /**
@@ -35,7 +37,7 @@ export class PropiedadesController {
    */
   @Get('capacidades')
   capacidades() {
-    return { mapas: this.geo.configurado };
+    return { mapas: this.geo.configurado, fotos: this.almacen.configurado };
   }
 
   @Get()

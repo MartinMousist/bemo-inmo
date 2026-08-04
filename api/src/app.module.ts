@@ -48,6 +48,11 @@ import {
 import { PlanesService } from './planes/planes.service';
 import { ImportarController } from './importar/importar.controller';
 import { ImportarService } from './importar/importar.service';
+import { FotosController } from './archivos/fotos.controller';
+import { FotosService } from './archivos/fotos.service';
+import { AlmacenamientoService } from './archivos/almacenamiento.service';
+import { PlantillasController } from './plantillas/plantillas.controller';
+import { PlantillasService } from './plantillas/plantillas.service';
 
 @Module({
   imports: [DatabaseModule],
@@ -74,6 +79,8 @@ import { ImportarService } from './importar/importar.service';
     SucursalesController,
     ApiKeysController,
     ImportarController,
+    FotosController,
+    PlantillasController,
   ],
   providers: [
     AuthService,
@@ -93,6 +100,9 @@ import { ImportarService } from './importar/importar.service';
     ExportarService,
     PlanesService,
     ImportarService,
+    FotosService,
+    AlmacenamientoService,
+    PlantillasService,
     // Guard GLOBAL: todo exige token salvo lo marcado con @Publico().
     // Si fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
     { provide: APP_GUARD, useClass: AuthGuard },

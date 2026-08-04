@@ -23,6 +23,9 @@ const schema = z.object({
 
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   BODY_LIMIT: z.string().default('1mb'),
+  /** Una foto de 8 MB en base64 son ~11 MB. */
+  BODY_LIMIT_FOTOS: z.string().default('14mb'),
+  BODY_LIMIT_IMPORTAR: z.string().default('6mb'),
 
   /**
    * Secreto de firma de los access tokens. Sin default: si falta, la app no
@@ -51,6 +54,16 @@ const schema = z.object({
    * Un default falso acá sería una propiedad ubicada en el medio del océano.
    */
   GOOGLE_MAPS_API_KEY: z.string().default(''),
+
+  /**
+   * Almacenamiento S3. Opcional: sin bucket la app funciona igual, sólo que no
+   * acepta fotos y lo dice. Un default inventado apuntaría a un bucket ajeno.
+   */
+  S3_ENDPOINT: z.string().default(''),
+  S3_BUCKET: z.string().default(''),
+  S3_ACCESS_KEY: z.string().default(''),
+  S3_SECRET_KEY: z.string().default(''),
+  S3_PUBLIC_URL: z.string().default(''),
 });
 
 type Crudo = z.infer<typeof schema>;

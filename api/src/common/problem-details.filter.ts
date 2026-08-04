@@ -73,6 +73,20 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       };
     }
 
+    // body-parser tira PayloadTooLargeError, que no es HttpException y caía en
+    // el 500 genérico. Un archivo demasiado grande es culpa del request, y el
+    // usuario necesita saber que el problema es el tamaño.
+    if (esCuerpoDemasiadoGrande(exception)) {
+      return {
+        type: 'about:blank',
+        title: 'Payload Too Large',
+        status: 413,
+        detail: 'El contenido enviado es demasiado grande.',
+        code: ErrorCode.ARCHIVO_DEMASIADO_GRANDE,
+        instance,
+      };
+    }
+
     // Los límites de plan los levanta un trigger con SQLSTATE 'BE001'. El
     // mensaje ya viene redactado desde la base, que es el único lugar donde
     // vive el límite: se pasa tal cual en vez de reescribirlo acá.
@@ -98,6 +112,15 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       instance,
     };
   }
+}
+
+function esCuerpoDemasiadoGrande(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    ((err as { type?: string }).type === 'entity.too.large' ||
+      (err as { statusCode?: number }).statusCode === 413)
+  );
 }
 
 /** SQLSTATE propio del proyecto para topes de plan. Ver migración 012. */

@@ -6,6 +6,7 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import UiIcon from '../componentes/UiIcon.vue';
+import GaleriaFotos from '../componentes/GaleriaFotos.vue';
 import {
   ETIQUETA_ESTADO_OP,
   ETIQUETA_OPERACION,
@@ -37,6 +38,7 @@ const cargando = ref(true);
 const error = ref('');
 const mapaVisible = ref(false);
 const mapasDisponibles = ref(false);
+const fotosDisponibles = ref(false);
 
 const nuevaOp = reactive({ abierto: false, tipo: 'alquiler', precio: '', moneda: 'ARS' });
 
@@ -45,10 +47,11 @@ async function cargar() {
   try {
     const [prop, caps] = await Promise.all([
       api<Propiedad>(`/propiedades/${id}`),
-      api<{ mapas: boolean }>('/propiedades/capacidades'),
+      api<{ mapas: boolean; fotos: boolean }>('/propiedades/capacidades'),
     ]);
     p.value = prop;
     mapasDisponibles.value = caps.mapas;
+    fotosDisponibles.value = caps.fotos;
   } catch (e) {
     error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar la propiedad.';
   } finally { cargando.value = false; }
@@ -192,6 +195,8 @@ onMounted(cargar);
               </p>
             </div>
           </section>
+
+          <GaleriaFotos :propiedad-id="p.id" :habilitado="fotosDisponibles" />
 
           <section class="card stack">
             <h2>Titulares</h2>

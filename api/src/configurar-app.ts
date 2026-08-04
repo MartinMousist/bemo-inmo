@@ -22,6 +22,14 @@ export function configurarApp(app: INestApplication): void {
 
   app.use(helmet());
   app.use(cookieParser());
+
+  // Las fotos viajan en base64, que infla un 33%: una imagen de 8 MB son ~11 MB
+  // de JSON. El límite grande va SÓLO en esa ruta; subirlo para todo agrandaría
+  // la superficie de ataque de cada endpoint por una necesidad de uno.
+  app.use('/v1/propiedades/:id/fotos', express.json({ limit: env.BODY_LIMIT_FOTOS }));
+  // La importación CSV manda texto plano, también más grande que lo normal.
+  app.use('/v1/importar', express.json({ limit: env.BODY_LIMIT_IMPORTAR }));
+
   app.use(express.json({ limit: env.BODY_LIMIT }));
   app.use(express.urlencoded({ extended: true, limit: env.BODY_LIMIT }));
 

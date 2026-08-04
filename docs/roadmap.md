@@ -93,7 +93,8 @@ igual para venta y para alquiler.
 - [x] Paginación server-side y búsqueda
 - [x] Importador CSV con previsualización que no escribe nada, alias de columna y
       números escritos a mano
-- [ ] Fotos de propiedades — **pendiente** (falta el bucket S3)
+- [x] Fotos de propiedades sobre S3 (MinIO en dev). Validación por **firma de bytes**,
+      portada automática, reordenado y borrado
 - [x] Componentes base + `AppShell` + `CommandPalette` (⌘K)
 
 **Gate**: cargar una propiedad real y seguir un lead, sin ayuda.
@@ -157,8 +158,8 @@ reales. Lo que sí está probado, con 41 tests:
 - [x] `operacion_venta`: reserva → boleto → escritura, sin marcha atrás
 - [x] Calculadora de comisiones de **tres niveles**, con 11 tests de papel
 - [x] Comisiones proyectadas / devengadas / cobradas, con vista por agente
-- [ ] Pre-contratos y plantillas — la tabla existe, la UI no. **Se corta la feature
-      entera antes que dejarla a medias**
+- [x] Pre-contratos y plantillas con motor propio de variables, condicionales y listas.
+      Cuatro plantillas base: pre-contrato, aviso de aumento, aviso de vencimiento y recibo
 
 **Gate**: una operación real repartida y verificada por quien cobra.
 **⚠️ ABIERTO**: necesita una venta tuya real. Lo que sí está probado (12 tests de

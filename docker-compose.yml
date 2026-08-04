@@ -22,6 +22,46 @@ services:
       retries: 20
       start_period: 5s
 
+  # Almacenamiento S3 para dev. La API habla el MISMO protocolo que S3, R2 o
+  # Spaces, así que pasar a producción es cambiar variables de entorno y no
+  # código. Guardar en disco local obligaría a reescribir esta capa después.
+  s3:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - s3-data:/data
+    ports:
+      - "${S3_PORT:-9000}:9000"
+      - "${S3_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  # Crea el bucket una vez y se apaga. Sin esto la primera subida falla con
+  # NoSuchBucket y parece un bug de la app.
+  s3-init:
+    image: minio/mc:latest
+    depends_on:
+      s3:
+        condition: service_healthy
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://s3:9000 $$S3_ACCESS_KEY $$S3_SECRET_KEY &&
+      mc mb --ignore-existing local/$$S3_BUCKET &&
+      mc anonymous set download local/$$S3_BUCKET &&
+      echo 'bucket listo'
+      "
+
   api:
     build:
       context: ./api
@@ -37,12 +77,22 @@ services:
       SEED_ON_BOOT: "true"
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: http://localhost:5173
+      S3_ENDPOINT: http://s3:9000
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # URL con la que el NAVEGADOR ve los archivos. Distinta del endpoint
+      # interno: dentro de la red de compose el host es "s3", pero el browser
+      # del usuario no resuelve ese nombre.
+      S3_PUBLIC_URL: http://localhost:${S3_PORT:-9000}/${S3_BUCKET}
     volumes:
       - ./api:/app
       - /app/node_modules # volumen anónimo: preserva el node_modules de la imagen
     depends_on:
       db:
         condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
     ports:
       - "${API_PORT:-3000}:3000"
     healthcheck:
@@ -72,3 +122,4 @@ services:
 
 volumes:
   db-data:
+  s3-data:
