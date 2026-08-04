@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import {
-  IsArray, IsBoolean, IsIn, IsISO8601, IsInt, IsNumber, IsOptional,
-  IsString, IsUUID, Max, MaxLength, Min, ValidateNested,
+  ArrayMaxSize, IsArray, IsBoolean, IsIn, IsISO8601, IsInt, IsNumber, IsOptional,
+  IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import { PaginacionDto } from '../common/paginacion';
 
@@ -50,10 +50,41 @@ export class CrearContratoDto {
   @IsOptional() @IsArray() @IsUUID('4', { each: true }) garantes?: string[];
 }
 
+export const ESTADOS_CONTRATO = [
+  'borrador', 'por_iniciar', 'vigente', 'vencido', 'rescindido', 'renovado',
+] as const;
+
 export class FiltroContratosDto extends PaginacionDto {
   @IsOptional()
-  @IsIn(['borrador', 'por_iniciar', 'vigente', 'vencido', 'rescindido', 'renovado'])
+  @IsIn(ESTADOS_CONTRATO as unknown as string[])
   estado?: string;
+}
+
+export const ESTADOS_COBRANZA = ['al_dia', 'parcial', 'en_mora', 'sin_cuotas'] as const;
+
+/** `q` busca por calle, localidad, código de propiedad o nombre de una parte. */
+export class FiltroCarteraDto extends FiltroContratosDto {
+  @IsOptional() @IsIn(ESTADOS_COBRANZA as unknown as string[]) cobranza?: string;
+  @IsOptional() @IsIn(INDICES as unknown as string[]) indice?: string;
+
+  /**
+   * Mes de vencimiento del contrato, `YYYY-MM`.
+   *
+   * No es `@IsISO8601`: eso aceptaría un día suelto y acá el filtro es por mes.
+   * El regex es explícito para que `2026-13` sea un 400 y no una consulta que
+   * devuelve vacío sin decir por qué.
+   */
+  @IsOptional()
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'venceEn tiene que ser YYYY-MM' })
+  venceEn?: string;
+}
+
+/** Selección múltiple de la cartera: generar cuotas o proyectar ajustes en tanda. */
+export class LoteContratosDto {
+  // Tope de 200: es una acción de una pantalla, no una migración. Sin límite,
+  // un cliente puede mandar 10.000 ids y dejar la conexión ocupada un rato largo.
+  @IsArray() @ArrayMaxSize(200) @IsUUID('4', { each: true }) ids!: string[];
+  @IsOptional() @IsISO8601() hasta?: string;
 }
 
 export class GenerarPeriodosDto {

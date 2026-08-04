@@ -29,8 +29,11 @@ const hasta = () => Math.min(props.pagina * props.porPagina, props.total);
     desaparece hace saltar el layout.
   -->
   <div v-if="total > 0" class="pager">
+    <!-- El espacio antes del sustantivo va como `&nbsp;`: el compilador de
+         plantillas colapsa el espacio suelto al principio de una interpolación
+         y quedaba "de 12contratos". -->
     <span class="rango mono">
-      {{ desde() }}–{{ hasta() }} de {{ total }}<span v-if="sustantivo"> {{ sustantivo }}</span>
+      {{ desde() }}–{{ hasta() }} de {{ total }}<template v-if="sustantivo">&nbsp;{{ sustantivo }}</template>
     </span>
 
     <div v-if="paginas > 1" class="controles">

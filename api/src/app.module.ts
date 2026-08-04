@@ -28,6 +28,7 @@ import {
   LiquidacionesController,
 } from './alquileres/alquileres.controller';
 import { ContratosService } from './alquileres/contratos.service';
+import { CarteraService } from './alquileres/cartera.service';
 import { IndicesService } from './alquileres/indices.service';
 import { BcraService } from './alquileres/bcra.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
@@ -100,6 +101,7 @@ import { InicioService } from './inicio/inicio.service';
     GeocodingService,
     OportunidadesService,
     ContratosService,
+    CarteraService,
     IndicesService,
     BcraService,
     LiquidacionesService,

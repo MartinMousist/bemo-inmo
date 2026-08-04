@@ -2,22 +2,52 @@ import {
   Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query,
 } from '@nestjs/common';
 import { ContratosService } from './contratos.service';
+import { CarteraService } from './cartera.service';
 import { IndicesService } from './indices.service';
 import { LiquidacionesService } from './liquidaciones.service';
 import {
   AgregarGastoDto, CargarIndiceDto, CargarIndicesLoteDto, CrearContratoDto,
-  FiltroContratosDto, FiltroIndicesDto, FiltroLiquidacionesDto,
-  GenerarLiquidacionesDto, GenerarPeriodosDto, RegistrarCobroDto,
+  FiltroCarteraDto, FiltroContratosDto, FiltroIndicesDto, FiltroLiquidacionesDto,
+  GenerarLiquidacionesDto, GenerarPeriodosDto, LoteContratosDto, RegistrarCobroDto,
 } from './alquileres.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
 @Controller('contratos')
 export class ContratosController {
-  constructor(private readonly contratos: ContratosService) {}
+  constructor(
+    private readonly contratos: ContratosService,
+    // `cartera_` con guión bajo para no chocar con el método `cartera()`.
+    private readonly cartera_: CarteraService,
+  ) {}
 
   @Get()
   listar(@ActorActual() a: Actor, @Query() f: FiltroContratosDto) {
     return this.contratos.listar(a.tenantId, f);
+  }
+
+  /**
+   * La cartera en formato de gestión: una fila por contrato con su próximo
+   * aumento, su última cuota, su saldo y su estado de cobranza ya resueltos.
+   *
+   * Va ANTES de `@Get(':id')`: Nest resuelve por orden de declaración y
+   * `cartera` entraría como un id que después falla en el ParseUUIDPipe.
+   */
+  @Get('cartera')
+  cartera(@ActorActual() a: Actor, @Query() f: FiltroCarteraDto) {
+    return this.cartera_.listar(a.tenantId, f);
+  }
+
+  /** Genera cuotas para varios contratos. Cada uno con su parte. */
+  @Post('lote/periodos')
+  @Roles('owner', 'admin')
+  periodosEnLote(@ActorActual() a: Actor, @Body() dto: LoteContratosDto) {
+    return this.cartera_.generarPeriodosEnLote(a.tenantId, dto);
+  }
+
+  @Post('lote/ajustes/proyectar')
+  @Roles('owner', 'admin')
+  ajustesEnLote(@ActorActual() a: Actor, @Body() dto: LoteContratosDto) {
+    return this.cartera_.proyectarAjustesEnLote(a.tenantId, dto);
   }
 
   /** El tablero de vencimientos: contratos, ajustes y cuotas en una sola lista. */
