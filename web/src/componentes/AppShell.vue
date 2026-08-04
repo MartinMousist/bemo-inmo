@@ -11,6 +11,10 @@ const auth = useAuth();
 /** Sidebar agrupado por función, no una lista plana de 12 ítems. */
 const grupos = [
   {
+    titulo: 'Hoy',
+    items: [{ a: '/inicio', icono: 'monitor', texto: 'Inicio' }],
+  },
+  {
     titulo: 'Cartera',
     items: [
       { a: '/propiedades', icono: 'edificio', texto: 'Propiedades' },
@@ -61,7 +65,7 @@ window.addEventListener('keydown', (e) => {
 <template>
   <div class="shell">
     <aside class="sidebar" :class="{ abierto: drawerAbierto }">
-      <RouterLink to="/propiedades" class="marca">
+      <RouterLink to="/inicio" class="marca">
         <BemoLogo :tam="30" con-nombre />
       </RouterLink>
 

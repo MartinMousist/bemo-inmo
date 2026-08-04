@@ -55,6 +55,8 @@ import { FotosService } from './archivos/fotos.service';
 import { AlmacenamientoService } from './archivos/almacenamiento.service';
 import { PlantillasController } from './plantillas/plantillas.controller';
 import { PlantillasService } from './plantillas/plantillas.service';
+import { InicioController } from './inicio/inicio.controller';
+import { InicioService } from './inicio/inicio.service';
 
 @Module({
   // El límite de intentos NO va como guard global: sólo lo aplica AuthController
@@ -64,6 +66,7 @@ import { PlantillasService } from './plantillas/plantillas.service';
   controllers: [
     HealthController,
     AuthController,
+    InicioController,
     EquipoController,
     PersonasController,
     PropiedadesController,
@@ -90,6 +93,7 @@ import { PlantillasService } from './plantillas/plantillas.service';
   providers: [
     AuthService,
     TokensService,
+    InicioService,
     EquipoService,
     PersonasService,
     PropiedadesService,

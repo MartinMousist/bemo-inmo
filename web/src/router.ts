@@ -4,9 +4,13 @@ import { useAuth } from './stores/auth';
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    // La portada es pública y NO rebota a alguien con sesión abierta: querer
-    // ver la página del producto estando logueado es legítimo.
+    // `/` es la portada para quien no tiene sesión, y el inicio de la app para
+    // quien sí (lo resuelve el guard de abajo). La portada queda igual accesible
+    // en `/producto`: querer ver la página del producto estando logueado es
+    // legítimo, y era lo que hacía antes esta ruta.
     { path: '/', component: () => import('./paginas/LandingPage.vue'),
+      meta: { publica: true, permiteSesion: true } },
+    { path: '/producto', component: () => import('./paginas/LandingPage.vue'),
       meta: { publica: true, permiteSesion: true } },
     { path: '/login', component: () => import('./paginas/LoginPage.vue'), meta: { publica: true } },
     { path: '/registrar', component: () => import('./paginas/RegistrarPage.vue'), meta: { publica: true } },
@@ -16,7 +20,8 @@ const router = createRouter({
       meta: { publica: true, permiteSesion: true },
     },
 
-    { path: '/app', redirect: '/propiedades' },
+    { path: '/app', redirect: '/inicio' },
+    { path: '/inicio', component: () => import('./paginas/InicioPage.vue') },
     { path: '/propiedades', component: () => import('./paginas/PropiedadesPage.vue') },
     { path: '/propiedades/nueva', component: () => import('./paginas/PropiedadFormPage.vue') },
     { path: '/propiedades/:id/editar', component: () => import('./paginas/PropiedadFormPage.vue') },
@@ -53,10 +58,15 @@ router.beforeEach(async (to) => {
   if (!auth.listo) await auth.restaurar();
 
   if (to.meta.publica) {
+    // Con sesión abierta, la raíz es el tablero del día y no la portada. Es la
+    // primera pregunta de quien abre el sistema a la mañana: qué hay que hacer
+    // hoy. La portada sigue en `/producto` para quien la quiera ver.
+    if (auth.autenticado && to.path === '/') return { path: '/inicio' };
+
     // Si ya está adentro, no tiene sentido mostrarle el login…
     // …salvo en la invitación: alguien logueado puede abrir una invitación a
     // otra inmobiliaria, y rebotarlo dejaría el enlace inservible.
-    if (auth.autenticado && !to.meta.permiteSesion) return { path: '/' };
+    if (auth.autenticado && !to.meta.permiteSesion) return { path: '/inicio' };
     return true;
   }
 

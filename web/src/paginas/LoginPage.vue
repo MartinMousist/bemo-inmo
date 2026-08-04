@@ -28,7 +28,7 @@ async function enviar() {
   try {
     await auth.login(email.value, password.value);
     // Vuelve adonde estaba antes de que lo rebotara el guard.
-    await router.replace((route.query.next as string) || '/propiedades');
+    await router.replace((route.query.next as string) || '/inicio');
   } catch (e) {
     // El mensaje real de la API: el back ya se ocupa de no revelar si el
     // correo existe, así que no hace falta genericarlo acá otra vez.

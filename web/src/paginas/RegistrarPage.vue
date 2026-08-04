@@ -28,7 +28,7 @@ async function enviar() {
       password: password.value,
       nombre: nombre.value,
     });
-    await router.replace('/propiedades');
+    await router.replace('/inicio');
   } catch (e) {
     error.value =
       e instanceof ApiError ? e.detail : 'No se pudo conectar con el servidor.';

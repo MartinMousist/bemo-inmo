@@ -34,7 +34,7 @@ async function aceptar() {
     auth.usuario = s.usuario;
     auth.tenant = s.tenant;
     auth.rol = s.rol;
-    await router.replace('/propiedades');
+    await router.replace('/inicio');
   } catch (e) {
     // El back distingue invitación inexistente, ya aceptada, cancelada y
     // vencida, y cada una tiene su texto. Mostramos el que vino.

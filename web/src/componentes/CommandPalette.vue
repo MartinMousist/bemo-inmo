@@ -21,6 +21,7 @@ interface Item {
 }
 
 const NAVEGACION: Item[] = [
+  { id: 'n0', titulo: 'Inicio', icono: 'monitor', seccion: 'Ir a', ir: () => router.push('/inicio') },
   { id: 'n1', titulo: 'Propiedades', icono: 'edificio', seccion: 'Ir a', ir: () => router.push('/propiedades') },
   { id: 'n2', titulo: 'Personas', icono: 'personas', seccion: 'Ir a', ir: () => router.push('/personas') },
   { id: 'n3', titulo: 'Oportunidades', icono: 'embudo', seccion: 'Ir a', ir: () => router.push('/oportunidades') },
