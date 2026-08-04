@@ -1,6 +1,25 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { InicioService } from './inicio.service';
-import { ActorActual, type Actor } from '../auth/decoradores';
+import { CajaService } from './caja.service';
+import { FiltroCajaDto } from './caja.dto';
+import { ActorActual, Roles, type Actor } from '../auth/decoradores';
+
+@Controller('caja')
+export class CajaController {
+  constructor(private readonly caja: CajaService) {}
+
+  /**
+   * Qué entró hoy, por qué medio y quién lo registró.
+   *
+   * Mismos roles que las liquidaciones: es la cobranza de la inmobiliaria, y un
+   * asesor no la ve.
+   */
+  @Get()
+  @Roles('owner', 'admin', 'contable')
+  delDia(@ActorActual() a: Actor, @Query() f: FiltroCajaDto) {
+    return this.caja.delDia(a.tenantId, f);
+  }
+}
 
 @Controller('inicio')
 export class InicioController {

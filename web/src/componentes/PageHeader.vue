@@ -30,5 +30,14 @@ h1 { font-size: 24px; }
   display: flex;
   gap: var(--s-sm);
   align-items: center;
+  /* Envuelven en pantalla angosta.
+     Sin esto, tres controles en la cabecera —un selector de mes y dos botones,
+     como en Liquidaciones— suman más de 375px y empujan el ancho de TODA la
+     página: el desborde no se ve en la cabecera, se ve como una barra de scroll
+     horizontal en el listado de abajo. */
+  flex-wrap: wrap;
+  /* `min-width: 0` deja que el bloque se achique antes de desbordar; sin él,
+     flex lo mantiene en su ancho de contenido. */
+  min-width: 0;
 }
 </style>

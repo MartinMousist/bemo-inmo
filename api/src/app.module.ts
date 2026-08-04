@@ -60,7 +60,8 @@ import { FotosService } from './archivos/fotos.service';
 import { AlmacenamientoService } from './archivos/almacenamiento.service';
 import { PlantillasController } from './plantillas/plantillas.controller';
 import { PlantillasService } from './plantillas/plantillas.service';
-import { InicioController } from './inicio/inicio.controller';
+import { CajaController, InicioController } from './inicio/inicio.controller';
+import { CajaService } from './inicio/caja.service';
 import { InicioService } from './inicio/inicio.service';
 
 @Module({
@@ -72,6 +73,7 @@ import { InicioService } from './inicio/inicio.service';
     HealthController,
     AuthController,
     InicioController,
+    CajaController,
     AuditoriaController,
     EquipoController,
     PersonasController,
@@ -101,6 +103,7 @@ import { InicioService } from './inicio/inicio.service';
     AuthService,
     TokensService,
     InicioService,
+    CajaService,
     EquipoService,
     PersonasService,
     PropiedadesService,

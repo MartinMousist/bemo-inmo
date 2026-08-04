@@ -28,6 +28,7 @@ const grupos = [
       { a: '/vencimientos', icono: 'calendario', texto: 'Vencimientos' },
       { a: '/contratos', icono: 'documento', texto: 'Contratos' },
       { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
+      { a: '/caja', icono: 'sena', texto: 'Caja' },
       { a: '/indices', icono: 'grafico', texto: 'Índices' },
     ],
   },
@@ -45,6 +46,7 @@ const grupos = [
     items: [
       { a: '/equipo', icono: 'equipo', texto: 'Equipo' },
       { a: '/importar', icono: 'mas', texto: 'Importar' },
+      { a: '/movimientos', icono: 'grafico', texto: 'Movimientos' },
       { a: '/plan', icono: 'documento', texto: 'Tu plan' },
     ],
   },

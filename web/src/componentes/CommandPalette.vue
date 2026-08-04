@@ -27,9 +27,16 @@ const NAVEGACION: Item[] = [
   { id: 'n3', titulo: 'Oportunidades', icono: 'embudo', seccion: 'Ir a', ir: () => router.push('/oportunidades') },
   { id: 'n4', titulo: 'Reservas', icono: 'sena', seccion: 'Ir a', ir: () => router.push('/reservas') },
   { id: 'n5', titulo: 'Equipo', icono: 'equipo', seccion: 'Ir a', ir: () => router.push('/equipo') },
+  { id: 'n6', titulo: 'Contratos', icono: 'documento', seccion: 'Ir a', ir: () => router.push('/contratos') },
+  { id: 'n7', titulo: 'Liquidaciones', icono: 'moneda', seccion: 'Ir a', ir: () => router.push('/liquidaciones') },
+  { id: 'n8', titulo: 'Caja', icono: 'sena', seccion: 'Ir a', ir: () => router.push('/caja') },
+  { id: 'n9', titulo: 'Vencimientos', icono: 'calendario', seccion: 'Ir a', ir: () => router.push('/vencimientos') },
+  { id: 'n10', titulo: 'Movimientos', icono: 'grafico', seccion: 'Ir a', ir: () => router.push('/movimientos') },
+  { id: 'n11', titulo: 'Índices', icono: 'grafico', seccion: 'Ir a', ir: () => router.push('/indices') },
   { id: 'a1', titulo: 'Nueva propiedad', icono: 'mas', seccion: 'Crear', ir: () => router.push('/propiedades/nueva') },
   { id: 'a2', titulo: 'Nueva persona', icono: 'mas', seccion: 'Crear', ir: () => router.push('/personas/nueva') },
   { id: 'a3', titulo: 'Nueva oportunidad', icono: 'mas', seccion: 'Crear', ir: () => router.push('/oportunidades/nueva') },
+  { id: 'a4', titulo: 'Nuevo contrato', icono: 'mas', seccion: 'Crear', ir: () => router.push('/contratos/nuevo') },
 ];
 
 const consulta = ref('');

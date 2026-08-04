@@ -22,10 +22,13 @@ docker compose up -d          # db + s3 (MinIO) + api + web
 | Consola de MinIO | http://localhost:9001 | las de `.env` (`S3_ACCESS_KEY` / `S3_SECRET_KEY`) |
 
 ```bash
-docker compose exec api npm test          # 300 tests contra Postgres real
-docker compose exec api npx tsc --noEmit  # typecheck backend
+docker compose exec api npm test           # 408 tests contra Postgres real
+docker compose exec web npm test           # 45 tests de front (Vitest)
+docker compose exec api npx tsc --noEmit   # typecheck backend
 docker compose exec web npx vue-tsc --noEmit
-./scripts/backup.sh                       # backup + verificación automática
+
+./scripts/backup.sh                        # backup a mano, con verificación
+docker compose --profile backup up -d      # backup automático, diario, verificado
 ```
 
 **Trampa conocida**: las dependencias se instalan **dentro** del contenedor
@@ -38,11 +41,11 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 
 | | |
 |---|---|
-| Commits | 19 |
-| Migraciones | 12 |
-| Tests | **359, en verde**, contra Postgres real |
-| Rutas de API | 142 |
-| Pantallas | 26 |
+| Commits | 24 |
+| Migraciones | 13 |
+| Tests | **408 de API** contra Postgres real + **45 de front**. Todo en verde |
+| Rutas de API | 155 |
+| Pantallas | 28 |
 
 ### Etapas
 
@@ -134,7 +137,10 @@ entendió.
 Lo que no sé y estoy interpretando:
 - ¿Los honorarios van sobre el bruto o sobre el neto?
 - ¿Las expensas las cobra la inmobiliaria y las pasa, o van aparte?
-- ¿Cómo se tratan los punitorios en la liquidación?
+- ~~¿Cómo se tratan los punitorios en la liquidación?~~ **Resuelto**: se calculan,
+  se pueden condonar con motivo, y a quién le corresponden lo decide cada contrato
+  (`punitorio_para`). Falta que confirmes que el default —al propietario— es el
+  que usás.
 - ¿El aumento se redondea? ¿A cuánto?
 - ¿Los porcentajes de honorarios de venta cambian por provincia?
 
@@ -159,19 +165,29 @@ apareció en el camino.
 
 ---
 
-### 🟠 Lo que sigue
+### ✅ La etapa 10 también está cerrada
 
-Está todo en **`docs/roadmap.md`, etapa 10**, con el porqué de cada uno y cómo se
-sabe que está hecho. El titular:
+Punitorios (con su motor puro y 14 casos de papel), renovación de contrato,
+devolución del depósito, auditoría de la plata, segunda tanda de paginación,
+request-id con logging estructurado, backup que corre solo y se verifica
+restaurando, 45 tests de frontend donde había cero, caja del día y ⌘K completa.
 
-- **10.1 · Huecos del dominio.** Columnas que se escriben y nadie lee: punitorios
-  (¡que se imprimen en el contrato!), renovación, devolución del depósito.
-- **10.2 · Auditoría de la plata.** Cerrar una liquidación no guarda quién la cerró.
-- **10.3 · Lo que se rompe con volumen.** La segunda tanda de paginación y los
-  agregados de la cartera.
-- **10.4 · Diagnóstico en producción.** Request-id, backup automático con
-  restauración probada, deploy, tests de frontend.
-- **10.5 · Producto.** Portal del propietario, caja del día.
+El detalle está en `docs/roadmap.md`, etapa 10, con lo hecho tildado.
+
+---
+
+### 🟠 Lo que queda, y de qué depende
+
+Marcado con ⏳ en el roadmap. **Nada de esto es "escribir el código que falta"**:
+
+| Qué | De qué depende |
+|---|---|
+| Expensas: quién las cobra | Una decisión de negocio. Es una de las cinco preguntas del gate de la etapa 0 |
+| Deploy, TLS, dominio | Un servidor. El `Dockerfile` de producción está listo |
+| Verificar CI | Un repo remoto |
+| Storage compartido del límite de intentos | Sólo si se despliega más de una réplica |
+| Medir los agregados de la cartera | 500 contratos cargados para hacer el `EXPLAIN` |
+| Portal del propietario, recibo de cobro, notas en el contrato | Nada: son las próximas features. Están descriptas con su porqué |
 
 ---
 
