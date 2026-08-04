@@ -31,6 +31,12 @@ describe('Seguridad del sistema', () => {
     /** Tablas que a propósito NO llevan RLS, con su razón. */
     const SIN_RLS_A_PROPOSITO = new Set([
       'schema_migrations', // infraestructura: app_role no tiene ningún permiso
+      // El contador del límite de intentos. No lleva `tenant_id` porque el
+      // contador de una IP existe ANTES de saber a qué inmobiliaria pertenece
+      // —de hecho existe justamente para los casos en que no pertenece a
+      // ninguna, como un login contra un mail que no está dado de alta.
+      // La clave ya viene armada desde la aplicación y el dato es efímero.
+      'limite_intento',
     ]);
 
     it('toda tabla de datos tiene row level security', async () => {

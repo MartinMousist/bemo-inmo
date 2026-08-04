@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { opcionesDeLimite } from './auth/limite-intentos';
+import { LimiteStoragePostgres } from './auth/limite-storage';
 import { DatabaseModule } from './database/database.module';
+import { DbService } from './database/db.service';
 import { HealthController } from './health/health.controller';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
@@ -75,7 +77,19 @@ import { InicioService } from './inicio/inicio.service';
   // El límite de intentos NO va como guard global: sólo lo aplica AuthController
   // con @UseGuards. Un tope global de dos dígitos por ventana rompería el uso
   // normal de la app, que hace decenas de requests por pantalla.
-  imports: [DatabaseModule, ThrottlerModule.forRoot(opcionesDeLimite)],
+  imports: [
+    DatabaseModule,
+    // El storage del contador va inyectado: en producción es una tabla —para que
+    // dos réplicas compartan la cuenta— y en desarrollo es memoria.
+    ThrottlerModule.forRootAsync({
+      imports: [DatabaseModule],
+      inject: [DbService],
+      useFactory: (db: DbService) => ({
+        ...opcionesDeLimite,
+        storage: new LimiteStoragePostgres(db),
+      }),
+    }),
+  ],
   controllers: [
     HealthController,
     AuthController,

@@ -56,6 +56,16 @@ const schema = z.object({
   COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
 
   /**
+   * El contador del límite de intentos, en la base en vez de en la memoria del
+   * proceso. Hace falta si se despliega más de una réplica: con dos, cada una
+   * lleva su propio contador y el límite efectivo se duplica en silencio.
+   *
+   * Por defecto sigue el entorno: en producción sí, en desarrollo y en tests no
+   * —una suite que prueba 429 escribiría en la base en cada request.
+   */
+  RATE_LIMIT_EN_BASE: z.enum(['true', 'false']).optional(),
+
+  /**
    * Límite de intentos en las rutas públicas de autenticación.
    *
    * Antes no había ninguno. `bcrypt` a costo 12 hace lento cada intento, pero eso
@@ -103,11 +113,13 @@ type Crudo = z.infer<typeof schema>;
 export type Env = Omit<
   Crudo,
   'MIGRATE_ON_BOOT' | 'SEED_ON_BOOT' | 'COOKIE_SECURE' | 'LOG_JSON'
+  | 'RATE_LIMIT_EN_BASE'
 > & {
   MIGRATE_ON_BOOT: boolean;
   SEED_ON_BOOT: boolean;
   COOKIE_SECURE: boolean;
   LOG_JSON: boolean;
+  RATE_LIMIT_EN_BASE: boolean;
   isProduction: boolean;
 };
 
@@ -133,6 +145,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     COOKIE_SECURE: e.COOKIE_SECURE === 'true',
     // Sin valor explícito, sigue al entorno.
     LOG_JSON: e.LOG_JSON ? e.LOG_JSON === 'true' : e.NODE_ENV === 'production',
+    RATE_LIMIT_EN_BASE: e.RATE_LIMIT_EN_BASE
+      ? e.RATE_LIMIT_EN_BASE === 'true'
+      : e.NODE_ENV === 'production',
     isProduction: e.NODE_ENV === 'production',
   };
 

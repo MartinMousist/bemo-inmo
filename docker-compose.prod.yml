@@ -1,0 +1,130 @@
+# Producción.
+#
+# Se usa SOLO este archivo, no como override del de desarrollo:
+#
+#     docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Superponerlo sobre `docker-compose.yml` heredaría `MIGRATE_ON_BOOT`,
+# `SEED_ON_BOOT` y los puertos abiertos de la base — y el seed en producción es
+# la forma más rápida de meterle datos de mentira a un cliente.
+#
+# Diferencias con desarrollo, todas a propósito:
+#   · La base NO publica puertos. Sólo se llega desde adentro de la red.
+#   · No hay MinIO: en producción va S3, R2 o Spaces, que es la misma API.
+#   · El front sale por Caddy, que además resuelve el TLS y hace de proxy.
+#   · El backup corre siempre, no en un perfil.
+
+name: bemo-inmo
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_OWNER_USER}
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD}
+      APP_DB_USER: ${DB_APP_USER}
+      APP_DB_PASSWORD: ${DB_APP_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    # SIN `ports`. En desarrollo se publica el 5432 para poder abrir un cliente;
+    # acá eso sería exponer la base entera a internet.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://${DB_APP_USER}:${DB_APP_PASSWORD}@db:5432/${DB_NAME}
+      DATABASE_OWNER_URL: postgres://${DB_OWNER_USER}:${DB_OWNER_PASSWORD}@db:5432/${DB_NAME}
+
+      # Las migraciones corren al arrancar: es la misma imagen que trae el
+      # código, así que schema y código no pueden quedar desfasados.
+      MIGRATE_ON_BOOT: "true"
+      # El seed NUNCA. `env.ts` además lo rechaza si NODE_ENV=production, así
+      # que esto es la segunda cerradura, no la única.
+      SEED_ON_BOOT: "false"
+
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: https://${DOMINIO}
+      COOKIE_SECURE: "true"
+      # Vacío = el host exacto. NUNCA un dominio padre: una cookie de `.bemo…`
+      # la comparten todos los subdominios, y un XSS en cualquier producto del
+      # grupo alcanzaría esta sesión. `env.ts` lo rechaza en producción.
+      COOKIE_DOMAIN: ""
+
+      LOG_JSON: "true"
+
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL}
+
+      # Con UNA sola instancia, el contador en memoria alcanza. Si algún día hay
+      # dos réplicas, hay que fijar REDIS_URL: cada una lleva su propio contador
+      # y el límite efectivo se duplica en silencio.
+      REDIS_URL: ${REDIS_URL:-}
+    # SIN `ports`: sólo Caddy le habla.
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      DOMINIO: ${DOMINIO}
+      ACME_EMAIL: ${ACME_EMAIL}
+      API_UPSTREAM: api:3000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Los certificados sobreviven a un redeploy. Sin esto, cada `up` pide uno
+      # nuevo a Let's Encrypt y en cinco intentos se agota la cuota semanal.
+      - caddy-data:/data
+      - caddy-config:/config
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_NAME: ${DB_NAME}
+      DB_OWNER_USER: ${DB_OWNER_USER}
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD}
+      PGHOST: db
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+      BACKUP_HORA: ${BACKUP_HORA:-03}
+      BACKUP_RETENER: ${BACKUP_RETENER:-14}
+    volumes:
+      - ./scripts:/scripts:ro
+      # Un volumen del HOST, no de Docker: un backup que vive adentro de Docker
+      # se va con el `docker volume prune` de alguien apurado.
+      - ${BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["/bin/sh", "/scripts/backup-programado.sh"]
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

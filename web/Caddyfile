@@ -1,0 +1,76 @@
+# Caddy: TLS, archivos estáticos y proxy a la API.
+#
+# Caddy y no nginx por una razón concreta: resuelve el certificado de Let's
+# Encrypt solo, lo renueva solo, y redirige HTTP a HTTPS sin que nadie escriba
+# un bloque para eso. En un producto que maneja plata de terceros, el TLS que
+# nadie tiene que acordarse de renovar es el que sigue funcionando en marzo.
+#
+# `DOMINIO` y `API_UPSTREAM` vienen del entorno (ver docker-compose.prod.yml).
+
+{
+	# El mail de Let's Encrypt: es donde avisan si un certificado va a vencer.
+	email {$ACME_EMAIL}
+	# Sin el servidor de administración: es una API de control y acá no se usa.
+	admin off
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	# ── Cabeceras de seguridad ────────────────────────────────────────────────
+	#
+	# La app ya manda las suyas con helmet, pero eso protege a las respuestas de
+	# la API. El HTML estático sale de acá y necesita las propias.
+	header {
+		# Un año, con subdominios. Va después de comprobar que el TLS funciona:
+		# con HSTS puesto, un certificado roto deja el sitio inaccesible.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		# El sitio no se embebe en ningún lado: es una app de gestión.
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Sin cámara, micrófono ni geolocalización: nada de la app los usa.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Caddy y su versión, fuera de las respuestas.
+		-Server
+	}
+
+	# ── La API ────────────────────────────────────────────────────────────────
+	#
+	# Mismo origen que el front, a propósito: así la cookie httpOnly del refresh
+	# no es de terceros, y no depende de que el navegador la acepte. Con la API
+	# en otro dominio, Safari y los bloqueadores la descartan.
+	handle_path /v1/* {
+		reverse_proxy {$API_UPSTREAM} {
+			header_up X-Real-IP {remote_host}
+			# La app corre con `trust proxy: 1` y lee de acá la IP real. Con la
+			# IP equivocada, el límite de intentos cuenta a todos como uno solo.
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# ── El front ──────────────────────────────────────────────────────────────
+	handle {
+		root * /srv
+
+		# Los assets llevan hash en el nombre: se cachean para siempre.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		# El index NO se cachea: es el que apunta a los assets nuevos después de
+		# cada deploy. Cacheado, un usuario sigue viendo la versión anterior.
+		@index path /
+		header @index Cache-Control "no-cache"
+
+		# SPA: cualquier ruta que no sea un archivo cae en el index y la resuelve
+		# el router. Sin esto, recargar en `/contratos/abc` da un 404 de Caddy.
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
