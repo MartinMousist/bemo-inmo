@@ -3,6 +3,9 @@
 > Documento de traspaso. Si arrancás una sesión nueva, **leé esto primero** y
 > después `CLAUDE.md`, `DESIGN.md` y `docs/roadmap.md`.
 >
+> Para el detalle de la última jornada —qué se construyó, qué se rompió y por
+> qué— está `docs/SESION-2026-08-04.md`. Se lee una vez y no se vuelve.
+>
 > Última actualización: 2026-08-04 (segunda sesión del día).
 
 ---
