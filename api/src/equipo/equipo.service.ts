@@ -35,6 +35,17 @@ export class EquipoService {
    * WHERE por tenant, la policy filtraría igual. Los guards son defensa en
    * profundidad, no la única línea.
    */
+  /**
+   * Sin paginar, **a propósito**.
+   *
+   * El plan Inicial permite 3 usuarios y el Medio 10; el Pro no tiene tope, pero
+   * el límite real es la cantidad de gente que trabaja en la inmobiliaria. Es un
+   * bound del mundo, no una apuesta: paginar acá sería ceremonia para una lista
+   * que nunca pasa de dos dígitos.
+   *
+   * Si algún día una franquicia tiene cientos de usuarios, esta lista no es lo
+   * primero que va a doler — pero entonces sí se pagina.
+   */
   async listar(tenantId: string): Promise<Miembro[]> {
     return this.db.withTenant(tenantId, async (ej) => {
       const { rows } = await ej.query<{

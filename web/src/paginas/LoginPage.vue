@@ -33,7 +33,7 @@ async function enviar() {
     // El mensaje real de la API: el back ya se ocupa de no revelar si el
     // correo existe, así que no hace falta genericarlo acá otra vez.
     error.value =
-      e instanceof ApiError ? e.detail : 'No se pudo conectar con el servidor.';
+      e instanceof ApiError ? e.paraMostrar : 'No se pudo conectar con el servidor.';
   } finally {
     enviando.value = false;
   }

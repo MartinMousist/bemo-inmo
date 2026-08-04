@@ -52,7 +52,7 @@ async function cargar() {
     total.value = r.total;
     paginas.value = r.paginas;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las ventas.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las ventas.';
   } finally { cargando.value = false; }
 }
 

@@ -61,7 +61,7 @@ async function cargar() {
     paginas.value = p.paginas;
     feed.value = f;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las publicaciones.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las publicaciones.';
   } finally { cargando.value = false; }
 }
 
@@ -85,7 +85,7 @@ async function abrir(id: string) {
   try {
     const r = await api<{ aviso: Aviso }>(`/publicaciones/${id}`);
     aviso.value = r.aviso; abierta.value = id;
-  } catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo abrir.'; }
+  } catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo abrir.'; }
 }
 
 async function copiar() {
@@ -97,7 +97,7 @@ async function copiar() {
 
 async function regenerar(id: string) {
   try { const r = await api<{ aviso: Aviso }>(`/publicaciones/${id}/regenerar`, { method: 'POST' }); aviso.value = r.aviso; }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo regenerar.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo regenerar.'; }
 }
 
 onMounted(cargar);

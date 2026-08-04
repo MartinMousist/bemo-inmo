@@ -35,7 +35,7 @@ async function guardar() {
     });
     router.replace('/oportunidades');
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo guardar.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo guardar.';
   } finally { guardando.value = false; }
 }
 </script>

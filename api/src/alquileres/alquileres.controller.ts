@@ -10,10 +10,11 @@ import { LiquidacionesService } from './liquidaciones.service';
 import {
   AgregarGastoDto, CargarIndiceDto, CargarIndicesLoteDto, CondonarPunitorioDto,
   CrearContratoDto, DevolverDepositoDto,
-  FiltroCarteraDto, FiltroContratosDto, FiltroIndicesDto, FiltroLiquidacionesDto,
+  FiltroCarteraDto, FiltroContratosDto, FiltroVencimientosDto, FiltroIndicesDto, FiltroLiquidacionesDto,
   GenerarLiquidacionesDto, GenerarPeriodosDto, LoteContratosDto, RegistrarCobroDto,
   RenovarContratoDto,
 } from './alquileres.dto';
+import { PaginacionDto } from '../common/paginacion';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
 @Controller('contratos')
@@ -57,8 +58,8 @@ export class ContratosController {
 
   /** El tablero de vencimientos: contratos, ajustes y cuotas en una sola lista. */
   @Get('vencimientos')
-  vencimientos(@ActorActual() a: Actor, @Query('dias') dias?: string) {
-    return this.contratos.vencimientos(a.tenantId, dias ? Number(dias) : 90);
+  vencimientos(@ActorActual() a: Actor, @Query() f: FiltroVencimientosDto) {
+    return this.contratos.vencimientos(a.tenantId, f);
   }
 
   @Get(':id')
@@ -73,8 +74,12 @@ export class ContratosController {
   }
 
   @Get(':id/ajustes')
-  ajustes(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.contratos.listarAjustes(a.tenantId, id);
+  ajustes(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() f: PaginacionDto,
+  ) {
+    return this.contratos.listarAjustes(a.tenantId, id, f);
   }
 
   @Post(':id/ajustes/proyectar')
@@ -84,8 +89,12 @@ export class ContratosController {
   }
 
   @Get(':id/periodos')
-  periodos(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.contratos.listarPeriodos(a.tenantId, id);
+  periodos(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() f: PaginacionDto,
+  ) {
+    return this.contratos.listarPeriodos(a.tenantId, id, f);
   }
 
   /** La cadena de renovaciones, del contrato más viejo al más nuevo. */

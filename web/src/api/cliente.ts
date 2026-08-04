@@ -6,9 +6,23 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     readonly detail: string,
+    /**
+     * El id del request que falló. Es el mismo que quedó en el log del servidor,
+     * y es lo que convierte "me dio error" en "ya lo veo": alcanza con leerlo de
+     * la pantalla. Sólo se muestra en los 5xx — en un 400 el mensaje ya dice qué
+     * pasó y el id es ruido.
+     */
+    readonly requestId?: string,
   ) {
     super(detail);
     this.name = 'ApiError';
+  }
+
+  /** El detalle, con el id detrás si hace falta que alguien lo reporte. */
+  get paraMostrar(): string {
+    return this.status >= 500 && this.requestId
+      ? `${this.detail} (referencia: ${this.requestId})`
+      : this.detail;
   }
 }
 
@@ -96,6 +110,7 @@ export async function api<T = unknown>(
       res.status,
       problema?.code ?? 'DESCONOCIDO',
       problema?.detail ?? `Error ${res.status}`,
+      problema?.requestId ?? res.headers.get('X-Request-Id') ?? undefined,
     );
   }
 
@@ -121,8 +136,12 @@ export async function descargar(ruta: string, nombreSugerido?: string): Promise<
   }
   if (!res.ok) {
     const problema = await res.json().catch(() => null);
-    throw new ApiError(res.status, problema?.code ?? 'DESCONOCIDO',
-      problema?.detail ?? 'No se pudo descargar el archivo.');
+    throw new ApiError(
+      res.status,
+      problema?.code ?? 'DESCONOCIDO',
+      problema?.detail ?? 'No se pudo descargar el archivo.',
+      problema?.requestId ?? res.headers.get('X-Request-Id') ?? undefined,
+    );
   }
 
   // El nombre lo manda el servidor en Content-Disposition; el sugerido es el

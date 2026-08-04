@@ -6,10 +6,12 @@ import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { fecha, moneyCorto, proximidad } from '../dominio/formato';
+import type { Pagina } from '../dominio/pagina';
 
 interface Vencimiento {
   tipo: 'contrato' | 'ajuste' | 'cuota';
   entidadId: string;
+  contratoId: string;
   fecha: string;
   etiquetaPropiedad: string;
   referencia: string;
@@ -18,7 +20,13 @@ interface Vencimiento {
   detalle: string | null;
 }
 
+// Es un tablero: se lee de corrido y agrupado por urgencia, no de a 25. El
+// endpoint ahora pagina —era un UNION de tres tablas sobre TODA la cartera— y
+// acá se pide una página holgada.
+const POR_PAGINA = 200;
+
 const items = ref<Vencimiento[]>([]);
+const total = ref(0);
 const cargando = ref(true);
 const error = ref('');
 const dias = ref(90);
@@ -32,9 +40,13 @@ const TITULO: Record<string, string> = {
 async function cargar() {
   cargando.value = true; error.value = '';
   try {
-    items.value = await api<Vencimiento[]>(`/contratos/vencimientos?dias=${dias.value}`);
+    const r = await api<Pagina<Vencimiento>>(
+      `/contratos/vencimientos?dias=${dias.value}&porPagina=${POR_PAGINA}`,
+    );
+    items.value = r.items;
+    total.value = r.total;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar los vencimientos.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar los vencimientos.';
   } finally { cargando.value = false; }
 }
 
@@ -61,7 +73,14 @@ onMounted(cargar);
 
 <template>
   <div class="stack">
-    <PageHeader titulo="Vencimientos" :bajada="cargando ? '' : `${items.length} en los próximos ${dias} días`">
+    <!-- El total real, no `items.length`: si hay más de los que entran en la
+         página, decirlo es la diferencia entre "hay 200" y "vi 200". -->
+    <PageHeader
+      titulo="Vencimientos"
+      :bajada="cargando ? '' : `${total} en los próximos ${dias} días${
+        total > items.length ? ` · se muestran los ${items.length} más próximos` : ''
+      }`"
+    >
       <template #acciones>
         <div class="segmented">
           <button v-for="d in [30, 90, 365]" :key="d" type="button"

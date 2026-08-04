@@ -123,6 +123,37 @@ services:
     ports:
       - "${WEB_PORT:-5173}:5173"
 
+  # Backup automático, verificado restaurando.
+  #
+  # Está en un perfil aparte: en desarrollo no hace falta y llenaría el disco de
+  # dumps de datos de prueba. Se levanta con:
+  #
+  #     docker compose --profile backup up -d
+  #
+  # Usa la MISMA imagen que la base, así `pg_dump` y `pg_restore` tienen
+  # exactamente la versión del servidor. Un pg_dump más viejo que el servidor
+  # falla, y es el tipo de cosa que se descubre el día que hace falta el backup.
+  backup:
+    image: postgres:16-alpine
+    profiles: ["backup"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_NAME: ${DB_NAME}
+      DB_OWNER_USER: ${DB_OWNER_USER}
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD}
+      PGHOST: db
+      # Hora local del contenedor. Por defecto TZ=UTC, así que conviene fijarla.
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+      BACKUP_HORA: ${BACKUP_HORA:-03}
+      BACKUP_RETENER: ${BACKUP_RETENER:-14}
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "/scripts/backup-programado.sh"]
+    restart: unless-stopped
+
 volumes:
   db-data:
   s3-data:

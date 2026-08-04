@@ -26,7 +26,7 @@ onMounted(async () => {
     ]);
     propiedades.value = p.items; personas.value = pe.items;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar los datos.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar los datos.';
   }
 });
 
@@ -59,7 +59,7 @@ async function guardar() {
     });
     router.replace(`/contratos/${r.id}`);
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo guardar.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo guardar.';
   } finally { guardando.value = false; }
 }
 </script>

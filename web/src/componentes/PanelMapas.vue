@@ -77,7 +77,7 @@ async function sincronizar() {
   } catch (e) {
     ui.error(
       'No se pudo sincronizar',
-      e instanceof ApiError ? e.detail : 'Error inesperado',
+      e instanceof ApiError ? e.paraMostrar : 'Error inesperado',
     );
   } finally {
     trabajando.value = false;

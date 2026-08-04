@@ -84,8 +84,8 @@ describe('Ciclo del contrato: punitorios, renovación y depósito', () => {
   async function cuotas(contratoId: string, i = inmo) {
     await http().post(`/v1/contratos/${contratoId}/periodos/generar`).set(...como(i))
       .send({ hasta: `${hoy().slice(0, 7)}-01` }).expect(201);
-    const r = await http().get(`/v1/contratos/${contratoId}/periodos`).set(...como(i)).expect(200);
-    return r.body as Array<{
+    const r = await http().get(`/v1/contratos/${contratoId}/periodos?porPagina=100`).set(...como(i)).expect(200);
+    return r.body.items as Array<{
       id: string; periodo: string; venceEl: string; total: number; saldo: number;
       punitorio: {
         devengado: number; condonado: boolean; cobrado: number; saldo: number;

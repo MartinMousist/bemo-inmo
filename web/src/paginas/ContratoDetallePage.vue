@@ -7,6 +7,7 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { fecha, money, periodo as fmtPeriodo, proximidad } from '../dominio/formato';
+import type { Pagina } from '../dominio/pagina';
 
 interface Ajuste {
   id: string; vigenteDesde: string; indiceTipo: string; coeficiente: number;
@@ -52,12 +53,14 @@ async function cargar() {
   try {
     const [ct, aj, pe] = await Promise.all([
       api<Contrato>(`/contratos/${id}`),
-      api<Ajuste[]>(`/contratos/${id}/ajustes`),
-      api<Periodo[]>(`/contratos/${id}/periodos`),
+      // Las dos vienen paginadas: se piden holgadas porque la ficha las
+      // muestra de corrido. Un contrato de diez años son 120 cuotas.
+      api<Pagina<Ajuste>>(`/contratos/${id}/ajustes?porPagina=100`),
+      api<Pagina<Periodo>>(`/contratos/${id}/periodos?porPagina=100`),
     ]);
-    c.value = ct; ajustes.value = aj; periodos.value = pe;
+    c.value = ct; ajustes.value = aj.items; periodos.value = pe.items;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar el contrato.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar el contrato.';
   } finally { cargando.value = false; }
 }
 
@@ -70,7 +73,7 @@ async function proyectar() {
       ? `${r.creados} ajuste(s) calculado(s). Falta el índice para ${r.sinIndice.map((f) => fecha(f)).join(', ')} — cargalo en Índices.`
       : `${r.creados} ajuste(s) calculado(s).`;
     await cargar();
-  } catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo proyectar.'; }
+  } catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo proyectar.'; }
 }
 
 /**
@@ -98,7 +101,7 @@ async function confirmar(ajusteId: string) {
     await cargar();
     ui.ok('Aumento confirmado', a ? money(a.montoNuevo, a.moneda) : undefined);
   } catch (e) {
-    const detalle = e instanceof ApiError ? e.detail : 'No se pudo confirmar.';
+    const detalle = e instanceof ApiError ? e.paraMostrar : 'No se pudo confirmar.';
     error.value = detalle;
     ui.error('No se pudo confirmar el aumento', detalle);
   }
@@ -107,7 +110,7 @@ async function confirmar(ajusteId: string) {
 async function generarPeriodos() {
   error.value = '';
   try { await api(`/contratos/${id}/periodos/generar`, { method: 'POST', body: '{}' }); await cargar(); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudieron generar.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron generar.'; }
 }
 
 async function cobrar(periodoId: string) {
@@ -126,7 +129,7 @@ async function cobrar(periodoId: string) {
     // a fin de mes, cuando ya se liquidó.
     ui.ok('Cobro registrado', money(monto, p?.moneda ?? c.value?.moneda ?? 'ARS'));
   } catch (e) {
-    const detalle = e instanceof ApiError ? e.detail : 'No se pudo registrar el cobro.';
+    const detalle = e instanceof ApiError ? e.paraMostrar : 'No se pudo registrar el cobro.';
     error.value = detalle;
     ui.error('No se pudo registrar el cobro', detalle);
   }

@@ -39,7 +39,7 @@ onMounted(async () => {
         if (v !== null && v !== undefined) form[k] = String(v);
       }
     } catch (e) {
-      error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar la propiedad.';
+      error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar la propiedad.';
     } finally {
       cargando.value = false;
     }
@@ -88,7 +88,7 @@ async function guardar() {
 
     router.replace(`/propiedades/${r.id}`);
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo guardar.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo guardar.';
   } finally {
     guardando.value = false;
   }

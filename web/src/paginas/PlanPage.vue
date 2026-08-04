@@ -40,7 +40,7 @@ async function cargar() {
     ]);
     mio.value = e; catalogo.value = c;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar el plan.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar el plan.';
   } finally { cargando.value = false; }
 }
 

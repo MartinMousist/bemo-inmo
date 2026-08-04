@@ -349,6 +349,14 @@ export class VentasService {
   }
 
   /** Lo que le corresponde a cada agente. Es lo que evita las discusiones. */
+  /**
+   * Sin paginar, a propósito: es un **agregado**, no una lista.
+   *
+   * El `GROUP BY` devuelve una fila por (agente × moneda × estado): con dos
+   * monedas y cuatro estados, un equipo de diez personas son 80 filas como
+   * techo. Paginar un resumen que ya está agrupado sería partir el total en
+   * pedazos, que es justo lo contrario de para qué sirve.
+   */
   async porAgente(tenantId: string, actor: { usuarioId: string; rol: string }) {
     return this.db.withTenant(tenantId, async (ej) => {
       // El asesor ve lo suyo; el titular y administración, todo.

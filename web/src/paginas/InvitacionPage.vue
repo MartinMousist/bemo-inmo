@@ -39,7 +39,7 @@ async function aceptar() {
     // El back distingue invitación inexistente, ya aceptada, cancelada y
     // vencida, y cada una tiene su texto. Mostramos el que vino.
     error.value =
-      e instanceof ApiError ? e.detail : 'No se pudo conectar con el servidor.';
+      e instanceof ApiError ? e.paraMostrar : 'No se pudo conectar con el servidor.';
   } finally {
     enviando.value = false;
   }

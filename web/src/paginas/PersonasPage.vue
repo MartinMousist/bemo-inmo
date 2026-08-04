@@ -37,7 +37,7 @@ async function cargar() {
     items.value = r.items; total.value = r.total;
     pareceDocumento.value = /^\d{7,9}$/.test(q.value.trim()) && r.items.length === 0;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las personas.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las personas.';
   } finally { cargando.value = false; }
 }
 
@@ -53,14 +53,14 @@ async function crearInline() {
     creando.value = false; nuevoNombre.value = ''; q.value = '';
     await cargar();
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo crear.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo crear.';
   }
 }
 
 async function exportar() {
   error.value = '';
   try { await descargar('/exportar/personas.csv'); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo exportar.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo exportar.'; }
 }
 
 onMounted(cargar);

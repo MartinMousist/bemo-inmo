@@ -5,6 +5,8 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { loadEnv } from './config/env';
 import { ProblemDetailsFilter } from './common/problem-details.filter';
+import { requestIdMiddleware } from './common/request-id';
+import { LoggerJson } from './common/logger';
 
 /**
  * TODA la configuración de la app, en un solo lugar.
@@ -20,8 +22,17 @@ import { ProblemDetailsFilter } from './common/problem-details.filter';
 export function configurarApp(app: INestApplication): void {
   const env = loadEnv();
 
+  // JSON en producción, formato legible mientras se programa. Leer JSON a mano
+  // en la consola es una molestia sin beneficio; filtrar texto libre por
+  // requestId en un agregador es imposible.
+  app.useLogger(new LoggerJson(env.LOG_JSON));
+
   app.use(helmet());
   app.use(cookieParser());
+
+  // PRIMERO de todo lo que registra algo: si fuera después, los errores del
+  // parseo de body saldrían sin id y son justo los que cuesta reproducir.
+  app.use(requestIdMiddleware);
 
   // Las fotos viajan en base64, que infla un 33%: una imagen de 8 MB son ~11 MB
   // de JSON. El límite grande va SÓLO en esa ruta; subirlo para todo agrandaría

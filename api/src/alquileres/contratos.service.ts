@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
-import { armarPagina, offset, type Pagina } from '../common/paginacion';
+import { armarPagina, offset, PaginacionDto, type Pagina } from '../common/paginacion';
 import { IndicesService } from './indices.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { calcularPunitorio } from './punitorios.motor';
@@ -16,6 +16,7 @@ import {
 import type {
   CrearContratoDto,
   FiltroContratosDto,
+  FiltroVencimientosDto,
   RegistrarCobroDto,
 } from './alquileres.dto';
 
@@ -358,8 +359,13 @@ export class ContratosService {
     });
   }
 
-  async listarAjustes(tenantId: string, contratoId: string) {
+  async listarAjustes(tenantId: string, contratoId: string, f: PaginacionDto) {
     return this.db.withTenant(tenantId, async (ej) => {
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        'SELECT count(*)::text AS total FROM contrato_ajuste WHERE contrato_id = $1',
+        [contratoId],
+      );
+
       const { rows } = await ej.query(
         `SELECT id, vigente_desde AS "vigenteDesde", indice_tipo AS "indiceTipo",
                 periodo_base AS "periodoBase", periodo_actual AS "periodoActual",
@@ -370,10 +376,12 @@ export class ContratosService {
                 confirmado_el AS "confirmadoEl", notificado_el AS "notificadoEl"
            FROM contrato_ajuste
           WHERE contrato_id = $1
-          ORDER BY vigente_desde`,
-        [contratoId],
+          ORDER BY vigente_desde
+          LIMIT $2 OFFSET $3`,
+        [contratoId, f.porPagina, offset(f)],
       );
-      return rows.map((r) => ({
+
+      const items = rows.map((r) => ({
         ...r,
         valorBase: r.valorBase === null ? null : Number(r.valorBase),
         valorActual: r.valorActual === null ? null : Number(r.valorActual),
@@ -381,6 +389,8 @@ export class ContratosService {
         montoAnterior: Number(r.montoAnterior),
         montoNuevo: Number(r.montoNuevo),
       }));
+
+      return armarPagina(items, Number(conteo[0].total), f);
     });
   }
 
@@ -455,8 +465,15 @@ export class ContratosService {
     });
   }
 
-  async listarPeriodos(tenantId: string, contratoId: string) {
+  async listarPeriodos(tenantId: string, contratoId: string, f: PaginacionDto) {
     return this.db.withTenant(tenantId, async (ej) => {
+      // Crece con el TIEMPO, no con la cartera: un contrato de tres años son 36
+      // cuotas y uno de diez, 120. No se rompe mañana, pero tampoco tiene techo.
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        'SELECT count(*)::text AS total FROM periodo_alquiler WHERE contrato_id = $1',
+        [contratoId],
+      );
+
       const { rows } = await ej.query<FilaPeriodo>(
         `SELECT p.id, p.periodo, p.vence_el AS "venceEl",
                 p.monto_alquiler AS "montoAlquiler", p.expensas, p.otros,
@@ -471,10 +488,11 @@ export class ContratosService {
            FROM periodo_alquiler p
            JOIN contrato_alquiler c ON c.id = p.contrato_id
           WHERE p.contrato_id = $1
-          ORDER BY p.periodo DESC`,
-        [contratoId],
+          ORDER BY p.periodo DESC
+          LIMIT $2 OFFSET $3`,
+        [contratoId, f.porPagina, offset(f)],
       );
-      return rows.map(aPeriodo);
+      return armarPagina(rows.map(aPeriodo), Number(conteo[0].total), f);
     });
   }
 
@@ -661,55 +679,44 @@ export class ContratosService {
    * El tablero. Junta lo que vence de todas las fuentes en una sola lista
    * ordenada: contratos, ajustes por confirmar y cuotas impagas.
    */
-  async vencimientos(tenantId: string, dias = 90) {
+  async vencimientos(
+    tenantId: string,
+    f: FiltroVencimientosDto,
+  ): Promise<Pagina<Vencimiento>> {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows } = await ej.query(
-        `
-        SELECT 'contrato' AS tipo, c.id AS "entidadId", c.fecha_fin AS fecha,
-               pr.codigo AS "codigoPropiedad",
-               trim(pr.calle || ' ' || coalesce(pr.numero,'')) AS referencia,
-               NULL::numeric AS monto, c.moneda, NULL::text AS detalle
-          FROM contrato_alquiler c
-          JOIN propiedad pr ON pr.id = c.propiedad_id
-         WHERE c.estado = 'vigente'
-           AND c.fecha_fin BETWEEN current_date AND current_date + $1::int
+      const params = [f.dias ?? 90, f.tipo ?? null];
 
-        UNION ALL
-
-        SELECT 'ajuste', a.id, a.vigente_desde,
-               pr.codigo, trim(pr.calle || ' ' || coalesce(pr.numero,'')),
-               a.monto_nuevo, a.moneda, a.estado
-          FROM contrato_ajuste a
-          JOIN contrato_alquiler c ON c.id = a.contrato_id
-          JOIN propiedad pr ON pr.id = c.propiedad_id
-         WHERE a.estado IN ('proyectado','confirmado')
-           AND a.vigente_desde <= current_date + $1::int
-           -- Sin piso hacia atrás: un ajuste sin confirmar cuya vigencia ya
-           -- pasó es exactamente lo que no hay que dejar caer. Esconderlo
-           -- después de 31 días es perder plata en silencio.
-
-        UNION ALL
-
-        SELECT 'cuota', p.id, p.vence_el,
-               pr.codigo, trim(pr.calle || ' ' || coalesce(pr.numero,'')),
-               p.total, p.moneda, p.estado
-          FROM periodo_alquiler p
-          JOIN contrato_alquiler c ON c.id = p.contrato_id
-          JOIN propiedad pr ON pr.id = c.propiedad_id
-         WHERE p.estado IN ('pendiente','parcial','vencido')
-           AND p.vence_el <= current_date + $1::int
-
-        ORDER BY fecha
-        `,
-        [dias],
+      // Un UNION ALL de tres tablas sobre TODA la cartera. Con 200 contratos y
+      // sus cuotas, "los próximos 90 días" son cientos de filas, y antes salían
+      // todas juntas en cada carga del tablero.
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        `SELECT count(*)::text AS total FROM (${SQL_VENCIMIENTOS}) v
+          WHERE ($2::text IS NULL OR v.tipo = $2)`,
+        params,
       );
 
-      return rows.map((r) => ({
-        ...r,
-        fecha: iso(r.fecha as string),
+      const { rows } = await ej.query<FilaVencimiento>(
+        `SELECT * FROM (${SQL_VENCIMIENTOS}) v
+          WHERE ($2::text IS NULL OR v.tipo = $2)
+          ORDER BY v.fecha
+          LIMIT $3 OFFSET $4`,
+        [...params, f.porPagina, offset(f)],
+      );
+
+      const items = rows.map((r) => ({
+        tipo: r.tipo,
+        entidadId: r.entidadId,
+        contratoId: r.contratoId,
+        fecha: iso(r.fecha),
+        codigoPropiedad: r.codigoPropiedad,
+        referencia: r.referencia,
         monto: r.monto === null ? null : Number(r.monto),
+        moneda: r.moneda,
+        detalle: r.detalle,
         etiquetaPropiedad: `PROP-${String(r.codigoPropiedad).padStart(4, '0')}`,
       }));
+
+      return armarPagina(items, Number(conteo[0].total), f);
     });
   }
 
@@ -776,6 +783,72 @@ interface FilaContrato {
   partes: Array<Record<string, unknown>> | null;
   proximo_ajuste: string | null;
   dias_para_vencer: number;
+}
+
+/**
+ * Lo que vence, de las tres fuentes, en una sola lista.
+ *
+ * Va como constante porque el conteo y la página tienen que usar exactamente el
+ * mismo SQL. Duplicarlo es cómo el paginador termina diciendo 40 y mostrando 12.
+ */
+const SQL_VENCIMIENTOS = `
+  SELECT 'contrato' AS tipo, c.id AS "entidadId", c.id AS "contratoId",
+         c.fecha_fin AS fecha, pr.codigo AS "codigoPropiedad",
+         trim(pr.calle || ' ' || coalesce(pr.numero,'')) AS referencia,
+         NULL::numeric AS monto, c.moneda, NULL::text AS detalle
+    FROM contrato_alquiler c
+    JOIN propiedad pr ON pr.id = c.propiedad_id
+   WHERE c.estado = 'vigente'
+     AND c.fecha_fin BETWEEN current_date AND current_date + $1::int
+
+  UNION ALL
+
+  SELECT 'ajuste', a.id, c.id, a.vigente_desde,
+         pr.codigo, trim(pr.calle || ' ' || coalesce(pr.numero,'')),
+         a.monto_nuevo, a.moneda, a.estado
+    FROM contrato_ajuste a
+    JOIN contrato_alquiler c ON c.id = a.contrato_id
+    JOIN propiedad pr ON pr.id = c.propiedad_id
+   WHERE a.estado IN ('proyectado','confirmado')
+     AND a.vigente_desde <= current_date + $1::int
+     -- Sin piso hacia atrás: un ajuste sin confirmar cuya vigencia ya pasó es
+     -- exactamente lo que no hay que dejar caer. Esconderlo después de 31 días
+     -- es perder plata en silencio.
+
+  UNION ALL
+
+  SELECT 'cuota', p.id, c.id, p.vence_el,
+         pr.codigo, trim(pr.calle || ' ' || coalesce(pr.numero,'')),
+         p.total, p.moneda, p.estado
+    FROM periodo_alquiler p
+    JOIN contrato_alquiler c ON c.id = p.contrato_id
+    JOIN propiedad pr ON pr.id = c.propiedad_id
+   WHERE p.estado IN ('pendiente','parcial','vencido')
+     AND p.vence_el <= current_date + $1::int`;
+
+interface FilaVencimiento {
+  tipo: string;
+  entidadId: string;
+  contratoId: string;
+  fecha: string;
+  codigoPropiedad: number;
+  referencia: string;
+  monto: string | null;
+  moneda: string;
+  detalle: string | null;
+}
+
+export interface Vencimiento {
+  tipo: string;
+  entidadId: string;
+  contratoId: string;
+  fecha: string;
+  codigoPropiedad: number;
+  referencia: string;
+  monto: number | null;
+  moneda: string;
+  detalle: string | null;
+  etiquetaPropiedad: string;
 }
 
 const SELECT_CONTRATO = `

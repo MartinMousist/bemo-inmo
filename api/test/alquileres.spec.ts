@@ -234,11 +234,11 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     expect(r.body.creados).toBeGreaterThanOrEqual(1);
 
     const ajustes = await http()
-      .get(`/v1/contratos/${contrato.id}/ajustes`)
+      .get(`/v1/contratos/${contrato.id}/ajustes?porPagina=100`)
       .set(...como(inmo))
       .expect(200);
 
-    const primero = ajustes.body[0];
+    const primero = ajustes.body.items[0];
     // Abril: base dic/25 = 100, actual mar/26 = 106,12 → coef 1,0612
     expect(primero.vigenteDesde).toBe('2026-04-01');
     expect(primero.coeficiente).toBe(1.0612);
@@ -246,9 +246,9 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     expect(primero.montoNuevo).toBe(424480);
     expect(primero.estado).toBe('proyectado');
 
-    if (ajustes.body[1]) {
+    if (ajustes.body.items[1]) {
       // El segundo arranca del monto del primero, no del inicial.
-      expect(ajustes.body[1].montoAnterior).toBe(424480);
+      expect(ajustes.body.items[1].montoAnterior).toBe(424480);
     }
   });
 
@@ -257,14 +257,14 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     await http().post(`/v1/contratos/${contrato.id}/ajustes/proyectar`).set(...como(inmo));
 
     const ajustes = await http()
-      .get(`/v1/contratos/${contrato.id}/ajustes`)
+      .get(`/v1/contratos/${contrato.id}/ajustes?porPagina=100`)
       .set(...como(inmo))
       .expect(200);
 
     // Un aumento que el usuario no puede explicarle al inquilino no sirve.
-    expect(ajustes.body[0].explicacion).toContain('IPC');
-    expect(ajustes.body[0].explicacion).toContain('400.000,00');
-    expect(ajustes.body[0].explicacion).toContain('424.480,00');
+    expect(ajustes.body.items[0].explicacion).toContain('IPC');
+    expect(ajustes.body.items[0].explicacion).toContain('400.000,00');
+    expect(ajustes.body.items[0].explicacion).toContain('424.480,00');
   });
 
   it('un ajuste confirmado no se puede recalcular', async () => {
@@ -272,8 +272,8 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     await http().post(`/v1/contratos/${contrato.id}/ajustes/proyectar`).set(...como(inmo));
 
     const ajustes = await http()
-      .get(`/v1/contratos/${contrato.id}/ajustes`).set(...como(inmo)).expect(200);
-    const id = ajustes.body[0].id;
+      .get(`/v1/contratos/${contrato.id}/ajustes?porPagina=100`).set(...como(inmo)).expect(200);
+    const id = ajustes.body.items[0].id;
 
     await http().post(`/v1/ajustes/${id}/confirmar`).set(...como(inmo)).expect(201);
 
@@ -321,8 +321,8 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     expect(b.body.creados).toBe(0);   // correrlo dos veces no duplica
 
     const per = await http()
-      .get(`/v1/contratos/${contrato.id}/periodos`).set(...como(inmo)).expect(200);
-    expect(per.body).toHaveLength(6);
+      .get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`).set(...como(inmo)).expect(200);
+    expect(per.body.items).toHaveLength(6);
   });
 
   it('las cuotas usan el monto del ajuste CONFIRMADO, no del proyectado', async () => {
@@ -334,20 +334,20 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
       .set(...como(inmo)).send({ hasta: '2026-06-01' }).expect(201);
 
     let per = await http()
-      .get(`/v1/contratos/${contrato.id}/periodos`).set(...como(inmo)).expect(200);
-    const abril = per.body.find((p: { periodo: string }) => p.periodo.startsWith('2026-04'));
+      .get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`).set(...como(inmo)).expect(200);
+    const abril = per.body.items.find((p: { periodo: string }) => p.periodo.startsWith('2026-04'));
     expect(abril.montoAlquiler).toBe(400000);
 
     // Se confirma y se regeneran: los períodos ya creados no cambian solos.
     const ajustes = await http()
-      .get(`/v1/contratos/${contrato.id}/ajustes`).set(...como(inmo)).expect(200);
-    await http().post(`/v1/ajustes/${ajustes.body[0].id}/confirmar`).set(...como(inmo)).expect(201);
+      .get(`/v1/contratos/${contrato.id}/ajustes?porPagina=100`).set(...como(inmo)).expect(200);
+    await http().post(`/v1/ajustes/${ajustes.body.items[0].id}/confirmar`).set(...como(inmo)).expect(201);
 
     per = await http()
-      .get(`/v1/contratos/${contrato.id}/periodos`).set(...como(inmo)).expect(200);
+      .get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`).set(...como(inmo)).expect(200);
     // El período ya emitido sigue igual: cambiar una cuota ya emitida sería
     // reescribir lo que el inquilino ya vio.
-    expect(per.body.find((p: { periodo: string }) => p.periodo.startsWith('2026-04')).montoAlquiler)
+    expect(per.body.items.find((p: { periodo: string }) => p.periodo.startsWith('2026-04')).montoAlquiler)
       .toBe(400000);
   });
 
@@ -357,8 +357,8 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
       .set(...como(inmo)).send({ hasta: '2026-01-01' }).expect(201);
 
     const per = await http()
-      .get(`/v1/contratos/${contrato.id}/periodos`).set(...como(inmo)).expect(200);
-    const enero = per.body[0];
+      .get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`).set(...como(inmo)).expect(200);
+    const enero = per.body.items[0];
 
     const r1 = await http().post('/v1/cobros').set(...como(inmo))
       .send({ periodoId: enero.id, monto: 150000 }).expect(201);
@@ -379,12 +379,12 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
       .set(...como(inmo)).send({ hasta: '2026-01-01' }).expect(201);
 
     const per = await http()
-      .get(`/v1/contratos/${contrato.id}/periodos`).set(...como(inmo)).expect(200);
+      .get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`).set(...como(inmo)).expect(200);
 
     // Cobra sólo 300.000 de los 400.000: al propietario le corresponde el 90%
     // de lo que ENTRÓ, no de lo que se facturó.
     await http().post('/v1/cobros').set(...como(inmo))
-      .send({ periodoId: per.body[0].id, monto: 300000 }).expect(201);
+      .send({ periodoId: per.body.items[0].id, monto: 300000 }).expect(201);
 
     const gen = await http().post('/v1/liquidaciones/generar')
       .set(...como(inmo)).send({ periodo: '2026-01-01' }).expect(201);
@@ -424,10 +424,10 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
 
     await http().post(`/v1/contratos/${c.body.id}/periodos/generar`)
       .set(...como(inmo)).send({ hasta: '2026-02-01' }).expect(201);
-    const per = await http().get(`/v1/contratos/${c.body.id}/periodos`)
+    const per = await http().get(`/v1/contratos/${c.body.id}/periodos?porPagina=100`)
       .set(...como(inmo)).expect(200);
     await http().post('/v1/cobros').set(...como(inmo))
-      .send({ periodoId: per.body[0].id, monto: 500000 }).expect(201);
+      .send({ periodoId: per.body.items[0].id, monto: 500000 }).expect(201);
 
     await http().post('/v1/liquidaciones/generar')
       .set(...como(inmo)).send({ periodo: '2026-02-01' }).expect(201);
@@ -455,9 +455,9 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     const { contrato, dueno } = await crearPropiedadYContrato();
     await http().post(`/v1/contratos/${contrato.id}/periodos/generar`)
       .set(...como(inmo)).send({ hasta: '2026-03-01' }).expect(201);
-    const per = await http().get(`/v1/contratos/${contrato.id}/periodos`)
+    const per = await http().get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`)
       .set(...como(inmo)).expect(200);
-    const marzo = per.body.find((p: { periodo: string }) => p.periodo.startsWith('2026-03'));
+    const marzo = per.body.items.find((p: { periodo: string }) => p.periodo.startsWith('2026-03'));
 
     await http().post('/v1/cobros').set(...como(inmo))
       .send({ periodoId: marzo.id, monto: 400000 }).expect(201);
@@ -505,9 +505,9 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     const { contrato, dueno } = await crearPropiedadYContrato();
     await http().post(`/v1/contratos/${contrato.id}/periodos/generar`)
       .set(...como(inmo)).send({ hasta: '2026-05-01' }).expect(201);
-    const per = await http().get(`/v1/contratos/${contrato.id}/periodos`)
+    const per = await http().get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`)
       .set(...como(inmo)).expect(200);
-    const mayo = per.body.find((p: { periodo: string }) => p.periodo.startsWith('2026-05'));
+    const mayo = per.body.items.find((p: { periodo: string }) => p.periodo.startsWith('2026-05'));
 
     await http().post('/v1/cobros').set(...como(inmo))
       .send({ periodoId: mayo.id, monto: 400000 }).expect(201);
@@ -531,9 +531,9 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     const { contrato, dueno } = await crearPropiedadYContrato();
     await http().post(`/v1/contratos/${contrato.id}/periodos/generar`)
       .set(...como(inmo)).send({ hasta: '2026-06-01' }).expect(201);
-    const per = await http().get(`/v1/contratos/${contrato.id}/periodos`)
+    const per = await http().get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`)
       .set(...como(inmo)).expect(200);
-    const junio = per.body.find((p: { periodo: string }) => p.periodo.startsWith('2026-06'));
+    const junio = per.body.items.find((p: { periodo: string }) => p.periodo.startsWith('2026-06'));
 
     await http().post('/v1/cobros').set(...como(inmo))
       .send({ periodoId: junio.id, monto: 400000 }).expect(201);
@@ -563,9 +563,9 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     const { contrato, dueno } = await crearPropiedadYContrato();
     await http().post(`/v1/contratos/${contrato.id}/periodos/generar`)
       .set(...como(inmo)).send({ hasta: '2026-02-01' }).expect(201);
-    const per = await http().get(`/v1/contratos/${contrato.id}/periodos`)
+    const per = await http().get(`/v1/contratos/${contrato.id}/periodos?porPagina=100`)
       .set(...como(inmo)).expect(200);
-    const feb = per.body.find((p: { periodo: string }) => p.periodo.startsWith('2026-02'));
+    const feb = per.body.items.find((p: { periodo: string }) => p.periodo.startsWith('2026-02'));
 
     await http().post('/v1/cobros').set(...como(inmo))
       .send({ periodoId: feb.id, monto: 200000 }).expect(201);
@@ -606,15 +606,23 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
   // ── Vencimientos y aislamiento ─────────────────────────────────────────────
 
   it('el tablero de vencimientos junta contratos, ajustes y cuotas', async () => {
-    const res = await http().get('/v1/contratos/vencimientos?dias=3650')
+    const res = await http().get('/v1/contratos/vencimientos?dias=365&porPagina=100')
       .set(...como(inmo)).expect(200);
 
-    const tipos = new Set(res.body.map((v: { tipo: string }) => v.tipo));
+    const tipos = new Set(res.body.items.map((v: { tipo: string }) => v.tipo));
     expect(tipos.has('ajuste')).toBe(true);
     expect(tipos.has('cuota')).toBe(true);
     // Y viene ordenado por fecha.
-    const fechas = res.body.map((v: { fecha: string }) => v.fecha);
+    const fechas = res.body.items.map((v: { fecha: string }) => v.fecha);
     expect([...fechas].sort()).toEqual(fechas);
+
+    // Cada fila trae el contrato al que pertenece: sin eso, la pantalla no
+    // puede llevar a ningún lado desde un aviso de cuota.
+    expect(res.body.items.every((v: { contratoId: string }) => !!v.contratoId)).toBe(true);
+
+    // Y ahora pagina: el UNION de tres tablas sobre toda la cartera salía entero.
+    expect(res.body.total).toBeGreaterThan(0);
+    expect(res.body.items.length).toBeLessThanOrEqual(res.body.porPagina);
   });
 
   it('cero fuga: la vecina no ve contratos, cuotas ni liquidaciones ajenas', async () => {
@@ -625,7 +633,8 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
     }
 
     const venc = await http().get('/v1/contratos/vencimientos').set(...como(otra)).expect(200);
-    expect(venc.body).toHaveLength(0);
+    expect(venc.body.items).toHaveLength(0);
+    expect(venc.body.total).toBe(0);
   });
 
   it('el asesor no puede tocar plata', async () => {

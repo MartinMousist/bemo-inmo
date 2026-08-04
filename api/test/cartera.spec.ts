@@ -85,9 +85,9 @@ describe('Cartera de alquileres', () => {
       .send({ hasta: new Date().toISOString().slice(0, 8) + '01' })
       .expect(201);
 
-    const per = await http().get(`/v1/contratos/${contratoId}/periodos`)
+    const per = await http().get(`/v1/contratos/${contratoId}/periodos?porPagina=100`)
       .set(...como(inmo)).expect(200);
-    return per.body as Array<{ id: string; total: number; venceEl: string; periodo: string }>;
+    return per.body.items as Array<{ id: string; total: number; venceEl: string; periodo: string }>;
   }
 
   /** El tipo real del endpoint: si la forma cambia, estos tests dejan de compilar. */
@@ -228,9 +228,9 @@ describe('Cartera de alquileres', () => {
     await http().post(`/v1/contratos/${contrato.id}/ajustes/proyectar`)
       .set(...como(inmo)).expect(201);
 
-    const ajustes = await http().get(`/v1/contratos/${contrato.id}/ajustes`)
+    const ajustes = await http().get(`/v1/contratos/${contrato.id}/ajustes?porPagina=100`)
       .set(...como(inmo)).expect(200);
-    const porFecha = (ajustes.body as Array<{ id: string; vigenteDesde: string }>)
+    const porFecha = (ajustes.body.items as Array<{ id: string; vigenteDesde: string }>)
       .sort((a, b) => a.vigenteDesde.localeCompare(b.vigenteDesde));
 
     // Confirmo el más viejo: rige desde 2012, o sea que ya está aplicado.
@@ -370,8 +370,8 @@ describe('Cartera de alquileres', () => {
     expect(r.body.resultados[0].ok).toBe(false);
 
     // Y del otro lado no se generó nada.
-    const per = await http().get(`/v1/contratos/${ajeno.id}/periodos`)
+    const per = await http().get(`/v1/contratos/${ajeno.id}/periodos?porPagina=100`)
       .set(...como(otra)).expect(200);
-    expect(per.body).toHaveLength(0);
+    expect(per.body.items).toHaveLength(0);
   });
 });

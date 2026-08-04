@@ -27,7 +27,7 @@ const ETIQUETA: Record<string, string> = {
 async function cargar() {
   cargando.value = true; error.value = '';
   try { items.value = await api<Reserva[]>('/reservas'); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las reservas.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las reservas.'; }
   finally { cargando.value = false; }
 }
 

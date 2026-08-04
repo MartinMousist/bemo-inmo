@@ -47,7 +47,7 @@ async function cargar() {
     total.value = r.total;
     paginas.value = r.paginas;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar.';
   } finally { cargando.value = false; }
 }
 
@@ -74,7 +74,7 @@ async function generar() {
         : `período ${fmtPeriodo(`${mes.value}-01`)}`,
     );
   } catch (e) {
-    const detalle = e instanceof ApiError ? e.detail : 'No se pudo generar.';
+    const detalle = e instanceof ApiError ? e.paraMostrar : 'No se pudo generar.';
     error.value = detalle;
     ui.error('No se pudo generar el período', detalle);
   }
@@ -101,7 +101,7 @@ async function cerrar(id: string) {
     await cargar();
     ui.ok('Liquidación cerrada', l ? money(l.totalNeto, l.moneda) : undefined);
   } catch (e) {
-    const detalle = e instanceof ApiError ? e.detail : 'No se pudo cerrar.';
+    const detalle = e instanceof ApiError ? e.paraMostrar : 'No se pudo cerrar.';
     error.value = detalle;
     ui.error('No se pudo cerrar la liquidación', detalle);
   }
@@ -110,7 +110,7 @@ async function cerrar(id: string) {
 async function exportar() {
   error.value = '';
   try { await descargar(`/exportar/liquidaciones.csv?periodo=${mes.value}-01`); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo exportar.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo exportar.'; }
 }
 
 onMounted(cargar);

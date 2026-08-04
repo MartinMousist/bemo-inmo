@@ -63,7 +63,7 @@ async function cargar() {
     total.value = r.total;
     paginas.value = r.paginas;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las propiedades.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las propiedades.';
   } finally {
     cargando.value = false;
   }
@@ -87,7 +87,7 @@ function tono(estado: string) {
 async function exportar() {
   error.value = '';
   try { await descargar('/exportar/propiedades.csv'); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo exportar.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo exportar.'; }
 }
 
 onMounted(cargar);

@@ -31,7 +31,7 @@ async function enviar() {
     await router.replace('/inicio');
   } catch (e) {
     error.value =
-      e instanceof ApiError ? e.detail : 'No se pudo conectar con el servidor.';
+      e instanceof ApiError ? e.paraMostrar : 'No se pudo conectar con el servidor.';
   } finally {
     enviando.value = false;
   }

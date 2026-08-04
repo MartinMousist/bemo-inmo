@@ -73,7 +73,7 @@ async function cargar() {
   try {
     d.value = await api<Inicio>('/inicio');
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar el inicio.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar el inicio.';
   } finally {
     cargando.value = false;
   }

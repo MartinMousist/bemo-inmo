@@ -32,7 +32,7 @@ async function cargar() {
     const r = await api<{ items: Oportunidad[] }>('/oportunidades?porPagina=100');
     items.value = r.items;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las oportunidades.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las oportunidades.';
   } finally { cargando.value = false; }
 }
 
@@ -53,7 +53,7 @@ async function avanzar(o: Oportunidad) {
     });
     await cargar();
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo mover.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo mover.';
   } finally { moviendo.value = null; }
 }
 

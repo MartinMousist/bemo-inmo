@@ -53,7 +53,7 @@ async function cargar() {
     mapasDisponibles.value = caps.mapas;
     fotosDisponibles.value = caps.fotos;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar la propiedad.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar la propiedad.';
   } finally { cargando.value = false; }
 }
 
@@ -72,7 +72,7 @@ async function agregarOperacion() {
     });
     nuevaOp.abierto = false; nuevaOp.precio = '';
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo crear la operación.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo crear la operación.';
   }
 }
 

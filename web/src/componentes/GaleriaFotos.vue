@@ -19,7 +19,7 @@ const arrastrando = ref<string | null>(null);
 async function cargar() {
   cargando.value = true;
   try { fotos.value = await api<Foto[]>(`/propiedades/${props.propiedadId}/fotos`); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar las fotos.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las fotos.'; }
   finally { cargando.value = false; }
 }
 
@@ -43,7 +43,7 @@ async function elegir(e: Event) {
     } catch (e) {
       // Se informa el archivo que falló y se sigue con los demás: perder toda
       // la tanda porque una foto pesa de más sería hostil.
-      error.value = `${f.name}: ${e instanceof ApiError ? e.detail : 'no se pudo subir'}`;
+      error.value = `${f.name}: ${e instanceof ApiError ? e.paraMostrar : 'no se pudo subir'}`;
     }
   }
 
@@ -54,7 +54,7 @@ async function elegir(e: Event) {
 
 async function portada(id: string) {
   try { fotos.value = await api(`/propiedades/${props.propiedadId}/fotos/${id}/portada`, { method: 'PUT' }); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo cambiar la portada.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cambiar la portada.'; }
 }
 
 async function borrar(id: string) {
@@ -72,7 +72,7 @@ async function borrar(id: string) {
     await cargar();
     ui.ok('Foto borrada');
   } catch (e) {
-    const detalle = e instanceof ApiError ? e.detail : 'No se pudo borrar.';
+    const detalle = e instanceof ApiError ? e.paraMostrar : 'No se pudo borrar.';
     error.value = detalle;
     ui.error('No se pudo borrar la foto', detalle);
   }
@@ -89,7 +89,7 @@ async function soltar(sobre: string) {
   ids.splice(j, 0, ...ids.splice(i, 1));
 
   try { fotos.value = await api(`/propiedades/${props.propiedadId}/fotos/orden`, { method: 'PUT', body: JSON.stringify({ ids }) }); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo reordenar.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo reordenar.'; }
 }
 
 onMounted(cargar);

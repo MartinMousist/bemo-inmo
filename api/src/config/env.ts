@@ -21,6 +21,13 @@ const schema = z.object({
   MIGRATE_ON_BOOT: z.enum(['true', 'false']).default('false'),
   SEED_ON_BOOT: z.enum(['true', 'false']).default('false'),
 
+  /**
+   * Log en JSON, una línea por evento. Por defecto sigue el entorno: en
+   * producción JSON —es lo único que un agregador puede filtrar por requestId—
+   * y en desarrollo el formato legible de Nest.
+   */
+  LOG_JSON: z.enum(['true', 'false']).optional(),
+
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   BODY_LIMIT: z.string().default('1mb'),
   /** Una foto de 8 MB en base64 son ~11 MB. */
@@ -95,11 +102,12 @@ type Crudo = z.infer<typeof schema>;
 
 export type Env = Omit<
   Crudo,
-  'MIGRATE_ON_BOOT' | 'SEED_ON_BOOT' | 'COOKIE_SECURE'
+  'MIGRATE_ON_BOOT' | 'SEED_ON_BOOT' | 'COOKIE_SECURE' | 'LOG_JSON'
 > & {
   MIGRATE_ON_BOOT: boolean;
   SEED_ON_BOOT: boolean;
   COOKIE_SECURE: boolean;
+  LOG_JSON: boolean;
   isProduction: boolean;
 };
 
@@ -123,6 +131,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     MIGRATE_ON_BOOT: e.MIGRATE_ON_BOOT === 'true',
     SEED_ON_BOOT: e.SEED_ON_BOOT === 'true',
     COOKIE_SECURE: e.COOKIE_SECURE === 'true',
+    // Sin valor explícito, sigue al entorno.
+    LOG_JSON: e.LOG_JSON ? e.LOG_JSON === 'true' : e.NODE_ENV === 'production',
     isProduction: e.NODE_ENV === 'production',
   };
 

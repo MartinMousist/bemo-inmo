@@ -128,7 +128,7 @@ async function cargar() {
     seleccion.value = new Set();
     cobrando.value = null;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar la cartera.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar la cartera.';
   } finally { cargando.value = false; }
 }
 
@@ -179,7 +179,7 @@ async function confirmarAjuste(f: Fila) {
     ui.ok('Aumento confirmado', `${f.propiedad.etiqueta} · ${money(a.montoNuevo, a.moneda)}`);
     await cargar();
   } catch (e) {
-    ui.error('No se pudo confirmar', e instanceof ApiError ? e.detail : 'Error inesperado');
+    ui.error('No se pudo confirmar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
   }
 }
 
@@ -204,7 +204,7 @@ async function registrarCobro(f: Fila) {
     ui.ok('Cobro registrado', `${f.propiedad.etiqueta} · ${money(monto, f.ultimaCuota.moneda)}`);
     await cargar();
   } catch (e) {
-    ui.error('No se pudo registrar el cobro', e instanceof ApiError ? e.detail : 'Error inesperado');
+    ui.error('No se pudo registrar el cobro', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
   }
 }
 
@@ -247,7 +247,7 @@ async function enLote(ruta: string, verbo: string) {
     }
     await cargar();
   } catch (e) {
-    ui.error('No se pudo correr la acción', e instanceof ApiError ? e.detail : 'Error inesperado');
+    ui.error('No se pudo correr la acción', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
   } finally {
     trabajando.value = false;
   }
@@ -256,7 +256,7 @@ async function enLote(ruta: string, verbo: string) {
 async function exportar() {
   error.value = '';
   try { await descargar('/exportar/contratos.csv'); }
-  catch (e) { ui.error('No se pudo exportar', e instanceof ApiError ? e.detail : 'Error inesperado'); }
+  catch (e) { ui.error('No se pudo exportar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado'); }
 }
 
 function irA(id: string) { router.push(`/contratos/${id}`); }

@@ -50,7 +50,7 @@ async function cargar() {
     paginas.value = a.paginas;
     canales.value = c;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar los avisos.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar los avisos.';
   } finally { cargando.value = false; }
 }
 
@@ -63,12 +63,12 @@ watch(pagina, () => void cargar());
 async function generar() {
   error.value = '';
   try { await api('/avisos/generar', { method: 'POST' }); await cargar(); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo recalcular.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo recalcular.'; }
 }
 
 async function visto(id: string) {
   try { await api(`/avisos/${id}/visto`, { method: 'POST' }); await cargar(); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo marcar.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo marcar.'; }
 }
 
 const sinEnviar = computed(() => canales.value.filter((c) => !c.disponible));

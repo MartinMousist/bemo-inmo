@@ -43,7 +43,7 @@ async function previsualizar() {
       body: JSON.stringify({ recurso: recurso.value, csv: csv.value }),
     });
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo leer el archivo.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo leer el archivo.';
     prev.value = null;
   } finally { cargando.value = false; }
 }
@@ -57,14 +57,14 @@ async function importar() {
     });
     prev.value = null; csv.value = ''; nombreArchivo.value = '';
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo importar.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo importar.';
   } finally { cargando.value = false; }
 }
 
 async function bajarModelo() {
   error.value = '';
   try { await descargar(`/importar/plantilla/${recurso.value}.csv`); }
-  catch (e) { error.value = e instanceof ApiError ? e.detail : 'No se pudo bajar el modelo.'; }
+  catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo bajar el modelo.'; }
 }
 
 function columnas(o: Record<string, unknown>): Array<[string, unknown]> {

@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AppError, ErrorCode } from '../common/app-error';
+import { anotarActor } from '../common/request-id';
 import { TokensService, type Rol } from './tokens.service';
 import { AuthService } from './auth.service';
 import { PUBLICO, ROLES, type RequestConActor } from './decoradores';
@@ -52,6 +53,11 @@ export class AuthGuard implements CanActivate {
     }
 
     req.actor = { usuarioId: claims.sub, tenantId: claims.tid, rol: claims.rol };
+
+    // Recién acá se sabe QUIÉN es. A partir de este punto, cada línea de log de
+    // este request sale con su tenant y su usuario, sin que ningún servicio
+    // tenga que recibirlos y reenviarlos.
+    anotarActor(claims.tid, claims.sub);
 
     const permitidos = this.reflector.getAllAndOverride<Rol[]>(ROLES, destinos);
     if (permitidos?.length && !permitidos.includes(claims.rol)) {

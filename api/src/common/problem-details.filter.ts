@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AppError, ErrorCode, type ErrorCodeValue } from './app-error';
+import { requestIdActual } from './request-id';
 
 interface ProblemDetails {
   type: string;
@@ -16,6 +17,13 @@ interface ProblemDetails {
   detail: string;
   code: ErrorCodeValue | string;
   instance: string;
+  /**
+   * El mismo id que sale en el header `X-Request-Id` y en cada línea de log de
+   * este request. RFC 9457 permite campos propios, y es lo que convierte
+   * "me dio error" en "ya lo veo": el usuario lee el id en pantalla y es el
+   * mismo que se busca en el log.
+   */
+  requestId?: string;
 }
 
 /**
@@ -34,6 +42,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const req = ctx.getRequest<Request>();
 
     const problem = this.toProblem(exception, req.originalUrl ?? req.url);
+    const requestId = requestIdActual();
+    if (requestId) problem.requestId = requestId;
 
     if (problem.status >= 500) {
       this.logger.error(

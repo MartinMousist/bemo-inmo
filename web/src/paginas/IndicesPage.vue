@@ -47,7 +47,7 @@ async function cargar() {
     total.value = v.total;
     paginas.value = v.paginas;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudieron cargar los índices.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar los índices.';
   } finally { cargando.value = false; }
 }
 
@@ -69,7 +69,7 @@ async function guardar() {
     tipoVisto.value = alta.tipo;
     await cargar();
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar el valor.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar el valor.';
   }
 }
 

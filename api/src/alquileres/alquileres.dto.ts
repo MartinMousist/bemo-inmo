@@ -70,6 +70,15 @@ export class FiltroContratosDto extends PaginacionDto {
   estado?: string;
 }
 
+export class FiltroVencimientosDto extends PaginacionDto {
+  /** Ventana hacia adelante. Máximo un año: más allá no es "lo que vence". */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(365) dias?: number;
+  @IsOptional() @IsIn(['contrato', 'ajuste', 'cuota']) tipo?: string;
+
+  /** Es un tablero: se mira de corrido, no de a 25. */
+  override porPagina: number = 100;
+}
+
 export const ESTADOS_COBRANZA = ['al_dia', 'parcial', 'en_mora', 'sin_cuotas'] as const;
 
 /** `q` busca por calle, localidad, código de propiedad o nombre de una parte. */

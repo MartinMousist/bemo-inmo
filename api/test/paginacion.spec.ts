@@ -31,6 +31,29 @@ const LISTAS = [
   { ruta: '/v1/publicaciones', rol: 'owner' as const },
   { ruta: '/v1/avisos', rol: 'owner' as const },
   { ruta: '/v1/indices', rol: 'owner' as const },
+  // Segunda tanda. `vencimientos` era un UNION ALL de tres tablas sobre TODA la
+  // cartera sin ningún LIMIT; los otros dos crecen con el TIEMPO —un contrato de
+  // diez años son 120 cuotas— y no con la cantidad de propiedades.
+  { ruta: '/v1/contratos/vencimientos', rol: 'owner' as const },
+  { ruta: '/v1/auditoria', rol: 'contable' as const },
+];
+
+/**
+ * Lo que queda SIN paginar, a propósito, y por qué.
+ *
+ * Está acá para que sea una decisión y no un olvido: si mañana uno de estos deja
+ * de estar acotado por lo que dice el comentario, el lugar donde se discute es
+ * este test.
+ *
+ *  · `/v1/equipo` — la cantidad de gente que trabaja en la inmobiliaria.
+ *  · `/v1/plantillas` — las ocho base más las que alguien escriba.
+ *  · `/v1/ventas/comisiones/por-agente` — es un AGREGADO, no una lista: una fila
+ *    por (agente × moneda × estado). Paginarlo sería partir un total en pedazos.
+ */
+const SIN_PAGINAR = [
+  '/v1/equipo',
+  '/v1/plantillas',
+  '/v1/ventas/comisiones/por-agente',
 ];
 
 describe('Paginación de las listas', () => {
@@ -167,6 +190,14 @@ describe('Paginación de las listas', () => {
         hastaMarzo.body.items.every((v: { periodo: string }) => v.periodo <= '2011-03-31'),
       ).toBe(true);
     });
+  });
+
+  it.each(SIN_PAGINAR)('%s sigue devolviendo un array, y está bien', async (ruta) => {
+    // No es un olvido: cada uno está acotado por algo real. Ver el comentario de
+    // SIN_PAGINAR. Si alguno deja de estarlo, este test es el lugar de la
+    // discusión — no una lista que un día devuelve 8.000 filas en silencio.
+    const res = await http().get(ruta).set(...como()).expect(200);
+    expect(Array.isArray(res.body)).toBe(true);
   });
 
   it('las listas siguen respetando los roles', async () => {

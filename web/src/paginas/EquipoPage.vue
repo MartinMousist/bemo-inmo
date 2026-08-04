@@ -33,7 +33,7 @@ async function cargar() {
   try {
     miembros.value = await api<Miembro[]>('/equipo');
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo cargar el equipo.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar el equipo.';
   } finally {
     cargando.value = false;
   }
@@ -51,7 +51,7 @@ async function invitar() {
     emailInvitado.value = '';
     invitando.value = false;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : 'No se pudo invitar.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo invitar.';
   }
 }
 

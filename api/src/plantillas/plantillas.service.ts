@@ -23,6 +23,10 @@ export interface Documento {
 export class PlantillasService {
   constructor(private readonly db: DbService) {}
 
+  /**
+   * Sin paginar, a propósito: son las ocho plantillas base más las que la
+   * inmobiliaria escriba. Nadie redacta cien modelos de contrato.
+   */
   async listar(tenantId: string): Promise<Plantilla[]> {
     return this.db.withTenant(tenantId, async (ej) => {
       const { rows } = await ej.query<{
