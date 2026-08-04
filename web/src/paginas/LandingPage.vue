@@ -124,7 +124,63 @@ const planes = [
   },
 ];
 
+/**
+ * El bloque "antes / después".
+ *
+ * Es el que más falta hacía: en esta categoría el competidor no es otro
+ * software, es una planilla más WhatsApp más la memoria de alguien. Nombrar eso
+ * con precisión —"el aumento se calcula a mano el día que alguien se acuerda"—
+ * hace más que cualquier lista de features, porque el lector reconoce su martes.
+ */
+const contraste = [
+  {
+    hoy: 'El aumento se calcula a mano el día que alguien se acuerda.',
+    aca: 'Se calcula solo con el índice del contrato y llega con la cuenta escrita.',
+  },
+  {
+    hoy: 'Un contrato vence y te enterás cuando llama el propietario.',
+    aca: 'Aparece en el inicio a los 90, 60 y 30 días.',
+  },
+  {
+    hoy: 'La liquidación se arma en una planilla que sólo entiende quien la hizo.',
+    aca: 'Sale de lo cobrado, con honorarios y gastos descontados, y cuadra sola.',
+  },
+  {
+    hoy: 'Si alguien se va, la información se va con él.',
+    aca: 'Todo queda en la cuenta de la inmobiliaria, con quién hizo cada cosa.',
+  },
+];
+
+/**
+ * Objeciones reales de alguien que maneja plata de terceros. No son features:
+ * son las razones por las que un administrador NO cambia de sistema.
+ */
+const garantias = [
+  {
+    icono: 'documento',
+    titulo: 'Cada número se puede explicar',
+    detalle:
+      'Todo importe calculado abre su memoria: qué índice, qué período, qué coeficiente y sobre qué base. Es lo que le mostrás al inquilino cuando pregunta.',
+  },
+  {
+    icono: 'equipo',
+    titulo: 'Tu cartera no se mezcla con la de nadie',
+    detalle:
+      'El aislamiento entre inmobiliarias está en el motor de la base, no sólo en la aplicación, y hay tests que verifican que no haya fugas.',
+  },
+  {
+    icono: 'mas',
+    titulo: 'Tus datos se van con vos',
+    detalle:
+      'Propiedades, contratos y liquidaciones se exportan a CSV cuando quieras, sin pedirle permiso a nadie. Un sistema del que no se puede salir es una trampa.',
+  },
+];
+
 const preguntas = [
+  {
+    q: '¿Cuánto sale?',
+    a: 'Todavía no hay una lista de precios publicada, y no la vamos a inventar. El número se está definiendo con las primeras inmobiliarias que lo usen de verdad; escribinos y lo armamos sobre tu cartera.',
+  },
   {
     q: '¿Sirve si los contratos tienen índices distintos?',
     a: 'Es exactamente para eso. Desde que los contratos son de forma libre, cada uno puede tener su índice (IPC, ICL, UVA, ICP, dólar o un porcentaje fijo) y su periodicidad. El sistema los maneja por contrato, no por regla general.',
@@ -139,7 +195,15 @@ const preguntas = [
   },
   {
     q: '¿Publica en Zonaprop y Argenprop?',
-    a: 'La publicación directa depende de convenios comerciales con cada portal, que están en trámite. Mientras tanto el sistema arma el aviso completo —texto, atributos y fotos ordenadas— listo para pegar.',
+    a: 'La publicación directa depende de convenios comerciales con cada portal, que están en trámite. Mientras tanto el sistema arma el aviso completo —texto, atributos y fotos ordenadas— listo para pegar, y expone un feed XML de la cartera que le podés pasar a un portal o a tu desarrollador sin depender de nosotros.',
+  },
+  {
+    q: '¿Y si dejo de usarlo?',
+    a: 'Te llevás todo. Propiedades, personas, contratos, cobros y liquidaciones se exportan a CSV desde la misma pantalla donde los mirás, sin trámite y sin pedir nada.',
+  },
+  {
+    q: '¿Quién puede ver la plata?',
+    a: 'Se define por rol. Un asesor ve la cartera y sus consultas, pero no las liquidaciones ni la cobranza de la inmobiliaria; el contable ve las liquidaciones y no puede cargar contratos. No es una preferencia de pantalla: el permiso se aplica en el servidor.',
   },
 ];
 
@@ -157,8 +221,10 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
       <div class="contenedor nav-inner">
         <RouterLink to="/" class="marca"><BemoLogo :tam="32" con-nombre /></RouterLink>
         <nav class="enlaces">
+          <a href="#problema">El problema</a>
           <a href="#modulos">Qué hace</a>
           <a href="#como">Cómo funciona</a>
+          <a href="#datos">Tus datos</a>
           <a href="#planes">Planes</a>
           <a href="#preguntas">Preguntas</a>
         </nav>
@@ -222,6 +288,32 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
       </div>
     </section>
 
+    <!-- ── El problema ── -->
+    <section id="problema" class="seccion alterna">
+      <div class="contenedor">
+        <div class="seccion-cab">
+          <h2>Hoy esto lo hace una planilla y la memoria de alguien</h2>
+          <p>
+            Funciona hasta que son cuarenta contratos, o hasta que esa persona
+            se toma vacaciones.
+          </p>
+        </div>
+
+        <ul class="contraste">
+          <li v-for="c in contraste" :key="c.hoy">
+            <div class="antes">
+              <span class="et">Hoy</span>
+              <p>{{ c.hoy }}</p>
+            </div>
+            <div class="despues">
+              <span class="et">Con Bemo INMO</span>
+              <p>{{ c.aca }}</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <!-- ── Módulos ── -->
     <section id="modulos" class="seccion">
       <div class="contenedor">
@@ -266,8 +358,30 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
       </div>
     </section>
 
+    <!-- ── Garantías ── -->
+    <section id="datos" class="seccion">
+      <div class="contenedor">
+        <div class="seccion-cab">
+          <h2>Estás manejando plata que no es tuya</h2>
+          <p>
+            Por eso las tres cosas que siguen no son opciones de configuración.
+          </p>
+        </div>
+
+        <div class="grid3">
+          <article v-for="g in garantias" :key="g.titulo" class="modulo">
+            <span class="icono"><UiIcon :nombre="g.icono" :tam="20" /></span>
+            <div class="modulo-cab">
+              <h3>{{ g.titulo }}</h3>
+            </div>
+            <p>{{ g.detalle }}</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Planes ── -->
-    <section id="planes" class="seccion">
+    <section id="planes" class="seccion alterna">
       <div class="contenedor">
         <div class="seccion-cab">
           <h2>Planes</h2>
@@ -315,7 +429,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     </section>
 
     <!-- ── Preguntas ── -->
-    <section id="preguntas" class="seccion alterna">
+    <section id="preguntas" class="seccion">
       <div class="contenedor angosto">
         <div class="seccion-cab">
           <h2>Preguntas</h2>
@@ -325,6 +439,24 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
             <summary>{{ p.q }}<UiIcon nombre="chevron" :tam="16" /></summary>
             <p>{{ p.a }}</p>
           </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Cierre ── -->
+    <section class="cierre">
+      <div class="contenedor cierre-inner">
+        <div>
+          <h2>Traé tres contratos y probá los números</h2>
+          <p>
+            Cargá tres de los que ya tenés y compará el aumento y la liquidación
+            contra lo que te dio tu planilla. Si no da exactamente lo mismo,
+            queremos saberlo.
+          </p>
+        </div>
+        <div class="cierre-cta">
+          <RouterLink class="btn" to="/registrar">Crear cuenta</RouterLink>
+          <a class="btn secondary" href="mailto:bemotech.ok@gmail.com">Escribirnos</a>
         </div>
       </div>
     </section>
@@ -741,6 +873,76 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   line-height: 1.65;
 }
 
+/* ── Antes / después ── */
+.contraste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-md);
+}
+.contraste li {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-md);
+  align-items: stretch;
+}
+.contraste .antes,
+.contraste .despues {
+  padding: var(--s-lg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+/* El "hoy" va apagado y el "acá" con el acento. Sin rojo en el lado del
+   problema: la planilla del lector no es un error, es lo que había. */
+.contraste .antes { background: transparent; border-style: dashed; }
+.contraste .despues { border-color: var(--accent-line); }
+
+.contraste .et {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: var(--s-xs);
+}
+.contraste .antes .et { color: var(--muted-2); }
+.contraste .despues .et { color: var(--accent); }
+.contraste p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.contraste .antes p { color: var(--muted); }
+.contraste .despues p { color: var(--ink-2); }
+
+/* ── Cierre ── */
+.cierre {
+  padding: clamp(40px, 6vw, 72px) 0;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+}
+.cierre-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2xl);
+  flex-wrap: wrap;
+}
+.cierre h2 {
+  font-size: clamp(22px, 2.6vw, 28px);
+  max-width: 20ch;
+}
+.cierre p {
+  margin: var(--s-md) 0 0;
+  max-width: 52ch;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.cierre-cta { display: flex; gap: var(--s-md); flex-wrap: wrap; }
+
 /* ── Pie ── */
 .pie-pagina {
   padding: var(--s-2xl) 0;
@@ -792,6 +994,12 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   .grid3,
   .pasos {
     grid-template-columns: 1fr;
+  }
+  /* Apilado, el par sigue leyéndose como "esto" → "esto otro" porque cada
+     mitad conserva su etiqueta. */
+  .contraste li {
+    grid-template-columns: 1fr;
+    gap: var(--s-xs);
   }
 }
 
