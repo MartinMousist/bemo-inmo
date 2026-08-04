@@ -73,6 +73,20 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       };
     }
 
+    // Los límites de plan los levanta un trigger con SQLSTATE 'BE001'. El
+    // mensaje ya viene redactado desde la base, que es el único lugar donde
+    // vive el límite: se pasa tal cual en vez de reescribirlo acá.
+    if (esLimiteDePlan(exception)) {
+      return {
+        type: 'about:blank',
+        title: 'Forbidden',
+        status: 403,
+        detail: (exception as { message: string }).message,
+        code: ErrorCode.LIMITE_DE_PLAN,
+        instance,
+      };
+    }
+
     // Nada más llega acá: cualquier cosa inesperada es un 500 genérico hacia
     // afuera. El detalle real va al log, no al cliente.
     return {
@@ -84,6 +98,16 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       instance,
     };
   }
+}
+
+/** SQLSTATE propio del proyecto para topes de plan. Ver migración 012. */
+function esLimiteDePlan(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: unknown }).code === 'BE001'
+  );
 }
 
 function extractDetail(body: unknown, fallback: string): string {

@@ -38,7 +38,10 @@ const grupos = [
   },
   {
     titulo: 'Administración',
-    items: [{ a: '/equipo', icono: 'equipo', texto: 'Equipo' }],
+    items: [
+      { a: '/equipo', icono: 'equipo', texto: 'Equipo' },
+      { a: '/plan', icono: 'documento', texto: 'Tu plan' },
+    ],
   },
 ];
 

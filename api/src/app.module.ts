@@ -37,6 +37,14 @@ import {
 import { PublicacionesService } from './publicaciones/publicaciones.service';
 import { RecordatoriosController } from './recordatorios/recordatorios.controller';
 import { RecordatoriosService } from './recordatorios/recordatorios.service';
+import { ExportarController } from './exportar/exportar.controller';
+import { ExportarService } from './exportar/exportar.service';
+import {
+  ApiKeysController,
+  PlanesController,
+  SucursalesController,
+} from './planes/planes.controller';
+import { PlanesService } from './planes/planes.service';
 
 @Module({
   imports: [DatabaseModule],
@@ -58,6 +66,10 @@ import { RecordatoriosService } from './recordatorios/recordatorios.service';
     PublicacionesController,
     FeedController,
     RecordatoriosController,
+    ExportarController,
+    PlanesController,
+    SucursalesController,
+    ApiKeysController,
   ],
   providers: [
     AuthService,
@@ -73,6 +85,8 @@ import { RecordatoriosService } from './recordatorios/recordatorios.service';
     VentasService,
     PublicacionesService,
     RecordatoriosService,
+    ExportarService,
+    PlanesService,
     // Guard GLOBAL: todo exige token salvo lo marcado con @Publico().
     // Si fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
     { provide: APP_GUARD, useClass: AuthGuard },

@@ -39,6 +39,10 @@ export const ErrorCode = {
   SIN_AJUSTE: 'SIN_AJUSTE',
   PERIODO_YA_PAGADO: 'PERIODO_YA_PAGADO',
   NO_ADMINISTRADO: 'NO_ADMINISTRADO',
+
+  // Planes
+  LIMITE_DE_PLAN: 'LIMITE_DE_PLAN',
+  MODULO_NO_INCLUIDO: 'MODULO_NO_INCLUIDO',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

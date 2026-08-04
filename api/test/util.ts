@@ -1,10 +1,9 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Client } from 'pg';
 import bcrypt from 'bcryptjs';
-import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
-import { ProblemDetailsFilter } from '../src/common/problem-details.filter';
+import { configurarApp } from '../src/configurar-app';
 import { loadEnv, resetEnvCache } from '../src/config/env';
 import { TokensService, type Rol } from '../src/auth/tokens.service';
 
@@ -30,15 +29,12 @@ export async function crearApp(): Promise<INestApplication> {
   resetEnvCache();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
-  // La app REAL: mismo módulo, mismos pipes, mismo filtro. Una app armada
-  // distinta para los tests prueba una app que no existe.
+  // La app REAL: se configura con la MISMA función que main.ts. Duplicar la
+  // configuración fue lo que hizo que el arnés no tuviera helmet y la suite
+  // corriera contra una app distinta de la que se despliega.
   const app = moduleRef.createNestApplication();
-  app.use(cookieParser());
-  app.setGlobalPrefix('v1');
-  app.useGlobalFilters(new ProblemDetailsFilter());
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
+  configurarApp(app);
+
   // listen(0) y no init(): supertest, si el server NO está escuchando, hace
   // listen(0) por cada request. Con requests en paralelo eso abre varios
   // listeners sobre el mismo server y las conexiones se caen con ECONNRESET

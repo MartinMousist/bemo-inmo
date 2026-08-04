@@ -214,32 +214,57 @@ despachador, no el modelo.
 
 ---
 
-## Etapa 8 — Piloto sostenido
+## Etapa 8 — Piloto sostenido ⚠️ LISTA, GATE ABIERTO (2026-08-04)
 
-**Qué**: usarlo de verdad, todos los días.
+- [x] Backup automatizado **que se verifica solo**: hace el dump, lo restaura en una base
+      descartable y cuenta filas. Si no se puede leer, lo renombra a `.INVALIDO` y falla
+- [x] Restore **probado de verdad**: se borró la base, se restauró desde el dump y la app
+      volvió a leer todo por el rol restringido
+- [x] Rotación de backups: se guardan los últimos 14
+- [x] Dockerfile de producción multi-stage, sin devDeps, usuario sin privilegios
+- [x] Estilos de impresión — una liquidación se imprime y se le entrega al propietario
+- [x] Export CSV de propiedades, personas, contratos, liquidaciones, comisiones y cobros
+- [x] Suite de permisos en verde
+- [x] Revisión de seguridad del sistema entero, **convertida en tests**
 
-- [ ] Backup automatizado + restore **probado** contra una base de ensayo
-- [ ] Dockerfile de producción multi-stage, sin devDeps, usuario sin privilegios
-- [ ] Estilos de impresión + export CSV de todo lo que sea una tabla
-- [ ] Suite de permisos completa en verde
-- [ ] Revisión de seguridad del sistema entero
+**Gate**: 30 días de uso diario sin volver al sistema viejo.
+**⚠️ ABIERTO**: necesita 30 días.
 
-**Gate**: 30 días de uso diario sin volver al sistema viejo para nada.
-**Esfuerzo**: 1 semana + los 30 días de uso.
+**Tres hallazgos de la revisión de seguridad**, cada uno ahora con su test:
+- `app_role` tenía INSERT/UPDATE/DELETE sobre `schema_migrations`. Lo introdujo mi propio
+  script de restore con un `GRANT ON ALL TABLES`. La app podía alterar el registro de
+  migraciones.
+- **El arnés de tests no tenía `helmet`.** La suite corría contra una app que difería de
+  producción justo en la capa de seguridad. La causa era configuración duplicada entre
+  `main.ts` y el arnés: se unificó en `configurar-app.ts`.
+- El export CSV neutraliza las fórmulas de Excel: un nombre `=1+1` se ejecuta al abrir el
+  archivo. Es inyección real, no un detalle de formato.
 
 ---
 
-## Etapa 9 — Segundo cliente y monetización
+## Etapa 9 — Segundo cliente y monetización ⚠️ LISTA, GATE ABIERTO (2026-08-04)
 
-**Qué**: dejar de ser un sistema interno y ser un producto.
+- [x] Los tres planes **con sus límites aplicados de verdad**, en un trigger de base. Un
+      plan que sólo vive en la pantalla de precios es un cartel
+- [x] Módulos por plan: pedir uno que no está incluido devuelve 403 con el motivo
+- [x] Multi-sucursal (plan Pro)
+- [x] API pública con claves: se muestran una sola vez, en la base queda el hash
+- [ ] **Cobro** — no hay medio de pago integrado, y `mi-plan` lo dice en vez de simularlo
+- [ ] **Campañas Meta** — App Review y Business Verification son un trámite de semanas
+- [x] Onboarding: el signup crea la inmobiliaria y el titular en un solo paso
 
-- [ ] Onboarding autoservicio con datos demo
-- [ ] Los tres planes con sus límites aplicados de verdad (no sólo en la pantalla de precios)
-- [ ] Cobro
-- [ ] Campañas Meta (App Review y Business Verification arrancan **acá**, no antes)
-- [ ] Multi-sucursal y API pública
+**Gate**: una inmobiliaria ajena, pagando, un mes completo.
+**⚠️ ABIERTO**: necesita un cliente y un medio de pago.
 
-**Gate**: una inmobiliaria ajena, pagando, usándolo un mes completo.
+**Nada de cobro simulado.** Sin facturas falsas, sin `Visa •••• 4242`, sin "se debitará
+automáticamente". `GET /v1/planes/mi-plan` devuelve `cobro.integrado: false` con el
+motivo, y el catálogo devuelve `precio: null` porque el gate de la etapa 0 es que alguien
+diga un número concreto.
+
+**El límite se aplica en la BASE, no en el servicio.** Un tope que sólo vive en el código
+de la aplicación se saltea con un request bien armado; el trigger corta en el mismo lugar
+donde se escribe el dato. Levanta el SQLSTATE propio `BE001`, que el filtro global traduce
+a un 403 con el mensaje que redacta la base — el límite vive en un solo lugar.
 
 ---
 

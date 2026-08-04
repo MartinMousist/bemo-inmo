@@ -1,14 +1,11 @@
 import 'reflect-metadata';
 import { join } from 'node:path';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import helmet from 'helmet';
-import express from 'express';
-import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
-import { ProblemDetailsFilter } from './common/problem-details.filter';
+import { configurarApp } from './configurar-app';
 import { migrar, correrSql } from './database/migrator';
 
 async function bootstrap(): Promise<void> {
@@ -35,30 +32,7 @@ async function bootstrap(): Promise<void> {
     bufferLogs: false,
   });
 
-  app.use(helmet());
-  app.use(cookieParser());
-  app.use(express.json({ limit: env.BODY_LIMIT }));
-  app.use(express.urlencoded({ extended: true, limit: env.BODY_LIMIT }));
-
-  // Necesario para que req.ip sea la IP real detrás del proxy, y no la del
-  // proxy. La auditoría con la IP equivocada es peor que sin IP.
-  app.set('trust proxy', 1);
-
-  app.setGlobalPrefix('v1');
-  app.useGlobalFilters(new ProblemDetailsFilter());
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      // Un cliente que manda `rol: "owner"` se entera, y nosotros también.
-      // Ignorar el campo en silencio es lo peligroso.
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: false },
-    }),
-  );
-
-  app.enableCors({ origin: env.CORS_ORIGIN, credentials: true });
-  app.enableShutdownHooks();
+  configurarApp(app);
 
   await app.listen(env.PORT, '0.0.0.0');
   logger.log(`Bemo INMO API escuchando en :${env.PORT}/v1 (${env.NODE_ENV})`);
