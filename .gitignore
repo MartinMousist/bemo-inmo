@@ -3,9 +3,21 @@ dist/
 *.tsbuildinfo
 
 # Secretos. .env.example sí se commitea; .env nunca.
+# El glob cubre .env.prod, .env.staging y cualquier otro que aparezca: la lista
+# explícita se olvida justo del que hace falta.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Los dumps de la base NUNCA van al repo.
+#
+# Estuvieron versionados hasta acá y se sacaron del historial antes de publicar:
+# un dump es la base entera —usuarios, hashes de contraseña, datos de una
+# inmobiliaria— y un repo es el peor lugar posible para eso. Además son binarios
+# de cientos de KB que se duplican en cada commit.
+backups/
+*.dump
+*.dump.INVALIDO
 
 .DS_Store
 *.log
