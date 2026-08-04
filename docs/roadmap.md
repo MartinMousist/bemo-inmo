@@ -149,52 +149,68 @@ reales. Lo que sí está probado, con 41 tests:
 
 ---
 
-## Etapa 5 — Cierre de ventas
+## Etapa 5 — Cierre de ventas ⚠️ CONSTRUIDA, GATE ABIERTO (2026-08-03)
 
-**Qué**: lo que pasa después de la reserva en una operación de venta.
+- [x] `operacion_venta`: reserva → boleto → escritura, sin marcha atrás
+- [x] Calculadora de comisiones de **tres niveles**, con 11 tests de papel
+- [x] Comisiones proyectadas / devengadas / cobradas, con vista por agente
+- [ ] Pre-contratos y plantillas — la tabla existe, la UI no. **Se corta la feature
+      entera antes que dejarla a medias**
 
-- [ ] `operacion_venta`: reserva → boleto → escritura
-- [ ] Calculadora de comisiones de tres niveles: cuánto cobra la operación, cómo se reparte
-      entre inmobiliarias, cómo se reparte puertas adentro
-- [ ] Comisiones proyectadas / devengadas / cobradas, con vista por agente
-- [ ] Pre-contratos y plantillas de documento con variables
+**Gate**: una operación real repartida y verificada por quien cobra.
+**⚠️ ABIERTO**: necesita una venta tuya real. Lo que sí está probado (12 tests de
+integración + 11 del motor): el reparto **siempre cuadra** — lo que factura la operación
+es exactamente lo que se reparte, incluso con montos que no dividen redondo.
 
-**Gate**: una operación de venta real, liquidada, con las tres puntas repartidas
-correctamente y verificadas por quien las cobra.
-**Esfuerzo**: 1,5 semanas.
-
----
-
-## Etapa 6 — Publicaciones
-
-**Qué**: sacar la propiedad al mundo.
-
-- [ ] Generador de aviso: texto, atributos y fotos ordenadas, por portal
-- [ ] **Plan B primero**: exportar el aviso completo para pegar. Esto se construye antes
-      que cualquier integración, porque no depende de nadie
-- [ ] Feed XML propio, estable y público por tenant
-- [ ] Integración con el primer portal que dé convenio
-- [ ] Estado de publicación por operación, con último sync y último error
-
-**Gate**: un aviso real publicado en al menos un portal, y el estado reflejado en el sistema.
-**Esfuerzo**: 1 semana el generador + lo que tarde el convenio.
-**Riesgo**: el convenio no depende del código. **Nunca bloquear el roadmap esperándolo.**
+**La decisión que evita el error clásico**: el reparto interno se aplica sobre lo que
+queda DESPUÉS del reparto con la otra inmobiliaria, no sobre el honorario bruto. Pagarle
+al agente el 25% del bruto cuando la mitad ya se fue es la forma más común de regalar
+plata.
 
 ---
 
-## Etapa 7 — Recordatorios y automatización
+## Etapa 6 — Publicaciones ⚠️ PLAN B LISTO, GATE BLOQUEADO (2026-08-03)
 
-**Qué**: que el sistema avise sin que nadie se lo pida.
+- [x] Generador de aviso: título, precio, atributos y texto listo para pegar
+- [x] **Plan B primero**, como estaba planeado. Se construyó ANTES que cualquier
+      integración y funciona hoy sin depender de nadie
+- [x] Feed XML público por inmobiliaria, con token rotable
+- [ ] Integración con un portal — **bloqueada por convenio comercial**, no por código
+- [x] Estado por operación, con último sync y último error
 
-- [ ] `evento_programado` con reintentos y registro de fallos
-- [ ] WhatsApp Business Cloud API con plantillas aprobadas
-- [ ] Recordatorios: vencimiento de contrato, aumento próximo, cuota impaga, reserva por
-      vencer, visita agendada
+**Gate**: un aviso publicado en un portal.
+**⚠️ BLOQUEADO Y NO POR NOSOTROS**: requiere convenio con Navent o MercadoLibre. El
+roadmap NO se detuvo esperándolo, que era exactamente el riesgo anotado.
+
+`INTEGRACION_ACTIVA` marca hoy `false` para todos los portales y la UI dice "copiar y
+pegar" en vez de mostrar un botón *Publicar* que no publica. Cuando se firme un convenio
+se cambia una constante.
+
+**Detalle de producto**: el aviso publica la **zona, nunca el número de puerta**. La
+dirección exacta es para quien ya llamó.
+
+---
+
+## Etapa 7 — Recordatorios ⚠️ GENERACIÓN LISTA, ENVÍO BLOQUEADO (2026-08-03)
+
+- [x] `evento_programado`, **idempotente por clave única**: el generador va a correr en
+      un cron y los crons se reintentan. Un aviso duplicado le llega dos veces al inquilino
+- [x] Recordatorios de contrato por vencer, aumento por aplicar, cuota impaga y reserva
+      por vencer, con los días configurables por inmobiliaria (90/60/30 y demás)
+- [x] Bandeja dentro de la app
+- [ ] Envío por **email** — falta configurar un proveedor
+- [ ] Envío por **WhatsApp** — Business Cloud API pide verificación de negocio y
+      plantillas aprobadas. Es un trámite, no código
+- [ ] Ingesta automática de índices desde INDEC y BCRA
 - [ ] Preferencias de canal por persona
 
-**Gate**: la inmobiliaria dejó de mirar el Excel de vencimientos. Verificado preguntando,
-no suponiendo.
-**Esfuerzo**: 1,5 semanas.
+**Gate**: dejaron de mirar el Excel.
+**⚠️ ABIERTO**: los avisos se generan y se ven, pero todavía no salen solos. `GET
+/v1/avisos/canales` devuelve qué canal puede enviar de verdad y la UI lo muestra tal cual,
+en vez de un botón "enviar" que no manda nada.
+
+**Cuando el envío exista, los eventos ya generados salen sin tocar nada más**: falta el
+despachador, no el modelo.
 
 ---
 

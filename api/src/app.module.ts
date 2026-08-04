@@ -28,6 +28,15 @@ import {
 import { ContratosService } from './alquileres/contratos.service';
 import { IndicesService } from './alquileres/indices.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
+import { ComisionesController, VentasController } from './ventas/ventas.controller';
+import { VentasService } from './ventas/ventas.service';
+import {
+  FeedController,
+  PublicacionesController,
+} from './publicaciones/publicaciones.controller';
+import { PublicacionesService } from './publicaciones/publicaciones.service';
+import { RecordatoriosController } from './recordatorios/recordatorios.controller';
+import { RecordatoriosService } from './recordatorios/recordatorios.service';
 
 @Module({
   imports: [DatabaseModule],
@@ -44,6 +53,11 @@ import { LiquidacionesService } from './alquileres/liquidaciones.service';
     CobrosController,
     IndicesController,
     LiquidacionesController,
+    VentasController,
+    ComisionesController,
+    PublicacionesController,
+    FeedController,
+    RecordatoriosController,
   ],
   providers: [
     AuthService,
@@ -56,6 +70,9 @@ import { LiquidacionesService } from './alquileres/liquidaciones.service';
     ContratosService,
     IndicesService,
     LiquidacionesService,
+    VentasService,
+    PublicacionesService,
+    RecordatoriosService,
     // Guard GLOBAL: todo exige token salvo lo marcado con @Publico().
     // Si fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
     { provide: APP_GUARD, useClass: AuthGuard },

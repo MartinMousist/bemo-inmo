@@ -20,7 +20,8 @@ const grupos = [
   {
     titulo: 'Alquileres',
     items: [
-      { a: '/vencimientos', icono: 'campana', texto: 'Vencimientos' },
+      { a: '/avisos', icono: 'campana', texto: 'Avisos' },
+      { a: '/vencimientos', icono: 'calendario', texto: 'Vencimientos' },
       { a: '/contratos', icono: 'documento', texto: 'Contratos' },
       { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
       { a: '/indices', icono: 'grafico', texto: 'Índices' },
@@ -31,6 +32,8 @@ const grupos = [
     items: [
       { a: '/oportunidades', icono: 'embudo', texto: 'Oportunidades' },
       { a: '/reservas', icono: 'sena', texto: 'Reservas' },
+      { a: '/ventas', icono: 'grafico', texto: 'Ventas' },
+      { a: '/publicaciones', icono: 'mapa', texto: 'Publicaciones' },
     ],
   },
   {

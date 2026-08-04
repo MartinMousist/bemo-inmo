@@ -32,6 +32,9 @@ const router = createRouter({
     { path: '/contratos/:id', component: () => import('./paginas/ContratoDetallePage.vue') },
     { path: '/liquidaciones', component: () => import('./paginas/LiquidacionesPage.vue') },
     { path: '/indices', component: () => import('./paginas/IndicesPage.vue') },
+    { path: '/ventas', component: () => import('./paginas/VentasPage.vue') },
+    { path: '/publicaciones', component: () => import('./paginas/PublicacionesPage.vue') },
+    { path: '/avisos', component: () => import('./paginas/AvisosPage.vue') },
     { path: '/equipo', component: () => import('./paginas/EquipoPage.vue') },
 
     { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },
