@@ -274,7 +274,7 @@ a un 403 con el mensaje que redacta la base — el límite vive en un solo lugar
 
 ---
 
-## Etapa 10 — Mejoras (2026-08-04) — ✅ CERRADA salvo lo que no depende de código
+## Etapa 10 — Mejoras ✅ CERRADA (2026-08-04)
 
 > Salieron de recorrer el código entero, no de una lista de ideas. Cada una dice
 > **por qué** y **cómo se sabe que está hecha**. Están ordenadas por lo que cuesta
@@ -283,9 +283,9 @@ a un 403 con el mensaje que redacta la base — el límite vive en un solo lugar
 > Las nueve etapas anteriores siguen siendo el camino: esto es lo que se ve
 > desde acá arriba, con las etapas construidas.
 >
-> **Estado**: hecho todo lo que era código. Queda abierto lo que depende de una
-> decisión de negocio (las expensas), de un servidor (el deploy) o de un tercero
-> (la API key de Google). Cada uno dice qué falta y de quién depende.
+> **Estado**: hecho **todo** lo que era código. Lo único abierto depende de algo
+> que no se escribe: una decisión de negocio (las expensas), un servidor (probar
+> el deploy de verdad), un repo remoto (verificar CI) y una API key.
 
 ### 10.1 · Huecos del dominio — columnas que nadie lee
 
@@ -323,7 +323,7 @@ feature no existe; para el que lee el schema, parece que sí.
       **Hecho cuando**: la regla está escrita en `spec.md` y hay un test con números
       reales que la sostiene.
 
-- [ ] ⏳ **Recibo de cobro.** Se registra el cobro y no sale ningún papel. El inquilino
+- [x] **Recibo de cobro.** Se registra el cobro y no sale ningún papel. El inquilino
       pide comprobante. El motor de plantillas ya existe: falta la plantilla y el
       botón. **Hecho cuando**: se registra un cobro y se imprime su recibo.
 
@@ -353,14 +353,21 @@ justo el que no tiene firma.
       cuotas, y `vencimientos` con 200 contratos devuelve todo junto.
       **Hecho cuando**: la suite de `paginacion.spec.ts` los incluye en su tabla.
 
-- [ ] ⏳ **Los agregados de la cartera se calculan sobre todo el tenant.** El CTE de
+- [x] **Los agregados de la cartera se calculan sobre todo el tenant.** MEDIDO con
+      `scripts/medir-cartera.sh`: 500 contratos, 12.000 cuotas, 9.000 cobros →
+      cartera **20 ms**, inicio 6–9 ms, vencimientos 1 ms. **No hace falta
+      optimizar nada**, que era justamente lo que había que averiguar antes de
+      tocar una línea. El script queda para volver a medir. Antes decía: El CTE de
       `cartera.service.ts` agrupa las cuotas de **todos** los contratos para
       devolver una página de 50. Con 500 contratos × 36 cuotas son 18.000 filas
       agregadas en cada request. Hoy no duele; hay que medirlo antes de que duela.
       **Hecho cuando**: hay un `EXPLAIN ANALYZE` con 500 contratos cargados y, si
       hace falta, los totales por contrato viven en una vista materializada.
 
-- [ ] ⏳ **El límite de intentos vive en la memoria del proceso.** Con una sola
+- [x] **El límite de intentos vive en la memoria del proceso.** Ahora el contador
+      va en Postgres —no en Redis: la base ya está y ya es estado compartido—.
+      Los tests levantan DOS storages contra la misma base, que es lo único que
+      prueba que la cuenta se comparta. Antes decía: Con una sola
       instancia alcanza. Con dos réplicas detrás de un balanceador, cada una lleva su
       contador y el límite efectivo se duplica. Hay un comentario en
       `limite-intentos.ts` que lo dice.
@@ -381,7 +388,11 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
       backup que depende de que alguien se acuerde no es un backup.
       **Hecho cuando**: corre solo, y hay una **restauración probada** — un backup
       que nunca se restauró es una hipótesis.
-- [ ] ⏳ **Deploy.** *(necesita un servidor)* No hay servidor, dominio ni TLS. El `Dockerfile` de producción está
+- [~] **Deploy.** El artefacto está: imagen de producción del front, Caddy con
+      TLS automático, `docker-compose.prod.yml` propio (no un override), y
+      `docs/deploy.md`. Las dos imágenes compilan, el compose y el Caddyfile
+      validan. **Un deploy real sigue sin hacerse**: no hay servidor, así que
+      esto NO está cerrado. Antes decía: No hay servidor, dominio ni TLS. El `Dockerfile` de producción está
       listo. Con `docker compose` + Caddy alcanza para empezar.
 - [x] **Tests de frontend: hoy hay cero.** Ahora hay 45. Los cuatro bugs de UI de la construcción
       anterior —y los dos de ésta— se encontraron mirando el navegador a mano.
@@ -392,15 +403,16 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
 
 ### 10.5 · Producto — lo que pide quien ya lo usa
 
-- [ ] ⏳ **Portal del propietario.** Un acceso de sólo lectura donde el dueño ve sus
+- [x] **Portal del propietario.** Un acceso de sólo lectura donde el dueño ve sus
       liquidaciones y el estado de cobranza de su propiedad. Es lo que más llamados
       ahorra, y todo el dato ya existe: es una pantalla y un rol.
-- [ ] ⏳ **Cobranza que se explique sola al inquilino.** Un enlace con el detalle de la
+- [ ] ⏳ **Cobranza que se explique sola al inquilino.** El recibo ya sale con su
+      detalle; falta el enlace con la memoria del aumento. Antes decía: Un enlace con el detalle de la
       cuota, el aumento aplicado y su memoria de cálculo. La regla «todo cálculo se
       puede explicar» hoy termina en la pantalla del administrador.
 - [x] **Vista de caja del día.** Qué entró hoy, por qué medio y quién lo registró.
       Los datos están en `cobro`; falta la pantalla.
-- [ ] ⏳ **Notas y seguimiento en el contrato.** Hoy el ida y vuelta con el inquilino
+- [x] **Notas y seguimiento en el contrato.** Hoy el ida y vuelta con el inquilino
       vive en WhatsApp, que es exactamente de donde este producto viene a sacarlo.
 - [ ] ⏳ **Comparar contra el año pasado.** Cartera, cobranza y morosidad mes contra
       mes. **Sin gráficos decorativos**: números y variación, según `DESIGN.md`.
@@ -411,8 +423,11 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
       apareció uno en Liquidaciones —tres controles en la cabecera empujaban el
       ancho de toda la página— y se arregló en `PageHeader`. Antes decía: Se verificaron el inicio, la cartera y la
       portada; el resto sólo tiene los breakpoints declarados.
-- [ ] ⏳ Contraste en modo oscuro y navegación por teclado en las tablas.
-- [ ] ⏳ Estados de carga por fila, no sólo skeletons de pantalla completa.
+- [x] Contraste en modo oscuro y navegación por teclado en las tablas. Medido
+      como WCAG, no a ojo: `--muted-2` daba **3,01** sobre `--surface-2` —por
+      debajo de AA— en los dos temas, y se usa a 11px. Corregido a 4,56 y 4,66.
+      La cartera era la única tabla clicable sin acceso por teclado.
+- [x] Estados de carga por fila, no sólo skeletons de pantalla completa.
 - [x] La paleta ⌘K: se sumaron contratos, liquidaciones, caja, vencimientos,
       movimientos, índices y «nuevo contrato».
 

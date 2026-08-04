@@ -104,6 +104,27 @@ const puedeOperar = computed(() => auth.rol === 'owner' || auth.rol === 'admin')
 const cobrando = ref<string | null>(null);
 const montoCobro = ref('');
 const trabajando = ref(false);
+/**
+ * Qué filas están esperando al servidor.
+ *
+ * Por FILA y no un skeleton de pantalla completa: confirmar un aumento tarda
+ * medio segundo, y volver toda la cartera a esqueleto por eso hace perder el
+ * lugar donde estaba la persona. El resto de la tabla sigue usable.
+ */
+const ocupadas = ref(new Set<string>());
+const ocupada = (id: string) => ocupadas.value.has(id);
+
+async function conFila<T>(id: string, fn: () => Promise<T>): Promise<T | undefined> {
+  if (ocupadas.value.has(id)) return undefined;
+  ocupadas.value = new Set(ocupadas.value).add(id);
+  try {
+    return await fn();
+  } finally {
+    const s = new Set(ocupadas.value);
+    s.delete(id);
+    ocupadas.value = s;
+  }
+}
 
 async function cargar() {
   cargando.value = true; error.value = '';
@@ -174,13 +195,15 @@ async function confirmarAjuste(f: Fila) {
   });
   if (!ok) return;
 
-  try {
-    await api(`/ajustes/${a.id}/confirmar`, { method: 'POST' });
-    ui.ok('Aumento confirmado', `${f.propiedad.etiqueta} · ${money(a.montoNuevo, a.moneda)}`);
-    await cargar();
-  } catch (e) {
-    ui.error('No se pudo confirmar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
-  }
+  await conFila(f.id, async () => {
+    try {
+      await api(`/ajustes/${a.id}/confirmar`, { method: 'POST' });
+      ui.ok('Aumento confirmado', `${f.propiedad.etiqueta} · ${money(a.montoNuevo, a.moneda)}`);
+      await cargar();
+    } catch (e) {
+      ui.error('No se pudo confirmar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+    }
+  });
 }
 
 function abrirCobro(f: Fila) {
@@ -195,17 +218,20 @@ async function registrarCobro(f: Fila) {
   const monto = Number(montoCobro.value);
   if (!f.ultimaCuota || !Number.isFinite(monto) || monto <= 0) return;
 
-  try {
-    await api('/cobros', {
-      method: 'POST',
-      body: JSON.stringify({ periodoId: f.ultimaCuota.id, monto }),
-    });
-    cobrando.value = null;
-    ui.ok('Cobro registrado', `${f.propiedad.etiqueta} · ${money(monto, f.ultimaCuota.moneda)}`);
-    await cargar();
-  } catch (e) {
-    ui.error('No se pudo registrar el cobro', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
-  }
+  const cuota = f.ultimaCuota;
+  await conFila(f.id, async () => {
+    try {
+      await api('/cobros', {
+        method: 'POST',
+        body: JSON.stringify({ periodoId: cuota.id, monto }),
+      });
+      cobrando.value = null;
+      ui.ok('Cobro registrado', `${f.propiedad.etiqueta} · ${money(monto, cuota.moneda)}`);
+      await cargar();
+    } catch (e) {
+      ui.error('No se pudo registrar el cobro', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+    }
+  });
 }
 
 // ── Acciones en lote ───────────────────────────────────────────────────────
@@ -390,7 +416,20 @@ onMounted(cargar);
           </thead>
           <tbody>
             <template v-for="f in items" :key="f.id">
-              <tr :class="{ marcada: seleccion.has(f.id) }">
+              <!--
+                El foco va en la FILA, no en cada celda: con `tabindex` por celda
+                habría que tabular nueve veces para pasar a la fila siguiente.
+                Las celdas interactivas (la casilla, confirmar, cobrar) frenan
+                la propagación, así que Enter sobre la fila lleva a la ficha y
+                los controles siguen funcionando por separado.
+              -->
+              <tr
+                :class="{ marcada: seleccion.has(f.id), ocupada: ocupada(f.id) }"
+                :aria-busy="ocupada(f.id)"
+                tabindex="0"
+                :aria-label="`${f.propiedad.etiqueta} · ${f.propiedad.direccion}`"
+                @keydown.enter="irA(f.id)"
+              >
                 <td class="marca" @click.stop>
                   <input
                     type="checkbox"
@@ -430,9 +469,10 @@ onMounted(cargar);
                       class="btn sm en-linea"
                       :class="{ urgente: f.proximoAjuste.vencido }"
                       type="button"
+                      :disabled="ocupada(f.id)"
                       @click.stop="confirmarAjuste(f)"
                     >
-                      Confirmar
+                      {{ ocupada(f.id) ? 'Confirmando…' : 'Confirmar' }}
                     </button>
                     <StatusChip
                       v-else-if="f.proximoAjuste.estado !== 'proyectado'"
@@ -458,8 +498,13 @@ onMounted(cargar);
                         @keydown.enter.prevent="registrarCobro(f)"
                         @keydown.esc="cobrando = null"
                       />
-                      <button class="btn sm" type="button" @click="registrarCobro(f)">
-                        Cobrar
+                      <button
+                        class="btn sm"
+                        type="button"
+                        :disabled="ocupada(f.id)"
+                        @click="registrarCobro(f)"
+                      >
+                        {{ ocupada(f.id) ? 'Cobrando…' : 'Cobrar' }}
                       </button>
                     </div>
                     <button
@@ -673,6 +718,16 @@ td {
 }
 tbody tr:hover { background: var(--surface-2); }
 tbody tr.marcada { background: var(--accent-tint); }
+/* El `box-shadow` global de :focus-visible no se ve sobre un `<tr>`: las celdas
+   lo tapan. Se marca con el fondo y una barra al costado, que sí se ven. */
+/* La fila que espera al servidor se atenúa y no acepta clics. El resto de la
+   tabla sigue usable: es la diferencia con un skeleton de pantalla completa. */
+tbody tr.ocupada { opacity: .55; pointer-events: none; }
+tbody tr:focus-visible {
+  outline: none;
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 tbody tr:last-child td { border-bottom: none; }
 .clicable { cursor: pointer; }
 .marca { width: 1%; padding-right: 0; }

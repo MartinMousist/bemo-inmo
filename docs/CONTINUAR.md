@@ -22,13 +22,14 @@ docker compose up -d          # db + s3 (MinIO) + api + web
 | Consola de MinIO | http://localhost:9001 | las de `.env` (`S3_ACCESS_KEY` / `S3_SECRET_KEY`) |
 
 ```bash
-docker compose exec api npm test           # 408 tests contra Postgres real
+docker compose exec api npm test           # 437 tests contra Postgres real
 docker compose exec web npm test           # 45 tests de front (Vitest)
 docker compose exec api npx tsc --noEmit   # typecheck backend
 docker compose exec web npx vue-tsc --noEmit
 
 ./scripts/backup.sh                        # backup a mano, con verificación
 docker compose --profile backup up -d      # backup automático, diario, verificado
+./scripts/medir-cartera.sh 500             # carga 500 contratos, mide y borra
 ```
 
 **Trampa conocida**: las dependencias se instalan **dentro** del contenedor
@@ -41,11 +42,11 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 
 | | |
 |---|---|
-| Commits | 24 |
-| Migraciones | 13 |
-| Tests | **408 de API** contra Postgres real + **45 de front**. Todo en verde |
-| Rutas de API | 155 |
-| Pantallas | 28 |
+| Commits | 28 |
+| Migraciones | 15 |
+| Tests | **437 de API** contra Postgres real + **45 de front**. Todo en verde |
+| Rutas de API | 170 |
+| Pantallas | 31 |
 
 ### Etapas
 
@@ -122,6 +123,9 @@ Cada una costó un rato de diagnóstico:
 | Índices en los tests | Un test cargó `icp` "porque estaba vacío" y rompió otro que afirmaba que `icp` no tiene valores | Los índices son **globales** y no se limpian entre corridas. Cada suite usa su propio año y acota con `desde`+`hasta` |
 | El índice del ajuste | Cargar el IPC sólo de los meses del ajuste no proyecta nada | El motor usa el índice del **mes anterior**: el IPC de un mes se publica a mediados del siguiente |
 | `GOOGLE_MAPS_API_KEY` | Con la key en `.env`, la API seguía sin verla | El `docker-compose.yml` no la pasaba al servicio `api` |
+| Contraste "que se ve bien" | `--muted-2` daba **3,01** sobre `--surface-2`, por debajo de AA, en los dos temas | A ojo un gris apagado sobre papel parece correcto. Se mide calculando el ratio, no mirando |
+| El motor de plantillas | No tiene negación (`!`) ni filtro `periodo` | Y no se los voy a agregar: el día que tenga `!`, `&&` y paréntesis es un lenguaje que alguien ejecuta desde un textarea. Lo que haga falta se calcula en el contexto |
+| Una tabla nueva sin RLS | El test de seguridad falla | Y está bien. `limite_intento` no lleva RLS a propósito y ahora está escrito por qué |
 
 ---
 
@@ -165,29 +169,37 @@ apareció en el camino.
 
 ---
 
-### ✅ La etapa 10 también está cerrada
+### ✅ La etapa 10 está cerrada
 
-Punitorios (con su motor puro y 14 casos de papel), renovación de contrato,
-devolución del depósito, auditoría de la plata, segunda tanda de paginación,
-request-id con logging estructurado, backup que corre solo y se verifica
-restaurando, 45 tests de frontend donde había cero, caja del día y ⌘K completa.
+Punitorios (motor puro, 14 casos de papel), renovación de contrato, devolución
+del depósito, auditoría de la plata, segunda tanda de paginación, request-id con
+logging estructurado, backup que corre solo y se verifica restaurando, 45 tests
+de frontend donde había cero, caja del día, ⌘K completa, **portal del
+propietario**, **notas de seguimiento**, **recibo de cobro**, el contador de
+intentos compartido en Postgres, el artefacto de deploy y la pasada de
+accesibilidad.
 
-El detalle está en `docs/roadmap.md`, etapa 10, con lo hecho tildado.
+El detalle está en `docs/roadmap.md`, etapa 10, con lo hecho tildado y lo que
+queda marcado con ⏳ y su motivo.
+
+**Lo que se midió en vez de suponer**: la cartera con 500 contratos da 20 ms y
+no hace falta optimizar nada; el contraste de `--muted-2` estaba por debajo de
+AA en los dos temas y se veía bien.
 
 ---
 
 ### 🟠 Lo que queda, y de qué depende
 
-Marcado con ⏳ en el roadmap. **Nada de esto es "escribir el código que falta"**:
+Marcado con ⏳ en el roadmap. **Nada de esto se destraba escribiendo código**:
 
 | Qué | De qué depende |
 |---|---|
-| Expensas: quién las cobra | Una decisión de negocio. Es una de las cinco preguntas del gate de la etapa 0 |
-| Deploy, TLS, dominio | Un servidor. El `Dockerfile` de producción está listo |
+| Expensas: quién las cobra | Una decisión tuya. Es una de las cinco preguntas del gate de la etapa 0 |
+| Que el deploy esté probado | Un servidor. El artefacto está entero y validado: ver `docs/deploy.md` |
 | Verificar CI | Un repo remoto |
-| Storage compartido del límite de intentos | Sólo si se despliega más de una réplica |
-| Medir los agregados de la cartera | 500 contratos cargados para hacer el `EXPLAIN` |
-| Portal del propietario, recibo de cobro, notas en el contrato | Nada: son las próximas features. Están descriptas con su porqué |
+| Google Maps | La API key. Los tres pasos están en `.env.example` |
+| Los gates de las etapas 0, 4, 5, 8 y 9 | Datos reales tuyos, un cliente y un medio de pago |
+| Archivar lo viejo · comparar contra el año pasado | Nada, pero no duelen todavía. Quedan descriptos con su porqué |
 
 ---
 
@@ -209,7 +221,7 @@ Marcado con ⏳ en el roadmap. **Nada de esto es "escribir el código que falta"
 Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 
 Leé docs/CONTINUAR.md y después CLAUDE.md, DESIGN.md y docs/roadmap.md.
-Ya están las nueve etapas construidas y 359 tests en verde.
+Ya están las diez etapas construidas: 437 tests de API y 45 de front, en verde.
 
 Trabajamos como siempre:
 - Cada feature va completa: migración con RLS, servicio, controlador con roles,
@@ -218,7 +230,8 @@ Trabajamos como siempre:
 - Si algo queda sin hacer o no lo pudiste probar, decímelo explícitamente.
 - Nada de datos falsos: lo que no existe se marca "en desarrollo" con el motivo.
 
-Empezá por [el punto que elijas de la etapa 10 del roadmap].
+Lo que queda abierto NO se destraba escribiendo código (ver la sección 5).
+Si hay algo nuevo para hacer, decímelo; si no, arranquemos por cerrar un gate.
 ```
 
 ---
@@ -231,12 +244,17 @@ api/src/
   common/               error RFC 9457, paginación, CSV
   auth/                 login, refresh con rotación, guards, roles
   personas/  propiedades/  oportunidades/     ← espina compartida (etapa 3)
-  inicio/               el tablero del día: un endpoint, una vuelta
+  inicio/               el tablero del día y la caja: un endpoint, una vuelta
+  auditoria/            quién tocó la plata
+  notas/                seguimiento sobre cualquier entidad
+  portal/               lo que ve el propietario, sin sesión
   alquileres/
     ajustes.motor.ts    el cálculo del aumento. PURO, 17 tests de papel
     bcra.service.ts     ICL y UVA. Contrato verificado
     contratos.service.ts  contratos, ajustes, cuotas, cobros, vencimientos
     cartera.service.ts  la vista de gestión + las acciones en lote
+    ciclo.service.ts    renovación y devolución del depósito
+    punitorios.motor.ts el interés por mora. PURO, 14 tests de papel
     liquidaciones.service.ts
   ventas/
     comisiones.motor.ts los TRES niveles de reparto. PURO, 11 tests
@@ -255,10 +273,11 @@ web/src/
   dominio/pagina.ts     la forma de una lista paginada, igual que en el back
   stores/ui.ts          toasts + confirmar() como promesa
   componentes/          AppShell, CommandPalette, GaleriaFotos, UiPager, primitivos
-  paginas/              26 pantallas
+  paginas/              31 pantallas
 ```
 
-**Los cuatro motores puros** (`ajustes`, `comisiones`, `aviso`, `plantillas`) no
+**Los cinco motores puros** (`ajustes`, `punitorios`, `comisiones`, `aviso`,
+`plantillas`) no
 tocan base ni red: entra data, sale un resultado. Ahí es donde hay que agregar
 casos cuando aparezca una regla nueva — son baratos de testear y es donde un error
 se paga caro.

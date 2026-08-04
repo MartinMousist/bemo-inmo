@@ -13,7 +13,12 @@
   --ink:     #1a1815;
   --ink-2:   #3a3630;
   --muted:   #6b6560;
-  --muted-2: #928b83;
+  /* Medido: 4,56:1 sobre `--surface-2`, que es el peor fondo donde se usa.
+     Antes era #928b83 y daba 3,01 — por debajo de AA (4,5) para texto normal,
+     y encima este token se usa a 11px, donde el requisito es más estricto y no
+     menos. La revisión de contraste lo encontró calculando, no mirando: a ojo
+     un gris apagado sobre papel parece bien. */
+  --muted-2: #746d65;
 
   /* ── Marca del grupo BEMO. Sólo firma: logo, favicon, portada ── */
   --marca:        #d2703f;
@@ -72,7 +77,8 @@
   --ink:     #f0ede7;
   --ink-2:   #d6d1c9;
   --muted:   #9d968c;
-  --muted-2: #746e66;
+  /* 4,66:1 sobre `--surface-2`. Antes #746e66 daba 3,07. */
+  --muted-2: #938c83;
 
   --accent:       #8fb3d9;
   --accent-hover: #a6c4e4;
