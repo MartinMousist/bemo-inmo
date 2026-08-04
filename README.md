@@ -6,6 +6,7 @@ Documentos que gobiernan el proyecto:
 
 | Archivo | Qué es |
 |---|---|
+| [`docs/CONTINUAR.md`](docs/CONTINUAR.md) | **Estado actual y qué sigue.** Empezá por acá |
 | [`CLAUDE.md`](CLAUDE.md) | Las reglas que no se negocian |
 | [`DESIGN.md`](DESIGN.md) | Sistema de diseño. Fuente de verdad visual |
 | [`docs/spec.md`](docs/spec.md) | Modelo de datos, permisos, reglas de negocio |
@@ -78,5 +79,10 @@ y no ve nada.
 
 ## Estado
 
-Etapa 1 de 10 — ver [`docs/roadmap.md`](docs/roadmap.md).
-No hay datos falsos en la UI: lo que no existe dice "En desarrollo".
+**Las nueve etapas construibles están hechas.** 300 tests en verde contra Postgres
+real. Los gates que quedan abiertos no dependen de código: necesitan datos reales,
+un convenio comercial, un cliente o tiempo.
+
+Ver [`docs/CONTINUAR.md`](docs/CONTINUAR.md) para el detalle y qué sigue.
+
+No hay datos falsos en la UI: lo que no existe dice "En desarrollo" con el motivo.

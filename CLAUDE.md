@@ -8,7 +8,11 @@ Multi-tenant. Cada inmobiliaria es un tenant aislado. Maneja plata de terceros
 (liquidaciones a propietarios) y contratos con validez legal: los números tienen que
 estar bien y tienen que poder explicarse.
 
+**➜ Si arrancás una sesión nueva, leé primero `docs/CONTINUAR.md`.** Tiene el estado
+real, las decisiones ya tomadas, las trampas descubiertas y qué sigue en orden.
+
 Documentos clave:
+- `docs/CONTINUAR.md` — **traspaso entre sesiones**. Empezá por acá.
 - `docs/spec.md` — spec técnico: modelo de datos, permisos, reglas de negocio, criterios de aceptación.
 - `docs/roadmap.md` — las etapas con sus gates. No se pasa de etapa sin cerrar el gate.
 - `docs/suite.md` — arquitectura del grupo BEMO y convenciones de nombres.
