@@ -64,6 +64,11 @@ import { PlantillasController } from './plantillas/plantillas.controller';
 import { PlantillasService } from './plantillas/plantillas.service';
 import { CajaController, InicioController } from './inicio/inicio.controller';
 import { CajaService } from './inicio/caja.service';
+import {
+  GastosController, ProveedoresController, ReclamosController,
+} from './gastos/gastos.controller';
+import { GastosService } from './gastos/gastos.service';
+import { ReclamosService } from './gastos/reclamos.service';
 import { TableroController } from './tablero/tablero.controller';
 import { TableroService } from './tablero/tablero.service';
 import { NotasController } from './notas/notas.controller';
@@ -98,6 +103,9 @@ import { InicioService } from './inicio/inicio.service';
     InicioController,
     CajaController,
     TableroController,
+    GastosController,
+    ProveedoresController,
+    ReclamosController,
     AuditoriaController,
     NotasController,
     AccesosPropietarioController,
@@ -132,6 +140,8 @@ import { InicioService } from './inicio/inicio.service';
     InicioService,
     CajaService,
     TableroService,
+    GastosService,
+    ReclamosService,
     NotasService,
     PortalService,
     EquipoService,

@@ -111,6 +111,21 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       };
     }
 
+    // Inmutabilidad hecha cumplir por un trigger (SQLSTATE 'BE002'). Es un
+    // conflicto de estado, no un error del servidor: el usuario pidió algo
+    // coherente sobre una fila que ya no admite cambios. El mensaje viene
+    // redactado desde la base, que es donde vive la regla.
+    if (esInmutable(exception)) {
+      return {
+        type: 'about:blank',
+        title: 'Conflict',
+        status: 409,
+        detail: (exception as { message: string }).message,
+        code: ErrorCode.YA_RENDIDO,
+        instance,
+      };
+    }
+
     // Nada más llega acá: cualquier cosa inesperada es un 500 genérico hacia
     // afuera. El detalle real va al log, no al cliente.
     return {
@@ -130,6 +145,16 @@ function esCuerpoDemasiadoGrande(err: unknown): boolean {
     err !== null &&
     ((err as { type?: string }).type === 'entity.too.large' ||
       (err as { statusCode?: number }).statusCode === 413)
+  );
+}
+
+/** SQLSTATE propio para lo que ya no se puede tocar. Ver migración 016. */
+function esInmutable(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: unknown }).code === 'BE002'
   );
 }
 

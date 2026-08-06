@@ -500,22 +500,43 @@ Van primero porque son lo único que hoy le miente al usuario. Ninguno es una me
 **Gate**: las cinco pantallas abiertas en el navegador, en claro y oscuro, a 1440 y 375.
 Y un test de front por cada uno que sea comprobable sin ojo humano.
 
-### 11.2 · Gastos y reclamos ⏳
+### 11.2 · Gastos y reclamos ✅ CERRADO
 
 El hueco más grande del dominio, y el que **ya costó plata**: el `DELETE` sin filtro que
 borraba los gastos cargados a mano y se los transfería de más al propietario no fue un
 descuido suelto — es una consecuencia del modelo. Mientras el gasto viva **dentro** de la
 liquidación, rearmar la liquidación puede destruirlo.
 
-- [ ] `gasto` como entidad propia: `estado` (registrado · a rendir · rendido),
-      `propiedad_id`, `contrato_id?`, `proveedor_id`, `doc_url`, moneda. La liquidación lo
-      **toma**, no lo **contiene**.
-- [ ] `reclamo` + `proveedor`: categoría, estado, prioridad, quién paga
-      (propietario/inquilino), adjuntos. Al cerrarse genera su `gasto`.
-- [ ] Los dos entran al portal del propietario, que ya existe.
+- [x] `gasto` como entidad propia, con `estado` (registrado · rendido · anulado),
+      propiedad, contrato, proveedor, comprobante, moneda y **quién lo paga**. La
+      liquidación lo **toma**, no lo **contiene**.
+- [x] `reclamo` + `proveedor`: categoría, prioridad, estado, quién paga y quién avisó.
+      Resolverlo con costo **genera su gasto en la misma transacción** — van juntos o no
+      van: si el reclamo se cierra y el gasto no entra, el arreglo queda sin costo.
+- [x] Pantallas de las dos, con alta en la misma lista: un reclamo se carga con el
+      inquilino al teléfono, y perder la lista para volver a buscarla es lo que hace que
+      termine en un papel.
+- [ ] ⏳ Que los dos entren al portal del propietario. El patrón está; es una pantalla más.
 
-**Hecho cuando**: se carga una reparación en marzo, se liquida en abril, y rearmar la
-liquidación de abril **no la toca**. Con test que lo fije.
+**Cerrado con** 19 tests contra Postgres real. El que justifica la feature entera es
+«rearmar la liquidación NO destruye el gasto ni lo duplica»: verificado en dos corridas
+seguidas sobre el mismo período, con el total intacto y **una sola** línea.
+
+**Tres cosas que aparecieron construyéndolo:**
+
+- **El gasto sólo entraba si el propietario también había cobrado ese mes.** `generar` se
+  disparaba únicamente con cobros sin liquidar, así que un mes con una unidad vacía a la
+  que hubo que arreglarle el techo no generaba nada: el gasto quedaba esperando y nadie
+  se enteraba de que el propietario debía. Ahora un propietario con gastos pendientes
+  genera su liquidación igual, con bruto 0 y **neto negativo** — un número incómodo y el
+  verdadero. Se descubrió probando la pantalla, no el endpoint.
+- **El trigger de inmutabilidad hacía imposible borrar una inmobiliaria.** Un gasto
+  rendido no se borra, y por CASCADE eso alcanzaba al `DELETE FROM tenant`. Se detectó
+  porque el arnés de tests no podía limpiar sus fixtures. La salida es explícita: si la
+  inmobiliaria ya no existe, esto es el cascade y no un borrado de la aplicación.
+- **`BE002`**, SQLSTATE propio para lo que ya no se puede tocar, mapeado a **409** con
+  código `YA_RENDIDO`. Antes habría salido como 500: un conflicto de estado no es un
+  error del servidor.
 
 ### 11.3 · El tablero ✅ CERRADO
 

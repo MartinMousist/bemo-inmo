@@ -113,8 +113,6 @@ export class LiquidacionesService {
         [mes],
       );
 
-      if (!cobros.length) return { generadas: 0, omitidasCerradas: 0 };
-
       // Agrupado por (propietario, moneda): un propietario con un alquiler en
       // pesos y otro en dólares recibe DOS liquidaciones, no una mezclada.
       const grupos = new Map<string, typeof cobros>();
@@ -123,6 +121,35 @@ export class LiquidacionesService {
         if (!grupos.has(k)) grupos.set(k, []);
         grupos.get(k)!.push(c);
       }
+
+      // Propietarios que este mes tienen GASTOS aunque no hayan tenido cobros.
+      //
+      // Sin esto la rendición se dispara sólo con la plata que entra, y un mes
+      // en que una unidad estuvo vacía y hubo que arreglarle el techo no genera
+      // nada: el gasto queda cargado, esperando, y nadie se entera de que el
+      // propietario debe. Pasa de verdad —una unidad vacía es justo la que hay
+      // que arreglar antes de alquilarla— y se descubrió probando la pantalla,
+      // no el endpoint.
+      //
+      // El resultado es una liquidación con bruto 0 y neto negativo. Es un
+      // número incómodo y es el verdadero: al propietario se le debe cobrar.
+      const { rows: soloGasto } = await ej.query<{
+        propietario_id: string; moneda: string;
+      }>(
+        `SELECT DISTINCT t.persona_id AS propietario_id, g.moneda
+           FROM gasto g
+           JOIN titularidad t ON t.propiedad_id = g.propiedad_id
+          WHERE g.estado = 'registrado'
+            AND g.a_cargo_de = 'propietario'
+            AND g.fecha < ($1::date + interval '1 month')::date`,
+        [mes],
+      );
+      for (const s of soloGasto) {
+        const k = `${s.propietario_id}|${s.moneda}`;
+        if (!grupos.has(k)) grupos.set(k, []);
+      }
+
+      if (!grupos.size) return { generadas: 0, omitidasCerradas: 0 };
 
       // ── 1. Qué liquidaciones del período ya existen ────────────────────────
       //
@@ -193,6 +220,24 @@ export class LiquidacionesService {
         `DELETE FROM liquidacion_linea
           WHERE liquidacion_id = ANY($1::uuid[])
             AND tipo IN ('alquiler','honorarios','punitorio')`,
+        [ids],
+      );
+
+      // Los gastos tomados en la corrida anterior se SUELTAN antes de volver a
+      // tomarlos. Es lo que hace que rearmar sea idempotente sin duplicar ni
+      // perder: el gasto vuelve a estar disponible y se lo vuelve a evaluar con
+      // las reglas de ahora.
+      //
+      // El trigger `gasto_inmutable` deja pasar exactamente esta transición
+      // —rendido → registrado sin tocar el monto— y ninguna otra.
+      await ej.query(
+        `DELETE FROM liquidacion_linea
+          WHERE liquidacion_id = ANY($1::uuid[]) AND gasto_id IS NOT NULL`,
+        [ids],
+      );
+      await ej.query(
+        `UPDATE gasto SET estado = 'registrado', liquidacion_id = NULL
+          WHERE liquidacion_id = ANY($1::uuid[])`,
         [ids],
       );
 
@@ -300,6 +345,68 @@ export class LiquidacionesService {
           ],
         );
       }
+
+      // ── 4b. TOMAR los gastos registrados ───────────────────────────────────
+      //
+      // Acá está toda la diferencia con el modelo anterior. El gasto vive en su
+      // propia tabla desde que se carga: la liquidación **lo toma**, no lo
+      // contiene. Antes el gasto nacía como línea de la rendición, y por eso
+      // rearmarla podía destruirlo — un termotanque de ARS 85.000 adelantado se
+      // le transfería de más al propietario. El `DELETE` filtrado tapó el
+      // síntoma; esto saca la causa.
+      //
+      // Cuatro condiciones para que un gasto entre, y ninguna es cosmética:
+      //
+      //   · `a_cargo_de = 'propietario'` — lo que paga el inquilino se le cobra
+      //     a él; meterlo acá es descontarle plata al dueño que no debe.
+      //   · misma moneda que la liquidación — ARS y USD no se suman nunca.
+      //   · `fecha <= fin del período` — un gasto de mayo no entra en la
+      //     rendición de abril, aunque se haya cargado antes de cerrarla.
+      //   · titularidad — en condominio, a cada dueño le toca SU porcentaje.
+      await ej.query(
+        `WITH objetivo AS (
+           SELECT l.id, l.propietario_id, l.periodo, l.moneda
+             FROM liquidacion l WHERE l.id = ANY($2::uuid[])
+         ),
+         elegibles AS (
+           SELECT o.id AS liquidacion_id, g.id AS gasto_id, g.contrato_id,
+                  g.concepto, g.tipo, g.fecha,
+                  round(g.monto * coalesce(t.porcentaje, 100) / 100, 2) AS monto,
+                  coalesce(t.porcentaje, 100) AS porcentaje
+             FROM objetivo o
+             JOIN titularidad t ON t.persona_id = o.propietario_id
+             JOIN gasto g ON g.propiedad_id = t.propiedad_id
+            WHERE g.estado = 'registrado'
+              AND g.a_cargo_de = 'propietario'
+              AND g.moneda = o.moneda
+              AND g.fecha < (o.periodo + interval '1 month')::date
+         ),
+         insertadas AS (
+           INSERT INTO liquidacion_linea
+             (tenant_id, liquidacion_id, contrato_id, concepto, tipo, signo, monto,
+              gasto_id, detalle)
+           SELECT $1, e.liquidacion_id, e.contrato_id,
+                  e.concepto || CASE WHEN e.porcentaje = 100 THEN ''
+                                     ELSE ' · ' || e.porcentaje || '% de titularidad' END,
+                  -- Los tipos del gasto y los de la línea no son el mismo
+                  -- catálogo: 'servicio' y 'seguro' no existen en la línea y
+                  -- caen en 'otro'. Mapear acá y no ensanchar el CHECK mantiene
+                  -- corta la lista con la que se calculan los totales.
+                  CASE e.tipo WHEN 'reparacion' THEN 'reparacion'
+                              WHEN 'impuesto'   THEN 'impuesto'
+                              WHEN 'expensas'   THEN 'expensas'
+                              ELSE 'otro' END,
+                  -1, e.monto, e.gasto_id,
+                  jsonb_build_object('gastoId', e.gasto_id, 'fecha', e.fecha)
+             FROM elegibles e
+           RETURNING gasto_id, liquidacion_id
+         )
+         UPDATE gasto g
+            SET estado = 'rendido', liquidacion_id = i.liquidacion_id
+           FROM insertadas i
+          WHERE g.id = i.gasto_id`,
+        [tenantId, ids],
+      );
 
       // ── 5. Recalcular los totales desde las líneas, en una sola pasada ─────
       //

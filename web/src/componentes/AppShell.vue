@@ -36,6 +36,10 @@ const grupos = [
       { a: '/contratos', icono: 'documento', texto: 'Contratos' },
       { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
       { a: '/caja', icono: 'sena', texto: 'Caja' },
+      // Reclamos y gastos van en Alquileres y no en un grupo propio: son el día
+      // a día de administrar, y quien los usa ya está mirando esta columna.
+      { a: '/reclamos', icono: 'campana', texto: 'Reclamos' },
+      { a: '/gastos', icono: 'moneda', texto: 'Gastos' },
       { a: '/indices', icono: 'grafico', texto: 'Índices' },
     ],
   },

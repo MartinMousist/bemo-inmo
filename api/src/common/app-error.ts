@@ -45,6 +45,11 @@ export const ErrorCode = {
   LIMITE_DE_PLAN: 'LIMITE_DE_PLAN',
   MODULO_NO_INCLUIDO: 'MODULO_NO_INCLUIDO',
 
+  // Reglas de inmutabilidad que hace cumplir la BASE con SQLSTATE 'BE002': un
+  // gasto ya rendido, igual que un ajuste confirmado o una liquidación cerrada.
+  // El código es estable para que el front decida sin leer el texto.
+  YA_RENDIDO: 'YA_RENDIDO',
+
   // Archivos
   ALMACENAMIENTO_NO_CONFIGURADO: 'ALMACENAMIENTO_NO_CONFIGURADO',
   ARCHIVO_DEMASIADO_GRANDE: 'ARCHIVO_DEMASIADO_GRANDE',
