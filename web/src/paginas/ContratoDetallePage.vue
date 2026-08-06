@@ -8,6 +8,7 @@ import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import PanelNotas from '../componentes/PanelNotas.vue';
 import PanelDocumentos from '../componentes/PanelDocumentos.vue';
+import GarantesContrato from '../componentes/GarantesContrato.vue';
 import { fecha, money, periodo as fmtPeriodo, proximidad, plural } from '../dominio/formato';
 import type { Pagina } from '../dominio/pagina';
 
@@ -161,6 +162,10 @@ onMounted(cargar);
         <div><span class="et">Locador</span><span>{{ c.locadores.map((l) => l.nombre).join(', ') || '—' }}</span></div>
         <div><span class="et">Inquilino</span><span>{{ c.locatarios.map((l) => l.nombre).join(', ') || '—' }}</span></div>
       </div>
+
+      <!-- Los garantes van ANTES de los aumentos: es lo que se mira mientras la
+           operación se está armando, y lo que decide si el contrato se firma. -->
+      <GarantesContrato :contrato-id="id" />
 
       <section class="card stack">
         <div class="row entre">

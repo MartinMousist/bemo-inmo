@@ -47,9 +47,9 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | | |
 |---|---|
 | Commits | 40 |
-| Migraciones | 16 |
-| Tests | **480 de API** contra Postgres real + **57 de front**. Todo en verde |
-| Pantallas | 34 |
+| Migraciones | 18 |
+| Tests | **505 de API** contra Postgres real + **57 de front**. Todo en verde |
+| Pantallas | 35 |
 
 ### Etapas
 
@@ -75,6 +75,7 @@ cerrado un gate cuya evidencia no existe es el error #2 del playbook con otra ca
 
 | Integración | Estado |
 |---|---|
+| **BCRA** (Central de Deudores) | ✅ **Funcionando.** Contrato verificado el 06/08 contra la API real: `GET /CentralDeDeudores/v1.0/Deudas/{cuit}`. Del DNI se derivan los CUIL posibles y se prueban en orden. El 404 **no es un error**: es «ninguna entidad lo informa», o sea sin deuda bancaria. Sólo situación 1 se acepta, y el veredicto se congela con su fecha. ⚠️ No consultarlo con datos demo: los DNI del seed son de personas reales |
 | **BCRA** (ICL + UVA) | ✅ **Funcionando y automático.** Contrato verificado contra la API real (v4.0, variables 40 y 31). Se sincroniza solo cada 12 h (`SINCRONIZAR_INDICES`), y sigue estando `POST /v1/indices/sincronizar` a mano. Idempotente |
 | **INDEC** (IPC) | ❌ Manual **a propósito**. No hay API estable; raspar un HTML que cambia sin aviso pondría un número equivocado en un aviso de aumento |
 | **Google Maps** | ⚙️ Todo el circuito listo, **falta sólo la API key**. Con la key puesta en `.env` ya llega al contenedor (antes el compose no la pasaba), hay diagnóstico que le pega a Google de verdad y un backfill de las propiedades cargadas antes. Sin key no inventa coordenadas: ofrece cargarlas a mano y dice por qué |
@@ -131,6 +132,7 @@ Cada una costó un rato de diagnóstico:
 | Contraste "que se ve bien" | `--muted-2` daba **3,01** sobre `--surface-2`, por debajo de AA, en los dos temas | A ojo un gris apagado sobre papel parece correcto. Se mide calculando el ratio, no mirando |
 | El motor de plantillas | No tiene negación (`!`) ni filtro `periodo` | Y no se los voy a agregar: el día que tenga `!`, `&&` y paréntesis es un lenguaje que alguien ejecuta desde un textarea. Lo que haga falta se calcula en el contexto |
 | Una tabla nueva sin RLS | El test de seguridad falla | Y está bien. `limite_intento` no lleva RLS a propósito y ahora está escrito por qué |
+| **Los DNI del seed son de personas reales** | Consultar la Central de Deudores con un garante del seed devolvió el nombre y la deuda bancaria de una persona real, y quedó guardado en la base de desarrollo | Un DNI «inventado» de ocho dígitos le pertenece a alguien. Se borró el registro. **No consultar el BCRA con datos demo**: es un tercero que no dio su consentimiento. El seed no trae ninguna consulta hecha, a propósito |
 
 ---
 
@@ -247,17 +249,21 @@ estable y raspar un HTML que cambia sin aviso pondría un número equivocado en 
 aviso de aumento. Lo que sí se puede hacer sin romper esa decisión: **avisar en
 el inicio** cuando el mes ya pasó y el IPC de ese período no está cargado.
 
-#### 4. `garantia`: la tabla que no lee nadie
+#### 4. Lo que le falta a garantes ← *el circuito base ya está*
 
-Existe desde la migración 007 con sus seis tipos —propietaria, recibo de
-sueldo, seguro de caución, garante solidario, depósito ampliado, otra—, tiene
-RLS y `vence_el`. **Ningún servicio la escribe ni la lee**, y los
-recordatorios ya tienen el evento `garantia_por_vencer` esperándola. Es el
-error #3 en su forma más pura, y por eso no está en el seed: sembrar filas que
-ninguna pantalla muestra sería dibujar volumen, no cargar datos.
+Hecho: legajo por contrato, los cinco documentos sobre S3, el control contra la
+Central de Deudores del BCRA con el veredicto congelado, la firma y la
+verificación de mínimo 2. Queda:
 
-Falta el circuito entero: cargar la garantía desde el contrato, verla en su
-ficha y que el recordatorio avise cuando vence.
+- **El recordatorio `garantia_por_vencer`** sigue sin emisor: la columna
+  `vence_el` se carga y nadie avisa.
+- **Re-consultar el BCRA cada tanto.** Hoy la consulta es a pedido. Un garante
+  aprobado en enero puede estar en situación 3 en junio, y el contrato dura
+  tres años.
+- **Cheques rechazados.** `…/Deudas/ChequesRechazados/{cuit}` existe y no se
+  consulta. Es la otra mitad del riesgo.
+- **El bot de WhatsApp** que cargue documentos solo: el endpoint de subida ya
+  recibe base64, así que lo que falta es el canal, no el back.
 
 #### 5. Lo demás, marcado con ⏳ en el roadmap
 

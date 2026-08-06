@@ -42,6 +42,9 @@ import { LiquidacionesService } from './alquileres/liquidaciones.service';
 import { ComisionesController, VentasController } from './ventas/ventas.controller';
 import { VentasService } from './ventas/ventas.service';
 import { ComisionesConfigService } from './ventas/comisiones.config.service';
+import { GaranteController, GarantesController } from './garantes/garantes.controller';
+import { GarantesService } from './garantes/garantes.service';
+import { DeudoresService } from './garantes/deudores.service';
 import {
   FeedController,
   PublicacionesController,
@@ -125,6 +128,8 @@ import { InicioService } from './inicio/inicio.service';
     LiquidacionesController,
     VentasController,
     ComisionesController,
+    GarantesController,
+    GaranteController,
     PublicacionesController,
     FeedController,
     RecordatoriosController,
@@ -161,6 +166,8 @@ import { InicioService } from './inicio/inicio.service';
     LiquidacionesService,
     VentasService,
     ComisionesConfigService,
+    GarantesService,
+    DeudoresService,
     PublicacionesService,
     RecordatoriosService,
     ExportarService,

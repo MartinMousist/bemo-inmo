@@ -39,6 +39,11 @@ export function configurarApp(app: INestApplication): void {
   // de JSON. El límite grande va SÓLO en esa ruta; subirlo para todo agrandaría
   // la superficie de ataque de cada endpoint por una necesidad de uno.
   app.use('/v1/propiedades/:id/fotos', express.json({ limit: env.BODY_LIMIT_FOTOS }));
+  // Los documentos del garante son lo mismo: la foto del DNI que alguien saca
+  // con el teléfono pasa los 3 MB sin esfuerzo, y con el límite normal el
+  // legajo no se puede cargar. Es la trampa del `BODY_LIMIT` de 1 MB otra vez
+  // —la que no se vio antes porque el test usaba un PNG de 2×2.
+  app.use('/v1/garantes/:id/documentos', express.json({ limit: env.BODY_LIMIT_FOTOS }));
   // La importación CSV manda texto plano, también más grande que lo normal.
   app.use('/v1/importar', express.json({ limit: env.BODY_LIMIT_IMPORTAR }));
 

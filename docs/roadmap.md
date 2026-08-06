@@ -644,17 +644,35 @@ elemento pensada para el caso común, aplicada a controles que no son ese caso. 
 
 ### 12.1 · Config de comisiones por inmobiliaria
 
-- [ ] `tenant.comisiones` existe desde la migración 008 y **nadie lo lee**. Su
+- [x] `tenant.comisiones` existe desde la migración 008 y **nadie lo leía**. Su
       default ya es el modelo que pidió el dueño: 3% + 3% a las puntas y 25% +
       25% puertas adentro, o sea 1,5% al captador, 1,5% al que vende y 3% a la
-      casa sobre un total de 6%.
-- [ ] `propiedad.agente_captador_id` también existe y no pre-llena nada.
-- [ ] **Las dos unidades a la vista.** El motor pide el nivel 3 en % de lo que
+      casa sobre un total de 6%. `GET`/`PUT /v1/comisiones/config` + pantalla.
+- [x] **Las dos unidades a la vista.** El motor pide el nivel 3 en % de lo que
       le queda a la casa; la inmobiliaria piensa en % de la venta. Se guarda en
       la del motor —cuando la operación se comparte, lo que queda se parte, y un
       % fijo sobre la venta dejaría de cerrar— y se muestran las dos.
+- [x] **Las dos puntas, acopladas al total.** Mover una ajusta la otra para que
+      sigan sumando el total, que arranca en 6% y es editable.
+- [ ] `propiedad.agente_captador_id` también existe y no pre-llena nada.
 - [ ] El pre-llenado es un **valor por defecto editable**: el captador no
       siempre es quien cargó la propiedad.
+- [ ] El % de cada agente en su membresía, editable desde el listado de equipo,
+      con sus estadísticas y las propiedades que trajo.
+
+### 12.4 · Garantes ✅ el circuito base
+
+- [x] `garantia` existía desde la 007 y **no la leía nadie**. Ahora tiene
+      persona, documentos, firma y veredicto.
+- [x] Los cinco documentos sobre S3: las dos caras del DNI y los tres últimos
+      recibos de sueldo. Volver a subir uno reemplaza al anterior.
+- [x] **Central de Deudores del BCRA**, contrato verificado contra la API real.
+      Del DNI se derivan los CUIL posibles. Sólo situación 1 se acepta y el
+      veredicto se **congela** con su fecha: la decisión se tomó con ese dato.
+- [x] Mínimo 2 garantes, con la verificación diciendo qué falta en castellano.
+- [ ] El recordatorio `garantia_por_vencer` sigue sin emisor.
+- [ ] Cheques rechazados: el endpoint del BCRA existe y no se consulta.
+- [ ] Re-consulta periódica: hoy es a pedido, y un contrato dura tres años.
 
 **Hecho cuando**: cargar una venta no obliga a tipear ningún porcentaje, y la
 pantalla muestra «captador 25% de lo que queda ≡ 1,5% de la venta».
