@@ -75,6 +75,10 @@ services:
       DATABASE_OWNER_URL: postgres://${DB_OWNER_USER}:${DB_OWNER_PASSWORD}@db:5432/${DB_NAME}
       MIGRATE_ON_BOOT: "true"
       SEED_ON_BOOT: "true"
+      # ICL y UVA del BCRA, solos, cada 12 h. Idempotente: correrlo de más no
+      # hace nada salvo el día que el BCRA publica. El IPC NO entra: INDEC no
+      # tiene API estable y la carga manual es deliberada.
+      SINCRONIZAR_INDICES: "true"
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: http://localhost:5173
       # Opcional: sin key la app no geocodifica y lo dice, no inventa

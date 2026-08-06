@@ -22,6 +22,17 @@ const schema = z.object({
   SEED_ON_BOOT: z.enum(['true', 'false']).default('false'),
 
   /**
+   * Trae ICL y UVA del BCRA solo, cada 12 h.
+   *
+   * Apagado por defecto **a propósito**: prendido, cualquier `npm test` o
+   * cualquier arranque de un script sale a internet a consultar el BCRA. Se
+   * prende donde hay una instancia sirviendo de verdad, que es el único lugar
+   * donde tiene sentido. El IPC no entra acá: INDEC no tiene API estable y la
+   * carga manual es deliberada.
+   */
+  SINCRONIZAR_INDICES: z.enum(['true', 'false']).default('false'),
+
+  /**
    * Log en JSON, una línea por evento. Por defecto sigue el entorno: en
    * producción JSON —es lo único que un agregador puede filtrar por requestId—
    * y en desarrollo el formato legible de Nest.
@@ -113,10 +124,11 @@ type Crudo = z.infer<typeof schema>;
 export type Env = Omit<
   Crudo,
   'MIGRATE_ON_BOOT' | 'SEED_ON_BOOT' | 'COOKIE_SECURE' | 'LOG_JSON'
-  | 'RATE_LIMIT_EN_BASE'
+  | 'RATE_LIMIT_EN_BASE' | 'SINCRONIZAR_INDICES'
 > & {
   MIGRATE_ON_BOOT: boolean;
   SEED_ON_BOOT: boolean;
+  SINCRONIZAR_INDICES: boolean;
   COOKIE_SECURE: boolean;
   LOG_JSON: boolean;
   RATE_LIMIT_EN_BASE: boolean;
@@ -142,6 +154,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ...e,
     MIGRATE_ON_BOOT: e.MIGRATE_ON_BOOT === 'true',
     SEED_ON_BOOT: e.SEED_ON_BOOT === 'true',
+    SINCRONIZAR_INDICES: e.SINCRONIZAR_INDICES === 'true',
     COOKIE_SECURE: e.COOKIE_SECURE === 'true',
     // Sin valor explícito, sigue al entorno.
     LOG_JSON: e.LOG_JSON ? e.LOG_JSON === 'true' : e.NODE_ENV === 'production',

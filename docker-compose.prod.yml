@@ -58,6 +58,10 @@ services:
       # El seed NUNCA. `env.ts` además lo rechaza si NODE_ENV=production, así
       # que esto es la segunda cerradura, no la única.
       SEED_ON_BOOT: "false"
+      # ICL y UVA del BCRA, solos, cada 12 h. Idempotente: correrlo de más no
+      # hace nada salvo el día que el BCRA publica algo nuevo. El IPC NO entra
+      # acá: INDEC no tiene API estable y la carga manual es deliberada.
+      SINCRONIZAR_INDICES: "true"
 
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: https://${DOMINIO}

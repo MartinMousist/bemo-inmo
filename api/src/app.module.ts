@@ -36,6 +36,7 @@ import { CicloService } from './alquileres/ciclo.service';
 import { AuditoriaController } from './auditoria/auditoria.controller';
 import { AuditoriaService } from './auditoria/auditoria.service';
 import { IndicesService } from './alquileres/indices.service';
+import { IndicesCron } from './alquileres/indices.cron';
 import { BcraService } from './alquileres/bcra.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
 import { ComisionesController, VentasController } from './ventas/ventas.controller';
@@ -154,6 +155,7 @@ import { InicioService } from './inicio/inicio.service';
     CicloService,
     AuditoriaService,
     IndicesService,
+    IndicesCron,
     BcraService,
     LiquidacionesService,
     VentasService,

@@ -46,7 +46,12 @@ export class IndicesService {
    * correrlo dos veces no cambia nada. Pensado para un cron.
    */
   async sincronizar(
-    usuarioId: string,
+    /**
+     * `null` cuando la cargó el CRON y no una persona. Inventar un usuario acá
+     * haría que la auditoría diga que alguien apretó un botón que nadie apretó.
+     * La columna `cargado_por` es nullable justamente para esto.
+     */
+    usuarioId: string | null,
     desde = '2020-07-01',
   ): Promise<Record<string, { cargados: number; yaEstaban: number; error?: string }>> {
     const hasta = new Date().toISOString().slice(0, 10);
@@ -157,7 +162,8 @@ export class IndicesService {
    */
   async cargar(
     v: { tipo: string; periodo: string; valor: number; fuente?: string; publicadoEl?: string },
-    usuarioId: string,
+    /** `null` cuando lo cargó el CRON. Ver `indices.cron.ts`. */
+    usuarioId: string | null,
   ): Promise<{ insertado: boolean; valorVigente: number }> {
     const filas = await this.db.query<{ insertado: boolean; valor_vigente: string }>(
       'SELECT * FROM app_indice_cargar($1, $2, $3, $4, $5, $6)',
@@ -182,13 +188,13 @@ export class IndicesService {
       );
     }
 
-    this.logger.log(`Índice ${v.tipo} ${v.periodo} = ${v.valor} cargado por ${usuarioId}`);
+    this.logger.log(`Índice ${v.tipo} ${v.periodo} = ${v.valor} cargado por ${usuarioId ?? 'el sistema'}`);
     return { insertado: true, valorVigente: Number(r.valor_vigente) };
   }
 
   async cargarLote(
     valores: Array<{ tipo: string; periodo: string; valor: number; fuente?: string }>,
-    usuarioId: string,
+    usuarioId: string | null,
   ): Promise<{ cargados: number; yaEstaban: number }> {
     let cargados = 0;
     let yaEstaban = 0;
