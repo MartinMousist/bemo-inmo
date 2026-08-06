@@ -28,6 +28,17 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   borrador: 'Borrador', lista: 'Lista para pegar', publicada: 'Publicada',
   pausada: 'Pausada', error: 'Error', baja: 'De baja',
 };
+/**
+ * La operación, en la fila.
+ *
+ * Sin esto, una propiedad en venta Y en alquiler —que es un caso normal, no un
+ * borde— muestra dos filas idénticas: mismo código, misma dirección, y lo único
+ * distinto es el portal. El dato venía en la respuesta desde el primer día y no
+ * se mostraba; apareció recién cuando la lista tuvo avisos de las dos puntas.
+ */
+const ETIQUETA_OPERACION: Record<string, string> = {
+  venta: 'Venta', alquiler: 'Alquiler', alquiler_temporario: 'Temporario',
+};
 
 const POR_PAGINA = 25;
 
@@ -152,9 +163,19 @@ onMounted(cargar);
       detalle="Desde una operación disponible se genera el aviso para el portal que quieras. El texto sale listo con título, precio y atributos." />
 
     <article v-for="p in items" v-else :key="p.id" class="card pub">
-      <header @click="abrir(p.id)">
+      <!--
+        La fila es un `button` y no un `header` con `@click`: era lo único de
+        esta pantalla que no se podía usar con el teclado, y el aviso vive
+        adentro del detalle que abre. Con `div` había que agregarle `tabindex`,
+        `role` y los handlers de Enter y Espacio a mano; el elemento nativo ya
+        los trae y anuncia el estado con `aria-expanded`.
+      -->
+      <button class="fila" type="button" :aria-expanded="abierta === p.id" @click="abrir(p.id)">
         <div class="quien">
-          <span class="mono cod">{{ p.etiquetaPropiedad }}</span>
+          <span class="linea">
+            <span class="mono cod">{{ p.etiquetaPropiedad }}</span>
+            <span class="op">{{ ETIQUETA_OPERACION[p.tipoOperacion] ?? p.tipoOperacion }}</span>
+          </span>
           <span class="dir">{{ p.direccion }}</span>
         </div>
         <StatusChip :texto="NOMBRE_PORTAL[p.portal] ?? p.portal" tono="acento" />
@@ -162,7 +183,7 @@ onMounted(cargar);
           :tono="p.estado === 'publicada' ? 'ok' : p.estado === 'error' ? 'err' : 'warn'" />
         <span v-if="!p.integracionActiva" class="modo">copiar y pegar</span>
         <span v-if="p.ultimoSync" class="mono sync">{{ fechaHora(p.ultimoSync) }}</span>
-      </header>
+      </button>
 
       <div v-if="abierta === p.id && aviso" class="detalle">
         <div v-if="aviso.faltantes.length" class="faltan">
@@ -197,9 +218,12 @@ onMounted(cargar);
 .nota { margin: var(--s-xs) 0 0; font-size: 12px; color: var(--muted); max-width: 60ch; }
 .url { padding: var(--s-sm) var(--s-md); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 12px; }
 .pub { padding: 0; overflow: hidden; }
-.pub header { display: flex; align-items: center; gap: var(--s-md); padding: var(--s-md) var(--s-lg); cursor: pointer; flex-wrap: wrap; }
-.pub header:hover { background: var(--surface-2); }
+/* El reset del botón: sin esto hereda fondo, borde y tipografía del navegador. */
+.pub .fila { display: flex; align-items: center; gap: var(--s-md); padding: var(--s-md) var(--s-lg); cursor: pointer; flex-wrap: wrap; width: 100%; background: none; border: 0; font: inherit; color: inherit; text-align: left; }
+.pub .fila:hover { background: var(--surface-2); }
 .quien { display: flex; flex-direction: column; margin-right: auto; }
+.linea { display: flex; align-items: baseline; gap: var(--s-sm); }
+.op { font-size: 11px; color: var(--muted); }
 .dir { color: var(--ink); font-size: 13px; }
 .modo { font-size: 11px; color: var(--muted-2); }
 .sync { font-size: 11px; color: var(--muted-2); }

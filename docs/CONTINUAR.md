@@ -172,6 +172,8 @@ hacerlo**, que es lo que sirve.
 | **Carteras de venta y alquiler** separadas | La de alquiler mostraba **3 de 13**: el filtro excluía `estado = 'cerrada'`, que es el estado de una unidad alquilada |
 | **Pre-contratos**: la pantalla que faltaba | El motor estaba entero e invisible. La sintaxis `{{ }}` no se puede mostrar dentro de un template de Vue |
 | **Índices que se sincronizan solos** | El «pensado para un cron» de la etapa 4 no tenía cron |
+| **El seed carga las plantillas y los avisos** | Las plantillas se veían en dev porque alguien había apretado «Traer las base»: en una base limpia, Pre-contratos y Publicaciones arrancaban vacías. Ninguna de las dos se puede escribir en el `.sql` sin copiar el texto legal y el formato del aviso, así que el seed tiene un segundo paso en TypeScript que usa las mismas funciones que la app |
+| **Dos avisos de la misma propiedad** | Una casa en venta Y en alquiler daba dos filas idénticas salvo el portal. `tipoOperacion` venía en la respuesta desde el primer día y no se mostraba. Y la fila era un `header` con `@click`: lo único de esa pantalla que no se podía usar con el teclado |
 
 ---
 
@@ -245,7 +247,19 @@ estable y raspar un HTML que cambia sin aviso pondría un número equivocado en 
 aviso de aumento. Lo que sí se puede hacer sin romper esa decisión: **avisar en
 el inicio** cuando el mes ya pasó y el IPC de ese período no está cargado.
 
-#### 4. Lo demás, marcado con ⏳ en el roadmap
+#### 4. `garantia`: la tabla que no lee nadie
+
+Existe desde la migración 007 con sus seis tipos —propietaria, recibo de
+sueldo, seguro de caución, garante solidario, depósito ampliado, otra—, tiene
+RLS y `vence_el`. **Ningún servicio la escribe ni la lee**, y los
+recordatorios ya tienen el evento `garantia_por_vencer` esperándola. Es el
+error #3 en su forma más pura, y por eso no está en el seed: sembrar filas que
+ninguna pantalla muestra sería dibujar volumen, no cargar datos.
+
+Falta el circuito entero: cargar la garantía desde el contrato, verla en su
+ficha y que el recordatorio avise cuando vence.
+
+#### 5. Lo demás, marcado con ⏳ en el roadmap
 
 `metrica_mes` persistida para la comparación interanual · gastos y reclamos en
 el portal del propietario · columnas configurables · lint de colores a mano ·
@@ -286,7 +300,8 @@ docs/roadmap.md.
 
 Estado: once etapas cerradas, 480 tests de API contra Postgres real y 57 de
 front, todo en verde. El seed trae 16 propiedades, 15 contratos y su ciclo de
-cobranza: entrás con owner@andes.test / unaclavelarga1.
+cobranza, las cuatro plantillas base en las dos inmobiliarias y siete avisos
+de la cartera: entrás con owner@andes.test / unaclavelarga1.
 
 Lo que sigue es la etapa 12 del roadmap, con el diseño ya resuelto en
 CONTINUAR.md §5. Arrancá por 12.1, la config de comisiones — el servicio se

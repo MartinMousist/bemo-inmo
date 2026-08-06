@@ -64,6 +64,19 @@ describe('Publicaciones', () => {
       expect(a.titulo).toBe('Departamento 3 ambientes en alquiler en Godoy Cruz');
     });
 
+    it('un ambiente va en singular', () => {
+      const a = generarAviso({ ...prop, ambientes: 1 }, { tipo: 'venta', precio: 54000, moneda: 'USD' });
+      expect(a.titulo).toBe('Departamento 1 ambiente en venta en Godoy Cruz');
+
+      // Y lo mismo cuando el título cae en los dormitorios porque la propiedad
+      // no tiene cargados los ambientes.
+      const b = generarAviso(
+        { ...prop, ambientes: null, dormitorios: 1 },
+        { tipo: 'venta', precio: 54000, moneda: 'USD' },
+      );
+      expect(b.titulo).toBe('Departamento 1 dormitorio en venta en Godoy Cruz');
+    });
+
     it('el título se corta por palabra entera, no al medio', () => {
       const a = generarAviso(
         { ...prop, localidad: 'Villa Nueva de Guaymallén Provincia' },

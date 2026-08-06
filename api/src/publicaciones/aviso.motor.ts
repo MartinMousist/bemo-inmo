@@ -59,9 +59,15 @@ export function generarAviso(
     o.tipo === 'venta' ? 'en venta' : o.tipo === 'alquiler' ? 'en alquiler' : 'temporario';
 
   // El título arranca por lo que la gente filtra: tipo, ambientes y zona.
+  //
+  // En singular cuando corresponde: el monoambiente de la cartera salía como
+  // «Departamento 1 ambientes en venta en Ciudad», y este título es el que
+  // alguien pega en un portal.
   const partesTitulo = [tipo];
-  if (p.ambientes) partesTitulo.push(`${p.ambientes} ambientes`);
-  else if (p.dormitorios) partesTitulo.push(`${p.dormitorios} dormitorios`);
+  if (p.ambientes) partesTitulo.push(`${p.ambientes} ${p.ambientes === 1 ? 'ambiente' : 'ambientes'}`);
+  else if (p.dormitorios) {
+    partesTitulo.push(`${p.dormitorios} ${p.dormitorios === 1 ? 'dormitorio' : 'dormitorios'}`);
+  }
   partesTitulo.push(operacion);
   if (p.localidad) partesTitulo.push(`en ${p.localidad}`);
 
