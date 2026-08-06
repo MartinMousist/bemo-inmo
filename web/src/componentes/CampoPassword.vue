@@ -61,18 +61,6 @@ const visible = ref(false);
 </template>
 
 <style scoped>
-.campo {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-xs);
-}
-.campo > span {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 
 .caja {
   display: flex;

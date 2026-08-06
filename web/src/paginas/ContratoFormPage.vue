@@ -151,16 +151,10 @@ async function guardar() {
 </template>
 
 <style scoped>
-h2 { font-size: 15px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s-md); }
 .ancho2 { grid-column: span 2; }
-.campo { display: flex; flex-direction: column; gap: var(--s-xs); }
-.campo > span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .campo input, .campo select { font: inherit; padding: var(--s-sm) var(--s-md); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: var(--ink); }
 .check { display: flex; gap: var(--s-sm); align-items: flex-start; font-size: 13px; color: var(--muted); }
 .check input { margin-top: 3px; }
 .check strong { color: var(--ink); }
-.nota { margin: 0; font-size: 12px; color: var(--muted-2); }
-.btn:disabled { opacity: 0.6; cursor: default; }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

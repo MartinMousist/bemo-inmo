@@ -102,7 +102,9 @@ onMounted(cargar);
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
-    <div class="segmented">
+    <!-- `scroll`: son muchos estados y en pantalla angosta la barra scrollea
+         en vez de empujar el ancho de la página. -->
+    <div class="segmented scroll">
       <button type="button" :class="{ activo: filtroTipo === '' }" @click="filtroTipo = ''">
         Todos
       </button>
@@ -157,25 +159,16 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.segmented { display: flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow-x: auto; background: var(--surface); }
-.segmented button { font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-lg); border: none; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
-.segmented button:last-child { border-right: none; }
-.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
 
 .toggle { display: inline-flex; align-items: center; gap: var(--s-xs); font-size: 13px; color: var(--muted); }
 .canales { padding: var(--s-md) var(--s-lg); background: var(--warning-tint); border: 1px solid var(--warning-line); border-radius: var(--r-md); font-size: 13px; color: var(--warning); }
 .canales p { margin: 0 0 var(--s-sm); }
 .canales ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-xs); }
 .canales li { display: flex; gap: var(--s-sm); align-items: center; }
-.card.sin-padding { padding: 0; overflow: hidden; }
-.lista { list-style: none; margin: 0; padding: 0; }
 .lista li { display: grid; grid-template-columns: auto 1fr auto auto auto; align-items: center; gap: var(--s-md); padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); font-size: 13px; }
-.lista li:last-child { border-bottom: none; }
 .que { display: flex; flex-direction: column; }
 .titulo { color: var(--ink); }
 .detalle { font-size: 12px; color: var(--muted); }
 .cuando { color: var(--muted); }
-.btn.sm { padding: 4px var(--s-md); font-size: 12px; }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 @media (max-width: 760px) { .lista li { grid-template-columns: 1fr auto; } .cuando { display: none; } }
 </style>

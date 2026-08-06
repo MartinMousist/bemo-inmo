@@ -111,7 +111,7 @@ onMounted(async () => {
           <header>
             <div>
               <span class="mono cod">{{ p.etiqueta }}</span>
-              <h2>{{ p.direccion }}</h2>
+              <h2 class="text-lg">{{ p.direccion }}</h2>
             </div>
             <span v-if="p.porcentaje !== null && p.porcentaje < 100" class="pct mono">
               tu parte: {{ p.porcentaje }}%
@@ -156,7 +156,7 @@ onMounted(async () => {
 
         <!-- ── Liquidaciones ────────────────────────────────────────────── -->
         <section class="card">
-          <h2>Tus liquidaciones</h2>
+          <h2 class="text-lg">Tus liquidaciones</h2>
           <p class="nota">
             Se listan las cerradas. Se liquida lo <strong>cobrado</strong>, no lo
             facturado: un mes que el inquilino no pagó no aparece acá.
@@ -229,8 +229,7 @@ onMounted(async () => {
 .bajada { margin: var(--s-sm) 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; max-width: 62ch; }
 
 .prop > header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-md); }
-.cod { display: block; font-size: 11px; color: var(--muted); }
-h2 { font-size: 18px; margin: 2px 0 0; }
+h2 { margin: 2px 0 0; }
 h3 { font-size: 13px; margin: 0 0 var(--s-sm); color: var(--muted); font-family: var(--font-ui); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .pct { font-size: 12px; color: var(--accent); white-space: nowrap; }
 
@@ -262,10 +261,7 @@ h3 { font-size: 13px; margin: 0 0 var(--s-sm); color: var(--muted); font-family:
 .liq:first-of-type { border-top: none; padding-top: 0; }
 .liq > header { display: flex; align-items: center; gap: var(--s-md); margin-bottom: var(--s-sm); }
 .neto { font-size: 18px; color: var(--ink); margin-left: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 td { padding: 4px 0; color: var(--ink-2); }
-.der { text-align: right; }
-.neg { color: var(--danger); }
 .total td { border-top: 1px solid var(--line); padding-top: var(--s-sm); font-weight: 600; color: var(--ink); }
 
 .aviso { text-align: left; }

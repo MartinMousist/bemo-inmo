@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useAuth } from '../stores/auth';
+import { guardarPlegado, leerPlegado } from '../dominio/sidebar';
 import UiIcon from './UiIcon.vue';
 import BemoLogo from './BemoLogo.vue';
 import MenuUsuario from './MenuUsuario.vue';
@@ -55,6 +56,19 @@ const grupos = [
 const drawerAbierto = ref(false);
 const paletaAbierta = ref(false);
 
+/**
+ * Barra lateral plegada.
+ *
+ * La preferencia se guarda: quien plegó la barra para ver la cartera completa en
+ * un portátil de 13" no quiere volver a plegarla en cada carga.
+ *
+ * En pantalla angosta no aplica —ahí la barra ya es un cajón— y eso lo cancela
+ * `familia.css` por media query, no acá: así la preferencia sobrevive a que
+ * alguien achique y vuelva a agrandar la ventana.
+ */
+const plegado = ref(leerPlegado());
+watch(plegado, guardarPlegado);
+
 // ⌘K / Ctrl+K abre la paleta desde cualquier pantalla.
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -66,9 +80,12 @@ window.addEventListener('keydown', (e) => {
 
 <template>
   <div class="shell">
-    <aside class="sidebar" :class="{ abierto: drawerAbierto }">
-      <RouterLink to="/inicio" class="marca">
-        <BemoLogo :tam="30" con-nombre />
+    <aside id="barra-lateral" class="sidebar" :class="{ abierto: drawerAbierto, collapsed: plegado }">
+      <RouterLink to="/inicio" class="marca" :title="plegado ? 'Bemo INMO' : undefined">
+        <!-- Plegada, el wordmark no se oculta por CSS: se deja de renderizar.
+             Ocultarlo con `display: none` lo dejaba en el árbol de
+             accesibilidad, anunciando un nombre que no está en pantalla. -->
+        <BemoLogo :tam="30" :con-nombre="!plegado" />
       </RouterLink>
 
       <nav>
@@ -79,15 +96,23 @@ window.addEventListener('keydown', (e) => {
             :key="i.a"
             :to="i.a"
             class="nav-item"
+            :title="plegado ? i.texto : undefined"
+            :aria-label="plegado ? i.texto : undefined"
             @click="drawerAbierto = false"
           >
             <UiIcon :nombre="i.icono" />
-            <span>{{ i.texto }}</span>
+            <span class="nav-label">{{ i.texto }}</span>
           </RouterLink>
         </div>
       </nav>
 
-      <button class="atajo" type="button" @click="paletaAbierta = true">
+      <button
+        class="atajo"
+        type="button"
+        :title="plegado ? 'Buscar (⌘K)' : undefined"
+        :aria-label="plegado ? 'Buscar' : undefined"
+        @click="paletaAbierta = true"
+      >
         <UiIcon nombre="buscar" />
         <span>Buscar</span>
         <kbd>⌘K</kbd>
@@ -100,6 +125,21 @@ window.addEventListener('keydown', (e) => {
       <header class="topbar">
         <button class="hamburguesa" type="button" aria-label="Menú" @click="drawerAbierto = true">
           <UiIcon nombre="menu" />
+        </button>
+
+        <!-- Va en la topbar y no dentro de la barra: plegada, un control que
+             viviera adentro quedaría a 64px de ancho y sin etiqueta. Acá la
+             posición no se mueve, esté plegada o no. -->
+        <button
+          class="icon-btn plegar"
+          type="button"
+          :aria-expanded="!plegado"
+          aria-controls="barra-lateral"
+          :aria-label="plegado ? 'Desplegar la barra lateral' : 'Plegar la barra lateral'"
+          :title="plegado ? 'Desplegar la barra lateral' : 'Plegar la barra lateral'"
+          @click="plegado = !plegado"
+        >
+          <UiIcon nombre="panel" />
         </button>
 
         <span class="tenant">{{ auth.tenant?.nombre }}</span>
@@ -118,115 +158,9 @@ window.addEventListener('keydown', (e) => {
 </template>
 
 <style scoped>
-.shell {
-  display: grid;
-  grid-template-columns: 232px 1fr;
-  min-height: 100vh;
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-xl);
-  padding: var(--s-lg);
-  background: var(--surface-2);
-  border-right: 1px solid var(--line);
-}
-
-.marca {
-  display: inline-flex;
-  padding: var(--s-sm);
-  border-radius: var(--r-md);
-  text-decoration: none;
-}
-
-nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-xl);
-  flex: 1;
-}
-
-.grupo-titulo {
-  margin: 0 0 var(--s-xs) var(--s-sm);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted-2);
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: var(--s-md);
-  padding: var(--s-sm) var(--s-md);
-  border-radius: var(--r-md);
-  color: var(--ink-2);
-  text-decoration: none;
-  transition: background var(--t-micro), color var(--t-micro);
-}
-.nav-item:hover {
-  background: var(--surface-3);
-}
-.nav-item.router-link-active {
-  background: var(--accent-tint);
-  color: var(--accent);
-  font-weight: 500;
-}
-
-.atajo {
-  display: flex;
-  align-items: center;
-  gap: var(--s-sm);
-  padding: var(--s-sm) var(--s-md);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.atajo:hover {
-  color: var(--ink-2);
-}
-.atajo kbd {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted-2);
-}
-
-.principal {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--s-md);
-  padding: var(--s-md) var(--s-xl);
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-}
-.separador {
-  margin-left: auto;
-}
-
-.tenant {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.contenido {
-  flex: 1;
-  padding: var(--s-2xl) var(--s-xl);
-  max-width: 1100px;
-  width: 100%;
-}
+/* La forma del shell —grilla, sidebar, topbar pegada, contenido y el
+   comportamiento de cajón en pantalla angosta— vive en `styles/familia.css`.
+   Acá queda sólo lo que es de ESTE componente y de ningún otro. */
 
 /* `velo-drawer` y no `velo`: el CSS scoped del padre alcanza al elemento RAÍZ
    del componente hijo, así que un `.velo { display: none }` acá le pegaba
@@ -237,20 +171,9 @@ nav {
 }
 
 @media (max-width: 900px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-  .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    width: 232px;
-    z-index: 30;
-    transform: translateX(-100%);
-    transition: transform var(--t-short);
-  }
-  .sidebar.abierto {
-    transform: none;
-  }
+  /* En angosto manda la hamburguesa: dos controles para la misma barra, uno al
+     lado del otro, es una pregunta que el usuario no tiene por qué contestar. */
+  .plegar { display: none; }
   .velo-drawer {
     display: block;
     position: fixed;
@@ -266,9 +189,6 @@ nav {
     background: var(--surface);
     color: var(--ink-2);
     cursor: pointer;
-  }
-  .contenido {
-    padding: var(--s-xl) var(--s-lg);
   }
 }
 </style>

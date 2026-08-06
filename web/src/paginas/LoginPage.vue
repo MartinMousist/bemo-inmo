@@ -44,7 +44,7 @@ async function enviar() {
   <AuthLayout>
     <form class="card" @submit.prevent="enviar">
       <header>
-        <h2>Entrar</h2>
+        <h2 class="text-lg">Entrar</h2>
         <p class="sub">Ingresá con tu cuenta de la inmobiliaria.</p>
       </header>
 
@@ -91,27 +91,12 @@ async function enviar() {
   padding: var(--s-2xl);
 }
 
-h2 {
-  font-size: 22px;
-}
 .sub {
   margin: var(--s-xs) 0 0;
   color: var(--muted);
   font-size: 13px;
 }
 
-.campo {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-xs);
-}
-.campo > span {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
 .campo input {
   font: inherit;
   padding: 10px var(--s-md);
@@ -135,23 +120,9 @@ h2 {
   font-size: 13px;
 }
 
-.alert {
-  margin: 0;
-  padding: var(--s-sm) var(--s-md);
-  background: var(--danger-tint);
-  border: 1px solid var(--danger-line);
-  border-radius: var(--r-md);
-  color: var(--danger);
-  font-size: 13px;
-}
-
 .btn.block {
   width: 100%;
   padding: 10px var(--s-lg);
-}
-.btn:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 .pie {

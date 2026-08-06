@@ -177,9 +177,4 @@ onMounted(cargar);
 .cerradas summary { cursor: pointer; }
 .cerradas ul { list-style: none; padding: var(--s-md) 0 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-sm); }
 .cerradas li { display: flex; gap: var(--s-sm); align-items: center; }
-.alert {
-  margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint);
-  border: 1px solid var(--danger-line); border-radius: var(--r-md);
-  color: var(--danger); font-size: 13px;
-}
 </style>

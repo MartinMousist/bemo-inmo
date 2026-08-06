@@ -150,15 +150,24 @@ onMounted(cargar);
         </button>
       </UiEmpty>
 
-      <div v-else class="table-wrap">
-        <table>
+      <!-- SIN `.table-wrap`, a propósito: era incompatible con `table-sticky` y
+           le tapaba la primera fila (ver el comentario en `familia.css`). Lo
+           que el scroll horizontal resolvía —seis columnas en un teléfono— se
+           resuelve ocultando las tres secundarias abajo de 760px, que es lo
+           que ya hace Vencimientos. Scrollear de costado una tabla escondía la
+           columna Estado sin avisar; ocultarla es la misma pérdida, dicha. -->
+      <div v-else>
+        <!-- `table-sticky`: la cartera es larga y el encabezado tiene que
+             quedar a la vista. Se ancla abajo de la topbar, que también es
+             pegada; con `top: 0` quedaba tapado por ella. -->
+        <table class="table-sticky table-clicable">
           <thead>
             <tr>
               <th>Código</th>
               <th>Dirección</th>
-              <th>Tipo</th>
-              <th class="der">Amb.</th>
-              <th class="der">m²</th>
+              <th class="secundaria">Tipo</th>
+              <th class="der secundaria">Amb.</th>
+              <th class="der secundaria">m²</th>
               <th>Operaciones</th>
             </tr>
           </thead>
@@ -177,9 +186,9 @@ onMounted(cargar);
                   sin ubicar
                 </span>
               </td>
-              <td>{{ ETIQUETA_TIPO[p.tipo] ?? p.tipo }}</td>
-              <td class="der mono">{{ numero(p.ambientes) }}</td>
-              <td class="der mono">{{ numero(p.supTotal) }}</td>
+              <td class="secundaria">{{ ETIQUETA_TIPO[p.tipo] ?? p.tipo }}</td>
+              <td class="der mono secundaria">{{ numero(p.ambientes) }}</td>
+              <td class="der mono secundaria">{{ numero(p.supTotal) }}</td>
               <td>
                 <div class="ops">
                   <span v-for="o in p.operaciones" :key="o.id" class="op">
@@ -207,66 +216,13 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.filtros {
-  display: flex;
-  gap: var(--s-md);
-  flex-wrap: wrap;
-}
-.filtros > :first-child { flex: 1; min-width: 220px; }
 
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  background: var(--surface);
-}
-.segmented button {
-  font: inherit;
-  font-size: 13px;
-  padding: var(--s-sm) var(--s-lg);
-  border: none;
-  border-right: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.segmented button:last-child { border-right: none; }
-.segmented button.activo {
-  background: var(--accent-tint);
-  color: var(--accent);
-  font-weight: 500;
-}
-
-.card.sin-padding { padding: 0; overflow: hidden; }
-.table-wrap { overflow-x: auto; }
-
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  background: var(--surface);
-  padding: var(--s-md) var(--s-lg);
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
 td {
   padding: var(--s-md) var(--s-lg);
   border-bottom: 1px solid var(--line);
   color: var(--ink-2);
   vertical-align: middle;
 }
-tbody tr { cursor: pointer; transition: background var(--t-micro); }
-tbody tr:hover { background: var(--surface-2); }
-tbody tr:last-child td { border-bottom: none; }
-.der { text-align: right; }
 .cod { color: var(--muted); white-space: nowrap; }
 .dir { color: var(--ink); }
 .sin-ubi {
@@ -279,6 +235,20 @@ tbody tr:last-child td { border-bottom: none; }
 .precio { font-size: 12px; color: var(--ink); }
 .muted { color: var(--muted-2); font-size: 12px; }
 
+/* Tipo, ambientes y m² se van en pantalla angosta: son el detalle de la ficha,
+   no lo que se busca en un listado. Lo que queda —código, dirección y las
+   operaciones con su precio— es lo que identifica una propiedad. */
+@media (max-width: 760px) {
+  .secundaria { display: none; }
+
+  /* Y con tres columnas la de operaciones sigue sin entrar en 375px: tipo,
+     precio y estado en una línea son ~200px. Se apilan. Sin esto el chip de
+     estado quedaba cortado por el borde de la tarjeta, que ahora recorta con
+     `clip` y por lo tanto ni siquiera deja scrollear hasta él. */
+  .op { flex-wrap: wrap; row-gap: var(--s-2xs); }
+  td { padding: var(--s-md) var(--s-sm); }
+}
+
 .pager {
   display: flex;
   align-items: center;
@@ -287,16 +257,5 @@ tbody tr:last-child td { border-bottom: none; }
   font-size: 13px;
   color: var(--muted);
 }
-.btn.sm { padding: 4px var(--s-md); font-size: 12px; }
-.btn:disabled { opacity: 0.5; cursor: default; }
 
-.alert {
-  margin: 0;
-  padding: var(--s-sm) var(--s-md);
-  background: var(--danger-tint);
-  border: 1px solid var(--danger-line);
-  border-radius: var(--r-md);
-  color: var(--danger);
-  font-size: 13px;
-}
 </style>

@@ -87,15 +87,34 @@ const pasos = [
   },
 ];
 
-const planes = [
+/**
+ * Planes.
+ *
+ * Cada ítem lleva su estado, igual que `modulos`. La versión anterior listaba
+ * TODO con un tilde verde, incluidas cosas que el propio `docs/CONTINUAR.md`
+ * marca bloqueadas: el envío por WhatsApp necesita verificación de negocio, las
+ * campañas en Meta no están empezadas y la publicación directa a portales
+ * depende de convenios en trámite. Peor todavía, "Comisiones por punta" salía
+ * con tilde acá y como "En desarrollo" ocho secciones más arriba, en esta misma
+ * página.
+ *
+ * Es el error que el playbook §4 nombra con todas las letras: un tilde es una
+ * promesa. Lo que no existe dice "En desarrollo".
+ */
+const planes: Array<{
+  nombre: string;
+  para: string;
+  incluye: Array<{ texto: string; estado: Estado }>;
+  destacado: boolean;
+}> = [
   {
     nombre: 'Inicial',
     para: 'Hasta 3 usuarios · 100 propiedades',
     incluye: [
-      'Cartera, personas y oportunidades',
-      'Contratos y vencimientos',
-      'Ajustes por índice',
-      'Publicación a 1 portal',
+      { texto: 'Cartera, personas y oportunidades', estado: 'listo' },
+      { texto: 'Contratos y vencimientos', estado: 'pronto' },
+      { texto: 'Ajustes por índice', estado: 'pronto' },
+      { texto: 'Publicación a 1 portal', estado: 'pronto' },
     ],
     destacado: false,
   },
@@ -103,11 +122,11 @@ const planes = [
     nombre: 'Medio',
     para: 'Hasta 10 usuarios · 500 propiedades',
     incluye: [
-      'Todo lo de Inicial',
-      'Cobranzas y liquidación a propietarios',
-      'Pre-contratos y plantillas',
-      'Comisiones por punta · 3 portales',
-      'Recordatorios por WhatsApp',
+      { texto: 'Todo lo de Inicial', estado: 'listo' },
+      { texto: 'Cobranzas y liquidación a propietarios', estado: 'pronto' },
+      { texto: 'Pre-contratos y plantillas', estado: 'listo' },
+      { texto: 'Comisiones por punta · 3 portales', estado: 'pronto' },
+      { texto: 'Recordatorios por WhatsApp', estado: 'pronto' },
     ],
     destacado: true,
   },
@@ -115,10 +134,10 @@ const planes = [
     nombre: 'Pro',
     para: 'Usuarios y propiedades sin límite',
     incluye: [
-      'Todo lo de Medio',
-      'Multi-sucursal',
-      'Campañas en Meta',
-      'Todos los portales · API',
+      { texto: 'Todo lo de Medio', estado: 'listo' },
+      { texto: 'Multi-sucursal', estado: 'pronto' },
+      { texto: 'Campañas en Meta', estado: 'pronto' },
+      { texto: 'Todos los portales · API', estado: 'pronto' },
     ],
     destacado: false,
   },
@@ -216,15 +235,36 @@ const compacto = ref(false);
 function alScrollear() {
   compacto.value = window.scrollY > 8;
 }
-onMounted(() => window.addEventListener('scroll', alScrollear, { passive: true }));
-onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
+
+/**
+ * El fondo del documento mientras se mira la portada.
+ *
+ * `.landing` pinta el papel, pero el rebote de scroll de macOS e iOS pasa POR
+ * ARRIBA del elemento y muestra el fondo del `<html>`, que sigue siendo el
+ * `--bg` de la app. Arriba de todo eso es una franja crema pegada al hero
+ * oscuro, en cada gesto. Se pinta el documento en tinta mientras la portada
+ * está montada y se devuelve al salir.
+ */
+onMounted(() => {
+  window.addEventListener('scroll', alScrollear, { passive: true });
+  document.documentElement.classList.add('en-portada');
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', alScrollear);
+  document.documentElement.classList.remove('en-portada');
+});
 </script>
 
 <template>
   <div class="landing">
-    <header class="nav" :class="{ compacto }">
+    <!-- La barra arranca sobre el hero oscuro (texto claro, sin fondo) y al
+         scrollear cae sobre papel: cambia a fondo sólido y tinta oscura. Sin
+         eso, el mismo color de texto no se lee en los dos. -->
+    <header class="nav" :class="compacto ? 'compacto' : 'sobre-hero'">
       <div class="contenedor nav-inner">
-        <RouterLink to="/" class="marca"><BemoLogo :tam="32" con-nombre /></RouterLink>
+        <RouterLink to="/" class="marca">
+          <BemoLogo :tam="32" con-nombre :invertido="!compacto" />
+        </RouterLink>
         <nav class="enlaces">
           <a href="#problema">El problema</a>
           <a href="#modulos">Qué hace</a>
@@ -243,7 +283,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     <!-- ── Portada ── -->
     <section class="hero">
       <div class="contenedor hero-inner">
-        <div class="hero-texto">
+        <div class="hero-texto" v-revelar>
           <p class="kicker">Para inmobiliarias argentinas</p>
           <h1>El alquiler se administra solo.</h1>
           <p class="bajada">
@@ -261,8 +301,8 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 
         <!-- Muestra de producto: componentes reales del sistema de diseño, no
              una captura de pantalla ni un mockup de stock. -->
-        <div class="hero-muestra" aria-hidden="true">
-          <div class="muestra-card">
+        <div class="hero-muestra" aria-hidden="true" v-revelar="1">
+          <div class="muestra-card elevar">
             <div class="muestra-cab">
               <span class="mono cod">PROP-0001</span>
               <StatusChip texto="Disponible" tono="ok" />
@@ -281,7 +321,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
             </div>
           </div>
 
-          <div class="muestra-card chica">
+          <div class="muestra-card chica elevar">
             <p class="mini">Vencimientos</p>
             <ul class="venc">
               <li><span>Contrato · Godoy Cruz</span><StatusChip texto="En 12 d" tono="err" /></li>
@@ -294,9 +334,9 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     </section>
 
     <!-- ── El problema ── -->
-    <section id="problema" class="seccion alterna">
+    <section id="problema" class="seccion hundida">
       <div class="contenedor">
-        <div class="seccion-cab">
+        <div class="seccion-cab" v-revelar>
           <h2>Hoy esto lo hace una planilla y la memoria de alguien</h2>
           <p>
             Funciona hasta que son cuarenta contratos, o hasta que esa persona
@@ -305,7 +345,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
         </div>
 
         <ul class="contraste">
-          <li v-for="c in contraste" :key="c.hoy">
+          <li v-for="(c, i) in contraste" :key="c.hoy" v-revelar="i % 3">
             <div class="antes">
               <span class="et">Hoy</span>
               <p>{{ c.hoy }}</p>
@@ -322,7 +362,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     <!-- ── Módulos ── -->
     <section id="modulos" class="seccion">
       <div class="contenedor">
-        <div class="seccion-cab">
+        <div class="seccion-cab" v-revelar>
           <h2>Todo lo que hoy vive en una planilla</h2>
           <p>
             Lo que ya está disponible se puede usar hoy. Lo que dice “en desarrollo”
@@ -331,7 +371,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
         </div>
 
         <div class="grid3">
-          <article v-for="m in modulos" :key="m.titulo" class="modulo">
+          <article v-for="(m, i) in modulos" :key="m.titulo" class="modulo elevar" v-revelar="i % 3">
             <span class="icono"><UiIcon :nombre="m.icono" :tam="20" /></span>
             <div class="modulo-cab">
               <h3>{{ m.titulo }}</h3>
@@ -347,14 +387,14 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     </section>
 
     <!-- ── Cómo funciona ── -->
-    <section id="como" class="seccion alterna">
+    <section id="como" class="seccion hundida">
       <div class="contenedor">
-        <div class="seccion-cab">
+        <div class="seccion-cab" v-revelar>
           <h2>Cómo funciona</h2>
           <p>Cuatro pasos, y después el sistema trabaja sin que nadie lo empuje.</p>
         </div>
         <ol class="pasos">
-          <li v-for="p in pasos" :key="p.n">
+          <li v-for="(p, i) in pasos" :key="p.n" v-revelar="i % 3">
             <span class="mono n">{{ p.n }}</span>
             <h3>{{ p.titulo }}</h3>
             <p>{{ p.detalle }}</p>
@@ -366,7 +406,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     <!-- ── Garantías ── -->
     <section id="datos" class="seccion">
       <div class="contenedor">
-        <div class="seccion-cab">
+        <div class="seccion-cab" v-revelar>
           <h2>Estás manejando plata que no es tuya</h2>
           <p>
             Por eso las tres cosas que siguen no son opciones de configuración.
@@ -374,7 +414,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
         </div>
 
         <div class="grid3">
-          <article v-for="g in garantias" :key="g.titulo" class="modulo">
+          <article v-for="(g, i) in garantias" :key="g.titulo" class="modulo elevar" v-revelar="i % 3">
             <span class="icono"><UiIcon :nombre="g.icono" :tam="20" /></span>
             <div class="modulo-cab">
               <h3>{{ g.titulo }}</h3>
@@ -386,9 +426,9 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     </section>
 
     <!-- ── Planes ── -->
-    <section id="planes" class="seccion alterna">
+    <section id="planes" class="seccion tinta">
       <div class="contenedor">
-        <div class="seccion-cab">
+        <div class="seccion-cab" v-revelar>
           <h2>Planes</h2>
           <p>
             Los precios se definen con las primeras inmobiliarias. Escribinos y
@@ -399,19 +439,24 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 
         <div class="grid3 planes">
           <article
-            v-for="p in planes"
+            v-for="(p, i) in planes"
             :key="p.nombre"
-            class="plan"
+            class="plan elevar"
             :class="{ destacado: p.destacado }"
+            v-revelar="i % 3"
           >
-            <p v-if="p.destacado" class="etiqueta">El que eligen la mayoría</p>
+            <!-- Decía "El que eligen la mayoría". Todavía no hay una mayoría que
+                 haya elegido nada: la etapa 0 sigue abierta y no hay clientes.
+                 Inventar prueba social es el mismo error que inventar un precio. -->
+            <p v-if="p.destacado" class="etiqueta">El que recomendamos</p>
             <h3>{{ p.nombre }}</h3>
             <p class="para">{{ p.para }}</p>
             <p class="precio">A convenir</p>
             <ul>
-              <li v-for="i in p.incluye" :key="i">
-                <UiIcon nombre="tilde" :tam="15" />
-                <span>{{ i }}</span>
+              <li v-for="f in p.incluye" :key="f.texto" :class="{ pendiente: f.estado === 'pronto' }">
+                <UiIcon :nombre="f.estado === 'listo' ? 'tilde' : 'reloj'" :tam="15" />
+                <span>{{ f.texto }}</span>
+                <span v-if="f.estado === 'pronto'" class="pronto">En desarrollo</span>
               </li>
             </ul>
             <RouterLink class="btn" :class="{ secondary: !p.destacado }" to="/registrar">
@@ -420,7 +465,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
           </article>
         </div>
 
-        <div class="medida">
+        <div class="medida" v-revelar>
           <div>
             <h3>¿Red o franquicia?</h3>
             <p>
@@ -436,10 +481,10 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     <!-- ── Preguntas ── -->
     <section id="preguntas" class="seccion">
       <div class="contenedor angosto">
-        <div class="seccion-cab">
+        <div class="seccion-cab" v-revelar>
           <h2>Preguntas</h2>
         </div>
-        <div class="faq">
+        <div class="faq" v-revelar>
           <details v-for="p in preguntas" :key="p.q">
             <summary>{{ p.q }}<UiIcon nombre="chevron" :tam="16" /></summary>
             <p>{{ p.a }}</p>
@@ -450,7 +495,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 
     <!-- ── Cierre ── -->
     <section class="cierre">
-      <div class="contenedor cierre-inner">
+      <div class="contenedor cierre-inner" v-revelar>
         <div>
           <h2>Traé tres contratos y probá los números</h2>
           <p>
@@ -487,7 +532,33 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 <style scoped>
 .landing {
   background: var(--bg);
+  color: var(--ink);
+
+  /* El escalón de superficie de la portada es más hondo que el de la app, y es
+     UN token redefinido en este scope — la app no se entera.
+     Por qué hace falta: la app se mira de cerca y con datos densos, y ahí el
+     `--surface-3` de #efece5 alcanza (1,18:1 contra una tarjeta blanca). La
+     portada se mira de lejos y de un saque, y a esa distancia 1,18 se lee como
+     un solo campo plano. Con #e8e4db la tarjeta pasa a 1,27:1 y el borde entre
+     una sección y la siguiente a 1,24:1 (era 1,07).
+     El matiz importa tanto como la profundidad: la primera versión era un beige
+     cálido (#e8e4db), derivado cuando los neutros del producto eran papel
+     cálido. Con el acento teal quedaba una sección beige entre un hero verde y
+     un acento verde-azulado — tres familias de color en una pantalla. Éste
+     tiene la misma luminancia con el hue rotado al acento.
+     El límite lo puso el contraste, no el gusto: un escalón más hondo dejaba
+     `--muted` por debajo de AA. */
+  --surface-3: #e2e7e3;
 }
+/* En oscuro el escalón de la app ya separa bien (1,33:1): se devuelve el valor
+   del sistema en vez de inventar otro. */
+[data-theme='dark'] .landing {
+  --surface-3: #253634;
+}
+
+/* La portada usa su propia rampa de superficies. La de la app está calibrada
+   para tablas densas: --bg con tarjetas --surface encima da 1,04:1, que a
+   distancia de lectura alcanza y de lejos es invisible. Medido, no supuesto. */
 .contenedor {
   width: 100%;
   max-width: 1120px;
@@ -503,12 +574,29 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   position: sticky;
   top: 0;
   z-index: 40;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
   border-bottom: 1px solid transparent;
-  transition: border-color var(--t-short), background var(--t-short);
+  transition: background var(--t-short), border-color var(--t-short),
+    backdrop-filter var(--t-short);
+}
+/* Arriba de todo la barra flota sobre el hero oscuro: sin fondo y con texto
+   claro. Al scrollear cae sobre papel y tiene que invertirse entera — mismo
+   color de texto en los dos fondos no se lee en ninguno. */
+.nav.sobre-hero .enlaces a { color: rgba(255, 255, 255, .72); }
+.nav.sobre-hero .enlaces a:hover { color: #fff; }
+.nav.sobre-hero .btn.secondary {
+  background: rgba(255, 255, 255, .07);
+  color: #fff;
+  border-color: rgba(255, 255, 255, .26);
+}
+.nav.sobre-hero .btn.secondary:hover { background: rgba(255, 255, 255, .14); }
+.nav.sobre-hero .btn:not(.secondary) {
+  background: var(--sobre-tinta-accent);
+  border-color: var(--sobre-tinta-accent);
+  color: #24140a;
 }
 .nav.compacto {
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(10px);
   border-bottom-color: var(--line);
 }
 .nav-inner {
@@ -545,7 +633,39 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 
 /* ── Hero ── */
 .hero {
-  padding: clamp(48px, 8vw, 96px) 0;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  /* Sube por debajo de la barra para que la barra quede ENCIMA del oscuro; el
+     padding devuelve el alto que el margen negativo se comió. */
+  margin-top: -64px;
+  padding: calc(clamp(56px, 9vw, 108px) + 64px) 0 clamp(56px, 9vw, 108px);
+  background: var(--tinta);
+  color: var(--sobre-tinta);
+}
+/* Dos halos muy tenues, uno del naranja de marca y otro del azul. Es
+   iluminación, no decoración: no hay blobs ni formas. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(64% 52% at 6% 0%, rgba(79, 169, 177, .20), transparent 68%),
+    radial-gradient(52% 46% at 94% 100%, rgba(14, 124, 134, .16), transparent 72%);
+}
+/* Corte suave contra la sección de papel que sigue. */
+.hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 96px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, .16));
 }
 .hero-inner {
   display: grid;
@@ -559,19 +679,21 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--marca);
+  color: var(--sobre-tinta-accent);
 }
 .hero h1 {
-  font-size: clamp(34px, 5vw, 56px);
-  line-height: 1.08;
+  font-size: clamp(36px, 5.4vw, 60px);
+  line-height: 1.06;
   max-width: 13ch;
+  color: #fff;
+  letter-spacing: -0.02em;
 }
 .bajada {
   margin: var(--s-lg) 0 0;
   max-width: 46ch;
-  color: var(--muted);
-  font-size: 16px;
-  line-height: 1.6;
+  color: var(--sobre-tinta-2);
+  font-size: 17px;
+  line-height: 1.62;
 }
 .cta {
   display: flex;
@@ -582,20 +704,49 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 .letra-chica {
   margin: var(--s-md) 0 0;
   font-size: 12px;
-  color: var(--muted-2);
+  color: var(--sobre-tinta-2);
 }
+
+/* Sobre tinta el acento azul del producto no contrasta (2,1:1). El principal
+   pasa a ser el naranja de marca — que acá deja de ser sólo firma— y el
+   secundario, un contorno claro. */
+.cta .btn:not(.secondary) {
+  background: var(--sobre-tinta-accent);
+  border-color: var(--sobre-tinta-accent);
+  color: #24140a;
+  box-shadow: 0 6px 20px rgba(79, 169, 177, .26);
+}
+.cta .btn:not(.secondary):hover {
+  filter: brightness(1.06);
+  box-shadow: 0 10px 26px rgba(79, 169, 177, .34);
+}
+.cta .btn.secondary {
+  background: rgba(255, 255, 255, .06);
+  color: #fff;
+  border-color: rgba(255, 255, 255, .26);
+}
+.cta .btn.secondary:hover { background: rgba(255, 255, 255, .13); }
+.cta .btn { transition: filter var(--t-micro), box-shadow var(--t-short), background var(--t-micro); }
 
 .hero-muestra {
   display: flex;
   flex-direction: column;
   gap: var(--s-md);
 }
+/* Van en tinta-2 y no en `--surface`: sobre el hero oscuro una tarjeta blanca
+   pega un salto de brillo, y en tema oscuro `--surface` es un marrón cálido que
+   choca con el azul del fondo. */
 .muestra-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--tinta-2);
+  border: 1px solid var(--tinta-linea);
   border-radius: var(--r-lg);
-  box-shadow: var(--sh-2);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .34);
   padding: var(--s-lg);
+  color: var(--sobre-tinta);
+}
+.muestra-card.elevar:hover {
+  border-color: rgba(255, 255, 255, .2);
+  box-shadow: 0 26px 60px rgba(0, 0, 0, .42);
 }
 .muestra-cab {
   display: flex;
@@ -604,11 +755,11 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 }
 .cod {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--sobre-tinta-2);
 }
 .muestra-dir {
   margin: var(--s-sm) 0 var(--s-md);
-  color: var(--ink);
+  color: #fff;
   font-weight: 500;
 }
 .muestra-fila {
@@ -617,30 +768,31 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   gap: var(--s-md);
 }
 .monto {
-  font-size: 20px;
-  color: var(--ink);
+  font-size: 21px;
+  color: #fff;
 }
 .muestra-calculo {
   margin-top: var(--s-lg);
   padding-top: var(--s-md);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--tinta-linea);
 }
 .mini {
   margin: 0;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--muted-2);
+  color: var(--sobre-tinta-2);
 }
 .calculo {
   margin: var(--s-sm) 0 0;
   padding: var(--s-sm) var(--s-md);
-  background: var(--surface-2);
+  background: rgba(0, 0, 0, .26);
   border-radius: var(--r-sm);
   font-size: 12px;
   line-height: 1.7;
-  color: var(--ink-2);
+  color: var(--sobre-tinta);
 }
+.calculo strong { color: #fff; }
 .muestra-card.chica {
   padding: var(--s-md) var(--s-lg);
 }
@@ -655,33 +807,74 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   justify-content: space-between;
   gap: var(--s-md);
   padding: var(--s-sm) 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--tinta-linea);
   font-size: 13px;
-  color: var(--ink-2);
+  color: var(--sobre-tinta);
 }
 .venc li:last-child {
   border-bottom: none;
 }
 
 /* ── Secciones ── */
+/* Cuerpo de portada, no de app. 13-14px es la densidad que DESIGN.md §1 pide
+   para ver 30 contratos; una página que vende se lee de lejos.
+   NO va en `.landing`: el hero hereda los 14px del body y queda intacto. */
+.seccion,
+.cierre,
+.pie-pagina {
+  font-size: 16px;
+  line-height: 1.6;
+}
+/* familia.css tiene `.btn { font: inherit }`. Sin esto, subir el cuerpo a 16px
+   empuja los seis botones de la mitad de abajo de 14 a 16px sin tocarles el
+   padding, y quedan desproporcionados. */
+.seccion .btn,
+.cierre .btn,
+.pie-pagina .btn { font-size: 14px; }
+.seccion .btn.sm { font-size: 13px; }
+
 .seccion {
   padding: clamp(48px, 7vw, 88px) 0;
 }
-.seccion.alterna {
-  background: var(--surface-2);
+/* Se hunde en vez de aclararse: contra la tarjeta blanca pasa de 1,12:1 a
+   1,35:1, seis veces el salto anterior. */
+.seccion.hundida {
+  background: var(--surface-3);
   border-block: 1px solid var(--line);
 }
+
+/* La segunda ancla oscura de la página, espejo del hero. Sin halo: el hero ya
+   tiene la firma de iluminación, y repetirla acá —con el badge naranja y el
+   botón naranja al lado— convierte el bloque en el elemento más cálido de una
+   marca cuyo acento es azul. */
+.seccion.tinta {
+  background: var(--tinta);
+  border-block: 1px solid var(--tinta);
+  color: var(--sobre-tinta);
+}
+.seccion.tinta .seccion-cab h2 { color: #fff; }
+.seccion.tinta .seccion-cab p { color: var(--sobre-tinta); }
 .seccion-cab {
-  max-width: 56ch;
-  margin-bottom: var(--s-2xl);
+  max-width: 62ch;
+  margin-bottom: clamp(28px, 4vw, 48px);
 }
+/* General Sans a 600, que es el peso de título de la capa familia. La escala
+   grande es de portada: la de la app llega hasta 24px (h1) y acá el titular de
+   sección tiene que sostener una página que se mira de lejos. */
 .seccion-cab h2 {
-  font-size: clamp(24px, 3vw, 32px);
+  font-size: clamp(30px, 4vw, 42px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.022em;
+  max-width: 20ch;
 }
+/* Es contenido, no una nota al pie: sube de 14px --muted a 18px --ink-2. */
 .seccion-cab p {
-  margin: var(--s-md) 0 0;
-  color: var(--muted);
+  margin: var(--s-lg) 0 0;
+  max-width: 54ch;
+  font-size: 18px;
   line-height: 1.6;
+  color: var(--ink-2);
 }
 
 .grid3 {
@@ -702,7 +895,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   border-radius: var(--r-md);
   background: var(--marca-suave);
   border: 1px solid var(--marca-linea);
-  color: var(--marca-fuerte);
+  color: var(--accent);
 }
 .modulo-cab {
   display: flex;
@@ -712,13 +905,13 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   flex-wrap: wrap;
 }
 .modulo h3 {
-  font-size: 16px;
+  font-size: 18px;
 }
 .modulo p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.62;
 }
 
 .pasos {
@@ -730,112 +923,209 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   gap: var(--s-lg);
   counter-reset: paso;
 }
+/* Dos fallos de contraste que ya existían y nadie vio a ojo: el numeral en
+   --marca sobre --surface-2 daba 3,06:1 (mínimo 4,5) y la regla de 2px en
+   --marca-linea daba 1,38:1 (mínimo 3 para un objeto gráfico). */
 .pasos li {
   padding-top: var(--s-lg);
-  border-top: 2px solid var(--marca-linea);
+  border-top: 2px solid var(--accent);
 }
 .pasos .n {
-  font-size: 12px;
-  color: var(--marca);
+  font-size: 22px;
   font-weight: 500;
+  letter-spacing: -0.02em;
+  /* `--accent` sobre `--surface-2` da 4,46 — a cuatro centésimas de AA. Ésta es
+     justo la variante de texto que existe para eso: 5,83. */
+  color: var(--accent-ink);
 }
 .pasos h3 {
   margin: var(--s-sm) 0 var(--s-xs);
-  font-size: 16px;
+  font-size: 18px;
 }
 .pasos p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.62;
 }
 
 /* ── Planes ── */
+/* ── Planes ──────────────────────────────────────────────────────────────
+   Cuatro defectos con una sola raíz: la tarjeta está construida como si
+   tuviera un precio, y no lo tiene.
+     1. `.etiqueta` era un <p> en el flujo, así que sólo existía en la del
+        medio y empujaba todo ~24px: las tres nunca alineaban.
+     2. "A convenir" en serif 24px tinta, en el lugar de un precio, tres
+        veces: no dice una mentira, la dibuja.
+     3. Tildes en --success. El verde es un semántico de ESTADO (§5) y acá no
+        informaba ningún estado: decoración con color de sistema.
+     4. `flex: 1` en la lista: el hueco entre planes de 4 y 5 ítems quedaba
+        ADENTRO de la lista.                                                */
+.planes { padding-top: 13px; align-items: stretch; }
+
 .plan {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--s-md);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--tinta-3);
+  border: 1px solid var(--tinta-linea-2);
   border-radius: var(--r-lg);
   padding: var(--s-xl);
+  color: var(--sobre-tinta);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .28);
 }
 .plan.destacado {
-  border-color: var(--accent-line);
-  box-shadow: var(--sh-2);
+  border-color: var(--sobre-tinta-accent);
+  box-shadow: 0 22px 56px rgba(0, 0, 0, .38);
 }
+/* `.elevar` de la familia levanta con --sh-3 y --accent-line: sobre oscuro la
+   sombra no se ve y el azul claro desentona. */
+.plan.elevar:hover {
+  border-color: var(--sobre-tinta-accent);
+  box-shadow: 0 28px 64px rgba(0, 0, 0, .44);
+}
+
+/* Sale del flujo y monta el borde superior: deja de empujar. */
 .etiqueta {
+  position: absolute;
+  top: 0;
+  left: var(--s-xl);
+  transform: translateY(-50%);
   margin: 0;
-  align-self: flex-start;
-  padding: 2px var(--s-sm);
+  padding: 3px var(--s-sm);
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 0;
   border-radius: var(--r-sm);
-  background: var(--accent-tint);
-  border: 1px solid var(--accent-line);
-  color: var(--accent);
+  background: var(--sobre-tinta-accent);
+  color: var(--sobre-tinta-on-accent);
+  white-space: nowrap;
 }
+
 .plan h3 {
-  font-size: 20px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #fff;
 }
+
+/* El lugar del precio lo ocupa el número que SÍ existe. En mono porque
+   DESIGN.md §1 reserva la mono para cifras, y es lo único que diferencia
+   un plan de otro. */
 .para {
   margin: 0;
-  font-size: 12px;
-  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--sobre-tinta);
 }
-.precio {
-  margin: 0;
-  font-family: var(--font-title);
-  font-size: 24px;
-  color: var(--ink);
-}
+
 .plan ul {
   list-style: none;
-  margin: 0;
+  margin: var(--s-sm) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--s-sm);
-  flex: 1;
+  flex: 0 0 auto;
 }
 .plan li {
   display: flex;
   gap: var(--s-sm);
   align-items: flex-start;
-  font-size: 13px;
-  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--sobre-tinta);
 }
 .plan li svg {
   flex: none;
-  margin-top: 2px;
-  color: var(--success);
+  margin-top: 3px;
+  color: var(--sobre-tinta-2);
+}
+/* Lo que todavía no existe se apaga y se dice. No se oculta: que el plan liste
+   hacia dónde va es información útil — mentir sobre cuándo, no. */
+/* Sobre la tarjeta oscura, --muted daba 2,14:1 y --muted-2 2,41:1 — y son 11
+   de los 13 ítems de los tres planes. Van al gris de tinta. */
+.plan li.pendiente { color: var(--sobre-tinta-2); }
+.plan li.pendiente svg { color: var(--sobre-tinta-2); }
+.plan .pronto {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sobre-tinta-2);
+  white-space: nowrap;
+}
+.plan::after {
+  content: '';
+  order: 1;
+  margin-top: auto;
+  height: 1px;
+  background: var(--tinta-linea-2);
+}
+/* "A convenir" baja al pie y cambia de registro: deja de parecer un precio
+   porque deja de estar donde va un precio. */
+.precio {
+  order: 2;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sobre-tinta-2);
 }
 .plan .btn {
+  order: 3;
   text-align: center;
   text-decoration: none;
+  background: transparent;
+  border-color: var(--tinta-linea-2);
+  color: #fff;
 }
+.plan .btn:hover { background: rgba(255, 255, 255, .08); border-color: #fff; }
+.plan.destacado .btn {
+  background: var(--sobre-tinta-accent);
+  border-color: var(--sobre-tinta-accent);
+  color: var(--sobre-tinta-on-accent);
+}
+.plan.destacado .btn:hover { filter: brightness(1.06); }
 
 .medida {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-xl);
-  margin-top: var(--s-lg);
+  margin-top: var(--s-2xl);
   padding: var(--s-xl);
-  background: var(--surface);
-  border: 1px dashed var(--line-strong);
+  background: transparent;
+  border: 1px dashed var(--tinta-linea-2);
   border-radius: var(--r-lg);
+  color: var(--sobre-tinta);
   flex-wrap: wrap;
 }
 .medida h3 {
-  font-size: 17px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
 }
 .medida p {
   margin: var(--s-xs) 0 0;
   max-width: 56ch;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--sobre-tinta-2);
+  font-size: 15px;
 }
+.medida .btn.secondary {
+  background: rgba(255, 255, 255, .06);
+  border-color: var(--tinta-linea-2);
+  color: #fff;
+}
+.medida .btn.secondary:hover { background: rgba(255, 255, 255, .13); border-color: #fff; }
 .medida .btn {
   text-decoration: none;
   white-space: nowrap;
@@ -895,15 +1185,25 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 }
 .contraste .antes,
 .contraste .despues {
-  padding: var(--s-lg);
+  padding: var(--s-lg) var(--s-xl);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface);
 }
 /* El "hoy" va apagado y el "acá" con el acento. Sin rojo en el lado del
-   problema: la planilla del lector no es un error, es lo que había. */
-.contraste .antes { background: transparent; border-style: dashed; }
-.contraste .despues { border-color: var(--accent-line); }
+   problema: la planilla del lector no es un error, es lo que había.
+   El acento deja de ser un borde de 1px a 1,42:1 —que nadie veía— y pasa a ser
+   una espina de 3px que corre por toda la columna: 11,5:1 sobre blanco, y es
+   la única cosa azul de la mitad clara de la página. */
+.contraste .antes {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+.contraste .despues {
+  border-color: var(--line);
+  border-left: 3px solid var(--accent);
+}
 
 .contraste .et {
   display: block;
@@ -913,21 +1213,22 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
   letter-spacing: .06em;
   margin-bottom: var(--s-xs);
 }
-.contraste .antes .et { color: var(--muted-2); }
+/* `--muted-2` a 10px sobre la superficie honda da 4,22:1. Este rótulo es lo
+   único que identifica la columna, así que sube a `--muted`: 4,63. */
+.contraste .antes .et { color: var(--muted); }
 .contraste .despues .et { color: var(--accent); }
 .contraste p {
   margin: 0;
-  font-size: 14px;
   line-height: 1.55;
 }
-.contraste .antes p { color: var(--muted); }
-.contraste .despues p { color: var(--ink-2); }
+.contraste .antes p { color: var(--muted); font-size: 16px; }
+.contraste .despues p { color: var(--ink-2); font-size: 17px; }
 
 /* ── Cierre ── */
 .cierre {
   padding: clamp(40px, 6vw, 72px) 0;
-  background: var(--surface-2);
-  border-top: 1px solid var(--line);
+  background: var(--surface-3);
+  border-top: 3px solid var(--accent);
 }
 .cierre-inner {
   display: flex;
@@ -943,7 +1244,8 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
 .cierre p {
   margin: var(--s-md) 0 0;
   max-width: 52ch;
-  color: var(--muted);
+  color: var(--ink-2);
+  font-size: 17px;
   line-height: 1.6;
 }
 .cierre-cta { display: flex; gap: var(--s-md); flex-wrap: wrap; }
@@ -1006,6 +1308,33 @@ onBeforeUnmount(() => window.removeEventListener('scroll', alScrollear));
     grid-template-columns: 1fr;
     gap: var(--s-xs);
   }
+  /* Apiladas, el badge ya no empuja a nadie, pero cae entre dos tarjetas y
+     necesita su propio aire. */
+  .planes { row-gap: var(--s-xl); }
+}
+
+/* Los bloques oscuros llevan `#fff` literal, que ningún token puede
+   neutralizar: sin esto, Planes se imprime blanco sobre blanco. */
+@media print {
+  .seccion.tinta,
+  .plan,
+  .medida {
+    background: #fff;
+    color: #000;
+    box-shadow: none;
+    border-color: #999;
+  }
+  .seccion.tinta .seccion-cab h2,
+  .seccion.tinta .seccion-cab p,
+  .plan h3,
+  .para,
+  .plan li,
+  .medida h3,
+  .medida p,
+  .precio { color: #000; }
+  .etiqueta { background: #fff; color: #000; border: 1px solid #999; }
+  .hero { background: #fff; color: #000; }
+  .hero h1, .muestra-dir, .monto { color: #000; }
 }
 
 @media (prefers-reduced-motion: reduce) {

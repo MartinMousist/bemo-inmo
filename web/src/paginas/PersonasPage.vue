@@ -133,18 +133,6 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.card.sin-padding { padding: 0; overflow: hidden; }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th {
-  text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.04em; color: var(--muted); padding: var(--s-md) var(--s-lg);
-  border-bottom: 1px solid var(--line); white-space: nowrap;
-}
-td { padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); color: var(--ink-2); }
-tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: var(--surface-2); }
-.fuerte { color: var(--ink); }
 .contacto { display: flex; flex-direction: column; gap: 2px; }
 .chico { font-size: 12px; color: var(--muted); }
 .roles { display: flex; gap: var(--s-xs); flex-wrap: wrap; }
@@ -156,9 +144,4 @@ tbody tr:hover { background: var(--surface-2); }
   background: var(--surface); color: var(--ink);
 }
 .nota { margin: 0; font-size: 13px; color: var(--muted); }
-.alert {
-  margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint);
-  border: 1px solid var(--danger-line); border-radius: var(--r-md);
-  color: var(--danger); font-size: 13px;
-}
 </style>

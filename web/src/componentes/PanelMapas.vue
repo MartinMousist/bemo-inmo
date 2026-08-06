@@ -164,13 +164,6 @@ onMounted(cargar);
 .panel.roto { background: var(--danger-tint); border-color: var(--danger-line); }
 
 header { display: flex; align-items: center; gap: var(--s-md); }
-h2 {
-  margin: 0;
-  font-family: var(--font-title);
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--ink);
-}
 
 .detalle, .como, .pendientes {
   margin: 0;
@@ -201,6 +194,5 @@ h2 {
 .fallidas li { display: flex; gap: var(--s-md); flex-wrap: wrap; align-items: baseline; }
 .fallidas a { display: flex; gap: var(--s-sm); align-items: baseline; color: var(--ink); text-decoration: none; }
 .fallidas a:hover { text-decoration: underline; }
-.cod { color: var(--muted); }
 .motivo { color: var(--muted); font-size: 12px; }
 </style>

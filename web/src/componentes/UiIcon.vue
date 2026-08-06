@@ -29,6 +29,12 @@ const PATHS: Record<string, string> = {
   monitor: 'M3 5a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM8 20h8M12 16v4',
   chevron: 'M6 9l6 6 6-6',
   tilde: 'M20 6 9 17l-5-5',
+  // Para "En desarrollo": lo que todavía no está, se marca con tiempo, no con
+  // una cruz. Una cruz dice "no lo vas a tener".
+  reloj: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
+  // Plegar/desplegar la barra lateral: el marco de la pantalla con su columna.
+  // Dice qué hace por su forma, que es más que lo que dice un chevron suelto.
+  panel: 'M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1M9.5 4v16',
   grafico: 'M3 3v18h18M7 15l3-4 3 3 5-7',
   campana: 'M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 0 1-3.4 0',
 };

@@ -123,7 +123,9 @@ onMounted(cargar);
 
     <div class="filtros">
       <SearchInput v-model="q" placeholder="Título del aviso, dirección o código…" />
-      <div class="segmented">
+      <!-- `scroll`: son muchos portales y en pantalla angosta la barra scrollea
+           en vez de empujar el ancho de la página. -->
+      <div class="segmented scroll">
         <button type="button" :class="{ activo: filtroPortal === '' }" @click="filtroPortal = ''">
           Todos
         </button>
@@ -190,12 +192,6 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.filtros { display: flex; gap: var(--s-md); flex-wrap: wrap; }
-.filtros > :first-child { flex: 1; min-width: 220px; }
-.segmented { display: flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow-x: auto; background: var(--surface); }
-.segmented button { font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-lg); border: none; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
-.segmented button:last-child { border-right: none; }
-.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
 
 .feed { display: flex; align-items: center; justify-content: space-between; gap: var(--s-lg); flex-wrap: wrap; }
 .nota { margin: var(--s-xs) 0 0; font-size: 12px; color: var(--muted); max-width: 60ch; }
@@ -204,7 +200,6 @@ onMounted(cargar);
 .pub header { display: flex; align-items: center; gap: var(--s-md); padding: var(--s-md) var(--s-lg); cursor: pointer; flex-wrap: wrap; }
 .pub header:hover { background: var(--surface-2); }
 .quien { display: flex; flex-direction: column; margin-right: auto; }
-.cod { font-size: 11px; color: var(--muted); }
 .dir { color: var(--ink); font-size: 13px; }
 .modo { font-size: 11px; color: var(--muted-2); }
 .sync { font-size: 11px; color: var(--muted-2); }
@@ -212,6 +207,4 @@ onMounted(cargar);
 .faltan { margin-bottom: var(--s-md); padding: var(--s-sm) var(--s-md); background: var(--warning-tint); border: 1px solid var(--warning-line); border-radius: var(--r-sm); color: var(--warning); font-size: 12px; }
 .texto { margin: 0; padding: var(--s-md); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 12px; line-height: 1.7; white-space: pre-wrap; color: var(--ink-2); max-height: 320px; overflow: auto; }
 .acciones { display: flex; gap: var(--s-sm); margin-top: var(--s-md); }
-.btn.sm { padding: 4px var(--s-md); font-size: 12px; }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

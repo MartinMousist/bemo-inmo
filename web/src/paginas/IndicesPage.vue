@@ -163,19 +163,9 @@ onMounted(cargar);
 .nombre { font-weight: 500; color: var(--ink); font-size: 13px; }
 .hasta { font-size: 12px; color: var(--muted); }
 .cuenta { font-size: 11px; color: var(--muted-2); }
-.campo { display: flex; flex-direction: column; gap: var(--s-xs); }
-.campo > span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .campo input, .campo select { font: inherit; padding: var(--s-sm) var(--s-md); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: var(--ink); }
-.nota { margin: 0; font-size: 12px; color: var(--muted-2); }
-.card.sin-padding { padding: 0; overflow: hidden; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); }
 td { padding: var(--s-sm) var(--s-lg); border-bottom: 1px solid var(--line); color: var(--ink-2); }
-tbody tr:last-child td { border-bottom: none; }
-.der { text-align: right; }
-.fuerte { color: var(--ink); }
 .fuente { color: var(--muted-2); font-size: 12px; }
 .vacio { padding: var(--s-2xl); text-align: center; color: var(--muted); }
 .ok { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--success-tint); border: 1px solid var(--success-line); border-radius: var(--r-md); color: var(--success); font-size: 13px; }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

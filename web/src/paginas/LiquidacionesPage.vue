@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
@@ -25,9 +26,24 @@ const items = ref<Liquidacion[]>([]);
 const total = ref(0);
 const paginas = ref(1);
 const pagina = ref(1);
-const mes = ref(new Date().toISOString().slice(0, 7));
+/**
+ * El período y el estado salen de la URL si vienen, y del mes corriente si no.
+ *
+ * Es lo que hace que «Liquidaciones sin cerrar: 2» del inicio caiga donde
+ * están esos dos borradores. Se leen una vez al montar y después mandan los
+ * controles: si el usuario cambia el mes, la query deja de ser la verdad.
+ */
+const ruta = useRoute();
+const qsPeriodo = String(ruta.query.periodo ?? '');
+const mes = ref(
+  /^\d{4}-\d{2}$/.test(qsPeriodo) ? qsPeriodo : new Date().toISOString().slice(0, 7),
+);
 const q = ref('');
-const filtroEstado = ref('');
+const filtroEstado = ref(
+  ['borrador', 'cerrada', 'pagada'].includes(String(ruta.query.estado))
+    ? String(ruta.query.estado)
+    : '',
+);
 const cargando = ref(true);
 const error = ref('');
 const abierta = ref<string | null>(null);
@@ -207,12 +223,6 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.filtros { display: flex; gap: var(--s-md); flex-wrap: wrap; }
-.filtros > :first-child { flex: 1; min-width: 220px; }
-.segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow: hidden; background: var(--surface); }
-.segmented button { font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-lg); border: none; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
-.segmented button:last-child { border-right: none; }
-.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
 
 .mes { font: inherit; padding: var(--s-sm) var(--s-md); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: var(--ink); }
 .liq { padding: 0; overflow: hidden; }
@@ -225,13 +235,8 @@ onMounted(cargar);
 .et { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); }
 .totales .mono { font-size: 13px; color: var(--ink-2); }
 .neto .mono { font-size: 16px; color: var(--ink); font-weight: 500; }
-.neg { color: var(--danger); }
 .detalle { border-top: 1px solid var(--line); background: var(--surface-2); padding: var(--s-lg); }
 .detalle table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .detalle td { padding: var(--s-xs) 0; color: var(--ink-2); }
-.der { text-align: right; }
 .acciones { margin-top: var(--s-md); }
-.btn.sm { padding: 4px var(--s-md); font-size: 12px; }
-.nota { font-size: 12px; color: var(--muted-2); }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

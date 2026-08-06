@@ -134,6 +134,12 @@ async function salir() {
   border-color: var(--line);
 }
 
+/* `--accent-ink`, no `--accent`. Es literalmente el caso que `tokens.css`
+   documenta como el motivo por el que existe la variante —«medido, `--accent`
+   sobre `--accent-tint` da 4,25:1»— y este avatar era el que se había quedado
+   con el color base: 4,25 a 11px, por debajo de AA. Con `-ink`, 5,83.
+   La definición de la capa familia ya lo hacía bien; esta copia local es la que
+   se desincronizó. */
 .avatar {
   display: inline-flex;
   align-items: center;
@@ -143,7 +149,7 @@ async function salir() {
   border-radius: 50%;
   background: var(--accent-tint);
   border: 1px solid var(--accent-line);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 11px;
   font-weight: 600;
 }

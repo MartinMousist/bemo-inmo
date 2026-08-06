@@ -99,6 +99,16 @@ export interface Inicio {
   liquidacionesBorrador: {
     total: number;
     neto: Importe[];
+    /**
+     * El período del borrador más viejo, para que el enlace de la pantalla
+     * lleve hasta él.
+     *
+     * Sin esto el contador decía "2" y el link caía en Liquidaciones, que abre
+     * en el mes corriente: "Sin liquidaciones para ago/26", con los dos
+     * borradores en enero. Un contador no puede llevar a una pantalla que
+     * muestre menos de lo que el contador prometió.
+     */
+    periodoMasViejo: string | null;
   } | null;
   oportunidadesFrias: {
     total: number;
@@ -363,17 +373,25 @@ export class InicioService {
   private async liquidacionesBorrador(
     ej: Ejecutor,
   ): Promise<NonNullable<Inicio['liquidacionesBorrador']>> {
-    const { rows } = await ej.query<{ total: string; moneda: string; neto: string }>(
-      `SELECT count(*)::text AS total, moneda, sum(total_neto)::text AS neto
+    const { rows } = await ej.query<{
+      total: string; moneda: string; neto: string; mas_viejo: string | null;
+    }>(
+      `SELECT count(*)::text AS total, moneda, sum(total_neto)::text AS neto,
+              min(periodo) AS mas_viejo
          FROM liquidacion
         WHERE estado = 'borrador'
         GROUP BY moneda
         ORDER BY moneda`,
     );
 
+    // El mínimo de los mínimos: el `min(periodo)` viene por moneda y el enlace
+    // es uno solo.
+    const periodos = rows.map((r) => r.mas_viejo).filter((p): p is string => !!p).map(iso);
+
     return {
       total: rows.reduce((a, r) => a + Number(r.total), 0),
       neto: aImportes(rows.map((r) => ({ moneda: r.moneda, monto: r.neto }))),
+      periodoMasViejo: periodos.length ? periodos.sort()[0] : null,
     };
   }
 

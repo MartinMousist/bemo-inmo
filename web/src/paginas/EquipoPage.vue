@@ -132,10 +132,6 @@ onMounted(cargar);
   margin: var(--s-xs) 0 0;
   color: var(--muted);
 }
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .invitar input,
 .invitar select {
   font: inherit;
@@ -148,11 +144,6 @@ onMounted(cargar);
 .invitar input {
   flex: 1;
 }
-.nota {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted-2);
-}
 .enlace {
   display: block;
   padding: var(--s-sm);
@@ -161,10 +152,6 @@ onMounted(cargar);
   border-radius: var(--r-sm);
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
 }
 th {
   text-align: left;
@@ -194,14 +181,5 @@ tr:last-child td {
   to {
     background-position: -200% 0;
   }
-}
-.alert {
-  margin: 0;
-  padding: var(--s-sm) var(--s-md);
-  background: var(--danger-tint);
-  border: 1px solid var(--danger-line);
-  border-radius: var(--r-md);
-  color: var(--danger);
-  font-size: 13px;
 }
 </style>

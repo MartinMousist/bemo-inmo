@@ -103,9 +103,9 @@ onMounted(cargar);
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
     <div class="filtros">
-      <label class="campo"><span>Desde</span><input v-model="desde" type="date" /></label>
-      <label class="campo"><span>Hasta</span><input v-model="hasta" type="date" /></label>
-      <label class="campo"><span>Medio</span>
+      <label class="campo suave"><span>Desde</span><input v-model="desde" type="date" /></label>
+      <label class="campo suave"><span>Hasta</span><input v-model="hasta" type="date" /></label>
+      <label class="campo suave"><span>Medio</span>
         <select v-model="medio">
           <option value="">Todos</option>
           <option v-for="(t, k) in MEDIO" :key="k" :value="k">{{ t }}</option>
@@ -144,7 +144,7 @@ onMounted(cargar);
 
       <div v-else class="card sin-padding">
         <div class="table-wrap">
-          <table>
+          <table class="table-clicable">
             <thead>
               <tr>
                 <th>Fecha</th><th>Propiedad</th><th>Inquilino</th><th>Período</th>
@@ -190,13 +190,8 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow: hidden; background: var(--surface); }
-.segmented button { font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-lg); border: none; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
-.segmented button:last-child { border-right: none; }
-.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
 
 .filtros { display: flex; gap: var(--s-lg); flex-wrap: wrap; align-items: flex-end; }
-.campo { display: flex; flex-direction: column; gap: var(--s-xs); font-size: 12px; color: var(--muted); }
 .campo input, .campo select {
   font: inherit; font-size: 13px;
   padding: var(--s-sm) var(--s-md);
@@ -218,21 +213,11 @@ onMounted(cargar);
 .medios li { display: flex; align-items: center; gap: var(--s-sm); font-size: 13px; color: var(--ink-2); }
 .medios .ops { font-size: 11px; color: var(--muted-2); }
 
-.card.sin-padding { padding: 0; overflow: hidden; }
-.table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
-th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); white-space: nowrap; }
 td { padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); color: var(--ink-2); vertical-align: top; }
-tbody tr { cursor: pointer; transition: background var(--t-micro); }
-tbody tr:hover { background: var(--surface-2); }
-tbody tr:last-child td { border-bottom: none; }
-.der { text-align: right; }
-.fuerte { color: var(--ink); }
-.cod { display: block; font-size: 11px; color: var(--muted); }
 .dir { color: var(--ink); }
 .imput { display: block; margin-top: 2px; font-size: 10px; color: var(--warning); }
 .comp, .quien { color: var(--muted); font-size: 12px; }
 
 .nota { margin: 0; font-size: 12px; color: var(--muted); }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

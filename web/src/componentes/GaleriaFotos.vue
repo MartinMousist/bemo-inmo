@@ -138,8 +138,6 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-h2 { font-size: 15px; }
-.row.entre { justify-content: space-between; }
 .btn.sm { padding: 4px var(--s-md); font-size: 12px; cursor: pointer; }
 .btn input { display: none; }
 .grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--s-sm); }
@@ -153,5 +151,4 @@ figcaption { display: flex; align-items: center; justify-content: space-between;
 .vacio, .aviso { margin: 0; font-size: 13px; color: var(--muted); }
 .aviso { padding: var(--s-sm) var(--s-md); background: var(--warning-tint); border: 1px solid var(--warning-line); border-radius: var(--r-md); color: var(--warning); }
 .sk { height: 100px; border-radius: var(--r-md); background: var(--surface-2); }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

@@ -62,12 +62,18 @@ withDefaults(
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
+/* `--marca-fuerte` y no `--marca`: el naranja de marca es color de FIRMA —el
+   cuadrado del isotipo, donde es fondo y no texto— y como texto sobre la
+   sidebar blanca da **3,43:1** a 14px, por debajo de AA. Es el mismo hallazgo
+   que la portada ya había tenido con el naranja sobre tinta, y que allá se
+   resolvió con un tono propio en vez de bajar la exigencia.
+   `--marca-fuerte` mide 4,65 en claro y 8,20 en oscuro. */
 .vertical {
   font-family: var(--font-ui);
   font-weight: 500;
   font-size: 0.78em;
   letter-spacing: 0.06em;
-  color: var(--marca);
+  color: var(--marca-fuerte);
   margin-left: 0.4em;
   vertical-align: 1px;
 }

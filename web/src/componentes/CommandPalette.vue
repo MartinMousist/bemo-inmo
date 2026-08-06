@@ -151,7 +151,7 @@ function indiceGlobal(seccion: string, pos: number): number {
 <template>
   <div v-if="abierta" class="velo" @click.self="abierta = false">
     <div class="paleta" role="dialog" aria-modal="true" aria-label="Buscar">
-      <div class="campo">
+      <div class="paleta-input">
         <UiIcon nombre="buscar" />
         <input
           ref="campo"
@@ -163,14 +163,14 @@ function indiceGlobal(seccion: string, pos: number): number {
         <kbd>esc</kbd>
       </div>
 
-      <div class="lista">
+      <div class="paleta-lista">
         <template v-for="[seccion, items] in porSeccion" :key="seccion">
-          <p class="seccion">{{ seccion }}</p>
+          <p class="paleta-grupo">{{ seccion }}</p>
           <button
             v-for="(i, pos) in items"
             :key="i.id"
             type="button"
-            class="item"
+            class="paleta-item"
             :class="{ activo: indiceGlobal(seccion, pos) === seleccion }"
             @click="ejecutar(i)"
             @mouseenter="seleccion = indiceGlobal(seccion, pos)"
@@ -188,98 +188,14 @@ function indiceGlobal(seccion: string, pos: number): number {
 </template>
 
 <style scoped>
-.velo {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(26, 24, 21, 0.4);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 12vh;
-}
+/* El velo, la caja, el buscador, los grupos y los ítems son capa familia
+   (`.velo`, `.paleta`, `.paleta-input`, `.paleta-grupo`, `.paleta-item`).
+   Acá queda sólo lo propio de la paleta. */
 
-.paleta {
-  width: min(600px, calc(100vw - 32px));
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-2);
-  overflow: hidden;
-}
+/* Más alta que un modal y anclada arriba: se abre con ⌘K mientras se escribe,
+   y el ojo ya está en el borde superior. */
+.paleta-lista { max-height: 52vh; }
 
-.campo {
-  display: flex;
-  align-items: center;
-  gap: var(--s-md);
-  padding: var(--s-md) var(--s-lg);
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-}
-.campo input {
-  flex: 1;
-  font: inherit;
-  font-size: 15px;
-  border: none;
-  background: transparent;
-  color: var(--ink);
-}
-.campo input:focus {
-  outline: none;
-  box-shadow: none;
-}
-.campo kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 2px 6px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--muted-2);
-}
-
-.lista {
-  max-height: 52vh;
-  overflow-y: auto;
-  padding: var(--s-sm);
-}
-
-.seccion {
-  margin: var(--s-sm) var(--s-sm) var(--s-xs);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted-2);
-}
-
-.item {
-  display: flex;
-  align-items: center;
-  gap: var(--s-md);
-  width: 100%;
-  padding: var(--s-sm) var(--s-md);
-  border: none;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--ink-2);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.item.activo {
-  background: var(--accent-tint);
-  color: var(--accent);
-}
-.titulo {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.detalle {
-  font-size: 12px;
-  color: var(--muted-2);
-}
 .vacio {
   padding: var(--s-xl);
   text-align: center;

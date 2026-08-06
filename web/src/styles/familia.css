@@ -1,0 +1,1364 @@
+/* ============================================================================
+   CAPA FAMILIA — BEMO
+   ----------------------------------------------------------------------------
+   La forma de los componentes, compartida por todos los productos del grupo:
+   altura de botón, densidad de tabla, chips, modales, sombras, foco.
+
+   `tokens.css` dice DE QUÉ COLOR. Este archivo dice QUÉ FORMA. Es la división
+   que DESIGN.md §0 promete y hasta hoy no existía: la capa familia estaba
+   repartida en 2830 líneas de `<style scoped>` a lo largo de 59 archivos, con
+   `.alert` copiado en 27 pantallas y `.campo` en 13. Cada copia era una
+   oportunidad de que dos pantallas del mismo producto no se parecieran.
+
+   Reconstruida a partir de `apps/web/src/design.css` de Bemo MED, que es donde
+   esta capa ya estaba resuelta. Lo que se trajo es la ESTRUCTURA —qué
+   componentes existen y con qué anatomía—, no los valores: los colores salen de
+   los tokens de INMO y las reglas anti-slop de DESIGN.md §6 mandan por encima
+   del original. Las tres divergencias deliberadas están anotadas donde ocurren.
+
+   Ningún selector de acá define un color literal. Si hace falta uno nuevo, va a
+   `tokens.css`.
+
+   Orden: base · tipografía · botones · formularios · superficies · tablas ·
+          chips · shell · overlays · feedback · navegación · utilidades ·
+          animaciones · responsive
+   ========================================================================== */
+
+/* --- 1. Base ------------------------------------------------------------- */
+
+/* Barras de scroll discretas. La app tiene muchas superficies scrolleables
+   (cartera, liquidaciones, paleta) y la barra nativa de Windows es un bloque
+   gris que compite con el dato. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-2);
+  background-clip: content-box;
+}
+
+::selection {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* Nadie navega esta app sin teclado: el administrador tabula entre montos.
+   El anillo va en `tokens.css` (`--ring`) y acá sólo se aplica. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- 2. Tipografía ------------------------------------------------------- */
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--t-micro);
+}
+a:hover {
+  color: var(--accent-hover);
+}
+
+.text-xs { font-size: 11px; }
+.text-sm { font-size: 13px; }
+.text-md { font-size: 16px; }
+.text-lg { font-size: 20px; }
+
+.muted { color: var(--muted); }
+.muted-2 { color: var(--muted-2); }
+/* `.fuerte` sube la TINTA, no el peso: en una tabla densa de importes, poner en
+   negrita la columna que importa engorda la mancha y se pierde el efecto. Subir
+   el contraste destaca igual y no rompe la grilla. Es lo que las siete
+   pantallas que ya lo usaban hacían. */
+.fuerte { color: var(--ink); }
+/* Negativo. DESIGN.md §5: los negativos van en `--danger`. */
+.neg { color: var(--danger); }
+
+/* Sólo `.der`: es la que nueve pantallas ya usaban para la columna de importes.
+   No se agregan `.izq` ni `.centro` "por simetría" — `.centro` ya significaba
+   otra cosa en AuthLayout (el bloque central de la portada de ingreso) y
+   definirla acá le centraba el título y la lista. Una utilidad que nadie pidió
+   es una colisión esperando. */
+.der { text-align: right; }
+
+/* Código de entidad (PROP-0001, CON-0042): siempre apagado y chico, para que
+   no compita con la dirección o el nombre que va al lado. */
+.cod {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Aclaración al pie de un control o de un bloque. */
+.nota {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rótulo por encima de un título. 11px y espaciado, como el encabezado de una
+   columna: es la única mayúscula forzada que DESIGN.md §4 permite. */
+.et {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+/* --- 3. Botones ---------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.25;
+  padding: 8px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--on-accent);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-micro), border-color var(--t-micro),
+    color var(--t-micro), box-shadow var(--t-micro);
+}
+.btn:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.btn:active { transform: translateY(0.5px); }
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn.secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line-strong);
+  box-shadow: var(--sh-1);
+}
+.btn.secondary:hover {
+  background: var(--surface-2);
+  border-color: var(--muted-2);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+}
+.btn.ghost:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* Peligroso en dos intensidades: el contorneado propone, el sólido confirma.
+   Rescindir un contrato y borrar una liquidación no pueden verse igual que
+   "Guardar". */
+.btn.peligroso {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger-line);
+}
+.btn.peligroso:hover {
+  background: var(--danger-tint);
+  border-color: var(--danger);
+}
+.btn.peligroso-solido {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--on-danger);
+}
+.btn.peligroso-solido:hover {
+  filter: brightness(0.92);
+}
+
+.btn.sm { padding: 5px 10px; font-size: 13px; border-radius: var(--r-sm); }
+.btn.xs { padding: 3px 8px; font-size: 12px; border-radius: var(--r-sm); }
+.btn.lg { padding: 11px 18px; font-size: 15px; }
+.btn.block { width: 100%; }
+.btn.icon,
+.btn.icono { padding: 7px; }
+.btn.icon.sm { padding: 5px; }
+
+/* Botón-ícono cuadrado: topbar, acciones de fila, cerrar de un modal. */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--t-micro), color var(--t-micro);
+}
+.icon-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.icon-btn.activo {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* Grupo segmentado: filtros excluyentes. Pastillas sobre un riel, como MED. */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+/* Para barras con muchos filtros en pantalla angosta. */
+.segmented.scroll { display: flex; overflow-x: auto; }
+.segmented button {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 5px 11px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-micro), color var(--t-micro);
+}
+.segmented button:hover { color: var(--ink); }
+.segmented button.activo,
+.segmented button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: var(--sh-1);
+}
+
+kbd,
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+/* --- 4. Formularios ------------------------------------------------------ */
+
+input,
+select,
+textarea {
+  width: 100%;
+  font: inherit;
+  padding: var(--s-sm) var(--s-md);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color var(--t-micro), box-shadow var(--t-micro);
+}
+textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.55;
+}
+input::placeholder,
+textarea::placeholder { color: var(--muted-2); }
+input:hover,
+select:hover,
+textarea:hover { border-color: var(--muted-2); }
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* Todo campo que lleva plata o una fecha va en mono y tabular: una columna de
+   importes con anchos de dígito distintos no se puede comparar de un vistazo,
+   que es exactamente para lo que se mira. */
+input[type='number'],
+input[inputmode='decimal'],
+input[inputmode='numeric'],
+input[type='date'],
+input[type='time'],
+.input-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+input[type='date'],
+input[type='time'] { min-height: 37px; }
+
+/* El selector de fecha nativo es un ícono negro: en oscuro desaparece. */
+[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
+[data-theme='dark'] input[type='time']::-webkit-calendar-picker-indicator {
+  filter: invert(0.75);
+}
+
+/* El chevron va como data-URI y no como ícono aparte: es la única forma de que
+   siga al `select` sin un wrapper en cada uno de los 13 formularios. */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b6560' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--s-md) center;
+  padding-right: var(--s-2xl);
+}
+[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239d968c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* `.campo` es la unidad de formulario del producto: etiqueta arriba, control
+   abajo. La etiqueta va en el `<span>` para no obligar a un `for`/`id` en cada
+   uno de los 65 usos — el control vive DENTRO del label. */
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-xs);
+}
+.campo > span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Campo de filtro, no de formulario: la etiqueta va en minúscula y apagada
+   porque acompaña a un control chico en una barra, no encabeza un dato que el
+   usuario está por escribir. */
+.campo.suave { font-size: 12px; color: var(--muted); }
+.campo.suave > span { font-size: inherit; font-weight: 500; text-transform: none; letter-spacing: 0; }
+
+.campo .ayuda {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.campo .error {
+  font-size: 12px;
+  color: var(--danger);
+}
+.campo.invalido input,
+.campo.invalido select,
+.campo.invalido textarea {
+  border-color: var(--danger);
+}
+
+/* Buscador con lupa adentro. */
+.input-icono,
+.input-icon { position: relative; }
+.input-icono > svg,
+.input-icon > svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted-2);
+  pointer-events: none;
+}
+.input-icono > input,
+.input-icon > input { padding-left: 34px; }
+.input-icono .clear,
+.input-icon .clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-sm);
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* --- 5. Superficies ------------------------------------------------------ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+  padding: var(--s-xl);
+}
+/* `clip` y no `hidden`: los dos recortan igual —que es lo único que hace falta
+   acá, que la tabla no se salga del radio de la tarjeta— pero `hidden` crea un
+   **contenedor de scroll**, y eso rompe cualquier `position: sticky` de adentro:
+   el sticky deja de anclarse a la página y se ancla a la tarjeta. Es la mitad
+   del bug que le tapaba la primera fila a Propiedades. `clip` no crea
+   contenedor de scroll y el sticky sigue viendo la página. */
+.card.sin-padding { padding: 0; overflow: clip; }
+.card.pad-sm { padding: var(--s-lg); }
+
+.card-cab {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  padding: var(--s-md) var(--s-lg);
+  border-bottom: 1px solid var(--line);
+}
+.card-cuerpo { padding: var(--s-lg); }
+.card-pie {
+  padding: var(--s-md) var(--s-lg);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.panel {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-md);
+}
+
+.divisor {
+  height: 1px;
+  margin: var(--s-lg) 0;
+  border: 0;
+  background: var(--line);
+}
+
+/* La memoria de cálculo. DESIGN.md §5 la pide en mono sobre `--surface-2`: es
+   la cuenta que el administrador le muestra al inquilino, y tiene que leerse
+   como una cuenta, no como una frase. */
+.memoria {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  padding: var(--s-sm) var(--s-md);
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+}
+
+/* Métrica del tablero. */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-xs);
+  padding: var(--s-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+}
+.stat .stat-et {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.stat .stat-valor {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.stat .stat-pie { font-size: 12px; color: var(--muted); }
+a.stat { text-decoration: none; transition: border-color var(--t-short); }
+a.stat:hover { border-color: var(--accent-line); }
+
+/* --- 6. Tablas ----------------------------------------------------------- */
+
+/* La densidad es una virtud declarada (DESIGN.md §1): el administrador quiere
+   ver 30 contratos, no 6 tarjetas. De ahí 13px y no 14. */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: var(--s-md) var(--s-lg);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+/* Encabezado pegado: OPT-IN, no default.
+   La topbar del shell también es pegada y va en z-index 30, así que un
+   `th { position: sticky; top: 0 }` global no deja el encabezado a la vista:
+   lo mete DEBAJO de la topbar. Acá se ancla a `--topbar-h` y sube de capa.
+   Va por tabla porque el que la escribe es el que sabe si es lo bastante larga
+   como para necesitarlo.
+
+   ⚠️ Ningún ancestro puede tener `overflow` distinto de `visible` o `clip`.
+   Un contenedor de scroll —`auto`, `scroll` **o `hidden`**— se convierte en el
+   ancla del sticky: deja de anclarse a la página, y `top: var(--topbar-h)` lo
+   corre 56px hacia ABAJO, tapándole la primera fila. Siempre, sin scrollear.
+
+   Pasó en Propiedades —decía «3 en cartera» y se veían dos, medido `thead.top`
+   487,75 contra `row1.top` 472,75— y tenía DOS ancestros culpables, que es por
+   qué sacar uno no alcanzó: `.table-wrap` (`overflow-x: auto`) y
+   `.card.sin-padding` (era `overflow: hidden`). El segundo pasó a `clip`, que
+   recorta igual y no crea contenedor de scroll. El primero no tiene arreglo:
+   si la tabla es larga Y ancha, la salida es **ocultar columnas** en pantalla
+   angosta —lo que ya hacen Vencimientos y Propiedades— y no scrollear de
+   costado. La regla de abajo hace que la combinación se note en vez de
+   romperse callada. */
+.table-sticky th {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 2;
+  background: var(--surface);
+}
+.table-wrap .table-sticky th {
+  /* Acá el sticky ya no sirve para nada: al menos que no tape una fila. */
+  top: 0;
+}
+td {
+  padding: var(--s-md) var(--s-lg);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+}
+tbody tr { transition: background var(--t-micro); }
+tbody tr:hover { background: var(--surface-2); }
+tbody tr:last-child td { border-bottom: none; }
+
+/* Plata a la derecha y en mono. No es cosmética: alinea las comas. */
+td.num,
+th.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+td.acciones {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+.table-wrap { overflow-x: auto; }
+
+/* Fila entera clicable (la fila navega al detalle). `.clicable` suelto sirve
+   para la celda, que es lo que hace falta cuando sólo algunas columnas navegan
+   y otras tienen sus propios controles. */
+.table-clicable tbody tr { cursor: pointer; }
+.clicable { cursor: pointer; }
+
+/* Barra de filtros: buscador que se estira + controles que lo acompañan.
+
+   La regla `.filtros > *` no es defensiva, es la que hace que esto funcione.
+   Arriba hay un `input, select, textarea { width: 100% }` —correcto dentro de
+   un `.campo`, que es una columna— y un `<select>` puesto directo en la barra
+   lo heredaba: se comía la fila entera. Medido en la cartera: buscador y dos
+   selects a 1052px cada uno, cuatro renglones donde iba uno. Caja se veía bien
+   sólo porque envuelve todo en `.campo`, que trae su propio ancho — o sea que
+   la misma clase daba dos resultados según cómo la llamaras, que es
+   exactamente lo que esta capa vino a terminar.
+
+   Acá el ancho lo pone el contenido, y el que se estira se declara. */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-md);
+}
+.filtros > * {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+}
+/* El buscador es el que se come el sobrante. Va por posición porque en las
+   siete barras del producto siempre es el primero; si alguna vez no lo es,
+   esto pasa a ser `.filtros > .crece`. */
+.filtros > :first-child { flex: 1 1 220px; min-width: 220px; }
+
+/* Lista sin viñetas con filas separadas por línea, dentro de una `.card`. */
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lista li:last-child { border-bottom: none; }
+
+/* --- 7. Chips y estados -------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: var(--r-full);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip.ok     { background: var(--success-tint); border-color: var(--success-line); color: var(--success-ink); }
+.chip.warn   { background: var(--warning-tint); border-color: var(--warning-line); color: var(--warning-ink); }
+.chip.err    { background: var(--danger-tint);  border-color: var(--danger-line);  color: var(--danger-ink); }
+.chip.acento { background: var(--accent-tint);  border-color: var(--accent-line);  color: var(--accent-ink); }
+
+/* Estado terminal negativo —vencido, rescindido— en sólido. Es el único caso
+   que DESIGN.md §5 autoriza a salirse del tint. */
+.chip.terminal {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--on-danger);
+}
+
+.chip .punto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* Medidor: porcentaje de un plan, avance de una cobranza. */
+.medidor {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.medidor > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width var(--t-short);
+}
+.medidor > span.warn { background: var(--warning); }
+.medidor > span.err  { background: var(--danger); }
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-full);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  color: var(--accent-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  flex: none;
+}
+.avatar.sm { width: 24px; height: 24px; font-size: 10px; }
+.avatar.lg { width: 44px; height: 44px; font-size: 15px; }
+.avatar.neutro {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+/* --- 8. App shell -------------------------------------------------------- */
+
+.shell { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-lg);
+  padding: var(--s-md);
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  /* Pegada: con cinco grupos de navegación, scrollear la cartera hasta el
+     contrato 80 no puede dejar al usuario sin menú. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  transition: width var(--t-short);
+}
+.sidebar.collapsed { width: var(--sidebar-w-collapsed); }
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .grupo-titulo,
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .atajo span,
+.sidebar.collapsed .atajo kbd { display: none; }
+.sidebar.collapsed .nav-item { justify-content: center; padding: 9px 0; }
+.sidebar.collapsed .marca,
+.sidebar.collapsed .atajo { justify-content: center; padding-inline: 0; }
+/* Con los títulos ocultos, los cinco grupos se vuelven una lista corrida de
+   diecisiete íconos. Una línea entre grupos conserva la estructura, que es la
+   información que el título llevaba. */
+.sidebar.collapsed .grupo + .grupo {
+  border-top: 1px solid var(--line);
+  padding-top: var(--s-md);
+}
+
+.sidebar .marca {
+  display: inline-flex;
+  padding: var(--s-sm);
+  border-radius: var(--r-md);
+  text-decoration: none;
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-lg);
+  flex: 1;
+}
+
+.grupo-titulo {
+  margin: 0 0 6px;
+  padding: 0 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+/* Ojo con el selector: va `.sidebar` adelante, NUNCA `.nav a` suelto.
+   La portada también tiene un `<header class="nav">`, y ahí adentro el logo es
+   un RouterLink a `/` que en la home queda con `router-link-active`: un
+   `.nav a.router-link-active` global le pintaba al logo el fondo del ítem
+   activo del menú. Dos cosas distintas comparten el nombre de clase. */
+.nav-item,
+.sidebar .nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background var(--t-micro), color var(--t-micro);
+}
+.nav-item:hover,
+.sidebar .nav a:hover { background: var(--surface-2); color: var(--ink); }
+.nav-item.router-link-active,
+.sidebar .nav a.router-link-active {
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+.nav-item svg,
+.sidebar .nav a svg { flex: none; color: var(--muted-2); }
+.nav-item:hover svg { color: var(--ink-2); }
+.nav-item.router-link-active svg,
+.sidebar .nav a.router-link-active svg { color: var(--accent); }
+/* Contador al final del ítem (avisos sin leer, vencimientos). */
+.sidebar .nav .badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface-3);
+  color: var(--muted);
+  border-radius: var(--r-full);
+  padding: 1px 7px;
+}
+.nav-item.router-link-active .badge { background: var(--surface); color: var(--accent-ink); }
+
+/* Marca del shell. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 6px;
+  min-height: 34px;
+  text-decoration: none;
+}
+.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--s-xs); }
+
+.atajo {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  padding: var(--s-sm) var(--s-md);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--t-micro), color var(--t-micro);
+}
+.atajo:hover { color: var(--ink-2); border-color: var(--muted-2); }
+.atajo kbd { margin-left: auto; border: 0; background: transparent; padding: 0; }
+
+.principal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Topbar pegada y translúcida, como en Bemo MED. Con listados largos, perder de
+   vista de qué inmobiliaria son los números que estás mirando es justo lo que
+   un producto multi-tenant no se puede permitir. */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  height: var(--topbar-h);
+  padding: 0 var(--s-lg);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.topbar .tenant { color: var(--muted); font-size: 13px; }
+.topbar .separador { margin-left: auto; }
+
+.contenido {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  padding: var(--s-2xl) var(--s-xl);
+}
+.contenido.ancho { max-width: 1400px; }
+.contenido.angosto { max-width: 760px; }
+
+/* Cabecera de pantalla. */
+.ph {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-lg);
+  flex-wrap: wrap;
+}
+.ph h1 { font-size: 24px; }
+.ph .bajada {
+  margin: var(--s-xs) 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+/* Envuelven en pantalla angosta. Sin esto, un selector de mes y dos botones
+   —como en Liquidaciones— suman más de 375px y empujan el ancho de TODA la
+   página: el desborde no se ve en la cabecera, se ve como una barra de scroll
+   horizontal en el listado de abajo. `min-width: 0` deja que el bloque se
+   achique antes de desbordar; sin él, flex lo mantiene en su ancho de
+   contenido. */
+.ph .acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* --- 9. Overlays --------------------------------------------------------- */
+
+.menu {
+  position: absolute;
+  min-width: 210px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+  z-index: 60;
+  animation: aparecer var(--t-micro) ease-out;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  width: 100%;
+  padding: var(--s-sm) var(--s-md);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-micro);
+}
+.menu-item:hover { background: var(--surface-2); color: var(--ink); }
+.menu-item svg { flex: none; color: var(--muted); }
+.menu-item.peligroso { color: var(--danger); }
+.menu-item.peligroso:hover { background: var(--danger-tint); }
+.menu-sep { height: 1px; margin: 5px 0; background: var(--line); }
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--s-xl);
+  overflow-y: auto;
+  background: rgba(26, 24, 21, 0.45);
+  backdrop-filter: blur(2px);
+  animation: desvanecer var(--t-short) ease-out;
+}
+
+.modal {
+  width: 100%;
+  max-width: 480px;
+  margin: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+  animation: subir var(--t-short) ease-out;
+}
+.modal.md { max-width: 620px; }
+.modal.lg { max-width: 820px; }
+.modal-cab { padding: var(--s-lg) var(--s-xl) var(--s-md); }
+.modal-cuerpo { padding: 0 var(--s-xl) var(--s-lg); }
+.modal-pie {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-sm);
+  padding: var(--s-md) var(--s-xl);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+
+.paleta {
+  width: 100%;
+  max-width: 600px;
+  margin: 8vh auto auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+  overflow: hidden;
+  animation: subir var(--t-short) ease-out;
+}
+.paleta-input {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  padding: 0 var(--s-lg);
+  border-bottom: 1px solid var(--line);
+}
+.paleta-input input {
+  border: 0;
+  padding: var(--s-lg) 0;
+  font-size: 15px;
+  background: transparent;
+}
+.paleta-input input:focus { box-shadow: none; }
+.paleta-lista { max-height: 330px; overflow-y: auto; padding: 6px; }
+.paleta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  width: 100%;
+  padding: var(--s-sm) var(--s-md);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  font: inherit;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+}
+.paleta-item svg { flex: none; color: var(--muted); }
+/* `.activo` y no sólo `aria-selected`: los ítems son `<button>` sueltos, no un
+   `listbox`, y `aria-selected` sobre un botón sin rol no significa nada. */
+.paleta-item.activo,
+.paleta-item[aria-selected='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.paleta-item.activo svg,
+.paleta-item[aria-selected='true'] svg { color: var(--accent); }
+.paleta-item .titulo {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.paleta-item .detalle { font-size: 12px; color: var(--muted-2); }
+
+.paleta-grupo {
+  margin: var(--s-sm) var(--s-sm) var(--s-xs);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.paleta-pie {
+  display: flex;
+  gap: var(--s-md);
+  padding: var(--s-sm) var(--s-lg);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* --- 10. Feedback -------------------------------------------------------- */
+
+.toasts {
+  position: fixed;
+  right: var(--s-lg);
+  bottom: var(--s-lg);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+  max-width: min(400px, calc(100vw - 32px));
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-sm);
+  padding: var(--s-md) var(--s-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-2);
+  font-size: 13px;
+  animation: entrar-derecha var(--t-short) ease-out;
+}
+.toast.ok  { border-left-color: var(--success); }
+.toast.err { border-left-color: var(--danger); }
+
+/* `.alert` es SIEMPRE un error: los 27 usos del repositorio son `v-if="error"`.
+   Estaba copiado idéntico en los 27 archivos; acá vive una sola vez. Los otros
+   registros llevan modificador explícito. */
+.alert {
+  margin: 0;
+  padding: var(--s-sm) var(--s-md);
+  background: var(--danger-tint);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--r-md);
+  color: var(--danger-ink);
+  font-size: 13px;
+}
+.alert.ok {
+  background: var(--success-tint);
+  border-color: var(--success-line);
+  color: var(--success-ink);
+}
+.alert.aviso {
+  background: var(--warning-tint);
+  border-color: var(--warning-line);
+  color: var(--warning-ink);
+}
+.alert.info {
+  background: var(--accent-tint);
+  border-color: var(--accent-line);
+  color: var(--accent-ink);
+}
+
+/* Error CON SALIDA. Un error que sólo describe el problema deja al usuario
+   recargando la página a mano; el mismo criterio que `.estado-vacio`, que ya
+   obliga a poner el botón que lo resuelve. El botón se separa a la derecha y
+   baja en pantalla angosta en vez de exprimir el texto. */
+.alert.con-accion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-md);
+  flex-wrap: wrap;
+}
+.alert.con-accion > .btn { flex: none; }
+
+/* Estado vacío CON SALIDA: título, explicación y el botón que lo resuelve. Un
+   vacío sin acción deja al usuario sin saber qué hacer.
+
+   Se llama `.estado-vacio` y no `.vacio` a propósito: en siete pantallas
+   `.vacio` ya significa otra cosa —el renglón apagado que dice "no hay
+   movimientos"— y dos nombres iguales con dos formas distintas es exactamente
+   lo que esta capa vino a terminar. */
+.estado-vacio {
+  padding: var(--s-3xl) var(--s-xl);
+  text-align: center;
+}
+.estado-vacio .titulo {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 17px;
+  color: var(--ink);
+}
+.estado-vacio .detalle {
+  margin: var(--s-xs) auto 0;
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: 13px;
+}
+.estado-vacio .accion { margin-top: var(--s-lg); }
+
+/* Skeleton, nunca un spinner centrado: el spinner salta el layout cuando llegan
+   los datos y la pantalla "pega un salto" (DESIGN.md §6). */
+.sk {
+  border-radius: var(--r-md);
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: brillo 1.2s ease-in-out infinite;
+}
+.sk-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+}
+
+/* --- 11. Navegación interna --------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.tabs button {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: var(--s-sm) var(--s-md);
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--t-micro), border-color var(--t-micro);
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Lista maestro-detalle. */
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  width: 100%;
+  padding: var(--s-sm) var(--s-md);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-micro);
+}
+.list-item:hover { background: var(--surface-2); }
+.list-item[aria-current='true'] {
+  background: var(--accent-tint);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--s-lg);
+  align-items: start;
+}
+
+/* --- 12. Utilidades ------------------------------------------------------ */
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.stack { display: flex; flex-direction: column; gap: var(--s-lg); }
+.stack.sm { gap: var(--s-sm); }
+.stack.md { gap: var(--s-md); }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  flex-wrap: wrap;
+}
+.row.tight { gap: var(--s-sm); }
+.row.nowrap { flex-wrap: nowrap; }
+.row.der { justify-content: flex-end; }
+.row.entre { justify-content: space-between; }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-md); }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-md); }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-md); }
+.grid-auto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s-md);
+}
+
+.espaciador { flex: 1; }
+.w-full { width: 100%; }
+.oculto { display: none !important; }
+
+/* --- 12b. Efectos -------------------------------------------------------- */
+/* DESIGN.md §6 prohibía movimiento de entrada y sombras de realce. Se relajó el
+   2026-08-04 por decisión explícita. Las dos reglas que sobreviven: el
+   movimiento es corto y con motivo, y `prefers-reduced-motion` lo apaga entero
+   — no lo atenúa, lo apaga. */
+
+/* Se levanta al pasar el cursor. Va en cualquier superficie que sea clicable o
+   que se esté ofreciendo: tarjeta de módulo, plan, propiedad. */
+/* Sin `will-change`: dejarlo fijo crea una capa de composición por tarjeta y
+   acá hay treinta. Se paga memoria todo el tiempo para ahorrar un frame en un
+   hover que puede no ocurrir nunca. El navegador promueve la capa solo al
+   empezar la transición. */
+.elevar {
+  transition: transform var(--t-short) ease-out, box-shadow var(--t-short) ease-out,
+    border-color var(--t-short) ease-out;
+}
+.elevar:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sh-3);
+  border-color: var(--accent-line);
+}
+.elevar:active { transform: translateY(-1px); }
+
+/* Aparece al entrar en pantalla. El estado inicial lo pone la clase y lo saca
+   el observador de `v-revelar`; si el JS no corre, `no-js` deja todo visible en
+   vez de dejar la página en blanco. */
+.revelar {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 520ms ease-out, transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.revelar.visible { opacity: 1; transform: none; }
+/* Escalonado: los hijos de una grilla entran uno atrás del otro, no todos de
+   golpe. Cuatro pasos y para — más que eso se siente lento, no elegante. */
+.revelar.paso-1 { transition-delay: 70ms; }
+.revelar.paso-2 { transition-delay: 140ms; }
+.revelar.paso-3 { transition-delay: 210ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .revelar { opacity: 1; transform: none; transition: none; }
+  .elevar:hover { transform: none; }
+}
+
+/* El documento se pinta en tinta mientras la portada está montada: el rebote
+   de scroll pasa por arriba de `.landing` y mostraría el fondo de la app.
+   La clase la pone y la saca LandingPage. */
+.en-portada, .en-portada body { background: var(--tinta); }
+
+/* --- 13. Animaciones ----------------------------------------------------- */
+
+@keyframes desvanecer { from { opacity: 0; } to { opacity: 1; } }
+@keyframes subir {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes aparecer {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes entrar-derecha {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes brillo { to { background-position: -200% 0; } }
+
+/* --- 14. Responsive ------------------------------------------------------ */
+
+@media (max-width: 1100px) {
+  .split { grid-template-columns: 1fr; }
+  .grid4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 232px;
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform var(--t-short);
+    box-shadow: var(--sh-2);
+  }
+  .sidebar.abierto { transform: none; }
+  /* El cajón va siempre completo: plegarlo no ahorra nada —está encima del
+     contenido, no al lado— y dejaría un menú de íconos sin etiqueta. La
+     preferencia no se apaga, sólo se ignora acá, así que sobrevive a que
+     alguien achique y vuelva a agrandar la ventana. */
+  .sidebar.collapsed { width: var(--sidebar-w); }
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .grupo-titulo,
+  .sidebar.collapsed .atajo span,
+  .sidebar.collapsed .atajo kbd { display: revert; }
+  .sidebar.collapsed .nav-item { justify-content: flex-start; padding: 8px 10px; }
+  .sidebar.collapsed .grupo + .grupo { border-top: 0; padding-top: 0; }
+  .contenido { padding: var(--s-xl) var(--s-lg); }
+  .grid2,
+  .grid3,
+  .grid4 { grid-template-columns: 1fr; }
+  .toasts { left: var(--s-md); right: var(--s-md); bottom: var(--s-md); max-width: none; }
+  .modal-pie { flex-wrap: wrap; }
+}

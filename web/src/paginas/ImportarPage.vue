@@ -181,17 +181,10 @@ function columnas(o: Record<string, unknown>): Array<[string, unknown]> {
 </template>
 
 <style scoped>
-h2 { font-size: 15px; }
-.row.entre { justify-content: space-between; }
-.segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow: hidden; background: var(--surface); }
-.segmented button { font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-lg); border: none; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
-.segmented button:last-child { border-right: none; }
-.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
 .btn.sm { padding: 4px var(--s-md); font-size: 12px; text-decoration: none; }
 .archivo { display: block; padding: var(--s-xl); border: 1px dashed var(--line-strong); border-radius: var(--r-md); text-align: center; cursor: pointer; color: var(--muted); }
 .archivo:hover { border-color: var(--accent-line); color: var(--ink-2); }
 .archivo input { display: none; }
-.nota { margin: 0; font-size: 12px; color: var(--muted-2); }
 .cols { margin: 0; font-size: 12px; color: var(--ink-2); line-height: 1.7; }
 .muted { color: var(--muted-2); }
 .mini { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-2); }
@@ -203,6 +196,4 @@ h2 { font-size: 15px; }
 .problemas.warn { background: var(--warning-tint); border: 1px solid var(--warning-line); color: var(--warning); }
 .problemas p { margin: 0 0 var(--s-xs); }
 .problemas ul { margin: 0; padding-left: var(--s-lg); }
-.btn:disabled { opacity: .6; cursor: default; }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

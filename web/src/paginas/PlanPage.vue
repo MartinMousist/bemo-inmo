@@ -61,7 +61,7 @@ onMounted(cargar);
       <section class="card stack">
         <div class="row entre">
           <div>
-            <h2>{{ mio.plan.nombre }}</h2>
+            <h2 class="text-lg">{{ mio.plan.nombre }}</h2>
             <p v-if="mio.pruebaHasta" class="sub">
               En prueba hasta el {{ fecha(mio.pruebaHasta) }}
             </p>
@@ -102,7 +102,7 @@ onMounted(cargar);
           <article v-for="p in catalogo" :key="p.codigo" class="card plan"
                    :class="{ actual: p.codigo === mio.plan.codigo }">
             <div class="row entre">
-              <h3>{{ p.nombre }}</h3>
+              <h3 class="text-lg">{{ p.nombre }}</h3>
               <StatusChip v-if="p.codigo === mio.plan.codigo" texto="Tu plan" tono="acento" />
             </div>
             <p class="tope-txt mono">
@@ -120,8 +120,6 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-h2 { font-size: 17px; }
-h3 { font-size: 16px; }
 .row.entre { justify-content: space-between; align-items: flex-start; }
 .sub { margin: var(--s-xs) 0 0; color: var(--muted); font-size: 13px; }
 .limites { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s-lg); }
@@ -140,5 +138,4 @@ h3 { font-size: 16px; }
 .precio { margin: var(--s-sm) 0; font-family: var(--font-title); font-size: 20px; color: var(--ink); }
 .plan ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .plan li { font-size: 12px; color: var(--muted); }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

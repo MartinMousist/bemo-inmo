@@ -5,29 +5,13 @@ defineProps<{ titulo: string; detalle?: string }>();
 </script>
 
 <template>
-  <div class="empty">
+  <div class="estado-vacio">
     <p class="titulo">{{ titulo }}</p>
     <p v-if="detalle" class="detalle">{{ detalle }}</p>
     <div class="accion"><slot /></div>
   </div>
 </template>
 
-<style scoped>
-.empty {
-  padding: var(--s-3xl) var(--s-xl);
-  text-align: center;
-}
-.titulo {
-  margin: 0;
-  font-family: var(--font-title);
-  font-size: 17px;
-  color: var(--ink);
-}
-.detalle {
-  margin: var(--s-xs) auto 0;
-  max-width: 46ch;
-  color: var(--muted);
-  font-size: 13px;
-}
-.accion { margin-top: var(--s-lg); }
-</style>
+<!-- Sin estilos propios: `.estado-vacio` es capa familia. Acá adentro se
+     llamaba `.empty` y en las pantallas `.vacio` es OTRA cosa (un renglón
+     apagado), así que el bloque con salida se quedó con su propio nombre. -->

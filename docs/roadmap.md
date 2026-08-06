@@ -433,6 +433,146 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
 
 ---
 
+## Etapa 11 — Lo que se ve mirando la app corriendo 🔨 EN CURSO (2026-08-05)
+
+> La etapa 10 salió de recorrer el **código**. Ésta sale de abrir la **aplicación** con
+> `owner@prueba.test` y usarla. Ningún test agarró nada de esto, porque los gates que
+> los cubrían eran de API.
+>
+> Es el **error #2 del playbook** con una cara nueva: el gate de B-01 decía «la suite de
+> `paginacion.spec.ts` los incluye en su tabla» y se cerró con eso. La suite pasa. La
+> pantalla no carga. **Un gate de API no cierra una feature que tiene pantalla** — el
+> playbook ya lo dice («una feature hecha en el back no está hecha») y esta etapa es lo
+> que costó no aplicarlo hacia atrás.
+>
+> **Dónde vivía cada defecto**: B-01 y B-05 están en `main` (verificado con
+> `git show HEAD:`). B-02, B-03 y B-04 están en el árbol de trabajo, porque la capa
+> familia todavía no se commiteó — ver el aviso de abajo.
+>
+> ⚠️ **`web/src/styles/familia.css` no está en git.** 1301 líneas, la fuente de verdad
+> de la forma de los componentes, que `DESIGN.md` documenta como decisión del 04/08 y
+> que el repositorio no tiene. No la toca `.gitignore`: nunca se agregó. Lo mismo con
+> `web/src/directivas/revelar.ts` y `web/src/dominio/sidebar.ts`. Existen sólo en este
+> disco y sin copia. El CI queda en verde igual porque los tests de front no renderizan
+> estilos — que es el mismo agujero que dejó pasar B-01, visto desde otro ángulo.
+
+### 11.1 · Los cinco defectos ✅ CERRADO
+
+Van primero porque son lo único que hoy le miente al usuario. Ninguno es una mejora.
+
+- [x] **B-01 · Vencimientos no carga, y muestra «0» en vez de decirlo.** El front pide
+      `porPagina=200`; el DTO topea en `@Max(100)`: 400. La pantalla imprime el mensaje
+      crudo del validador **en inglés** y debajo, en grande, «Nada por vencer · 0 en los
+      próximos 90 días» — con seis cuotas en mora y un contrato que termina el 10/08 en
+      la misma base. Es el cero falso que el playbook prohíbe, en la pantalla que sostiene
+      la promesa de la portada.
+      **Hecho cuando**: la pantalla carga paginada, y un error de carga **nunca** comparte
+      pantalla con un total. Con test de front que fije las dos cosas.
+
+- [x] **B-02 · La primera fila de Propiedades es invisible.** Dice «3 en cartera» y se ven
+      dos. `.table-sticky th` lleva `top: var(--topbar-h)`, pero la tabla vive dentro de
+      `.table-wrap`, y `overflow-x: auto` convierte al wrapper en contenedor de scroll: el
+      sticky se ancla a él y se corre 56px sobre la fila 1. Medido: `thead.top` 487,75
+      contra `row1.top` 472,75, y `elementFromPoint(400,500)` devuelve el `<th>`.
+      **Hecho cuando**: se ven las tres filas, con el encabezado pegado funcionando.
+
+- [x] **B-03 · Blanco sobre `--danger` no pasa AA en oscuro.** `.btn.peligroso-solido` fija
+      `color: #fff`. En claro `#b23a32` da 6,5:1; en oscuro `--danger` se aclara a `#d9756c`
+      y da **3,13:1**, con texto de 13px. Es el problema que ya se resolvió para el acento
+      inventando `--on-accent` y que nunca se extendió a los semánticos.
+      **Hecho cuando**: existe `--on-danger`, no queda ningún `#fff` a mano en un botón, y
+      el ratio está medido en los dos temas.
+
+- [x] **B-04 · La barra de filtros se rompe con controles sin envolver.** `input, select,
+      textarea { width: 100% }` más `.filtros > :first-child { flex: 1 }`: sólo el primer
+      hijo tiene ancho propio y los `<select>` toman la fila entera. Medido en la cartera:
+      cuatro renglones donde iba uno. Caja se ve bien **por casualidad**, porque envuelve
+      todo en `.campo`.
+      **Hecho cuando**: la misma clase da el mismo resultado con controles pelados y con
+      `.campo`, en las siete pantallas que ya la usan.
+
+- [x] **B-05 · Un contador que lleva a una pantalla que muestra menos.** «Liquidaciones sin
+      cerrar: 2» lleva a Liquidaciones, que abre en el mes corriente y responde «Sin
+      liquidaciones para ago/26». Los dos borradores son de `2026-01`.
+      **Hecho cuando**: la regla queda escrita y aplicada — *ningún contador del inicio
+      puede llevar a una pantalla que muestre menos de lo que el contador prometió.*
+
+**Gate**: las cinco pantallas abiertas en el navegador, en claro y oscuro, a 1440 y 375.
+Y un test de front por cada uno que sea comprobable sin ojo humano.
+
+### 11.2 · Gastos y reclamos ⏳
+
+El hueco más grande del dominio, y el que **ya costó plata**: el `DELETE` sin filtro que
+borraba los gastos cargados a mano y se los transfería de más al propietario no fue un
+descuido suelto — es una consecuencia del modelo. Mientras el gasto viva **dentro** de la
+liquidación, rearmar la liquidación puede destruirlo.
+
+- [ ] `gasto` como entidad propia: `estado` (registrado · a rendir · rendido),
+      `propiedad_id`, `contrato_id?`, `proveedor_id`, `doc_url`, moneda. La liquidación lo
+      **toma**, no lo **contiene**.
+- [ ] `reclamo` + `proveedor`: categoría, estado, prioridad, quién paga
+      (propietario/inquilino), adjuntos. Al cerrarse genera su `gasto`.
+- [ ] Los dos entran al portal del propietario, que ya existe.
+
+**Hecho cuando**: se carga una reparación en marzo, se liquida en abril, y rearmar la
+liquidación de abril **no la toca**. Con test que lo fije.
+
+### 11.3 · El tablero ⏳
+
+Hoy el producto muestra la plata **de terceros** y no muestra la propia: los honorarios
+devengados no están en ninguna pantalla. Y los cuatro números del inicio no tienen contra
+qué compararse — un indicador sin base es un número.
+
+- [ ] `GET /v1/tablero?desde&hasta&comparar` con el mismo contrato que `/inicio`: agrupado
+      por moneda, `null` —no cero— donde el rol no ve.
+- [ ] Cobranza: tasa del mes, aging de mora por tramo (1-30 / 31-60 / 61-90 / +90), deuda
+      vencida total, días promedio de cobro.
+- [ ] Cartera: ocupación, vacancia, renovación (el dato ya está en `contrato_anterior_id`),
+      carga de los próximos 30/60/90/180 días.
+- [ ] Negocio: **honorarios devengados**, comisiones por cobrar, ranking por asesor.
+- [ ] Embudo: conversión por etapa, leads por origen, tiempo de primera respuesta y
+      motivos de pérdida — las cuatro columnas ya se llenan y no las lee nadie (error #3).
+- [ ] `metrica_mes` persistida al cerrar el período. «Comparar contra el año pasado» no
+      puede depender de recalcular sobre datos que desde entonces cambiaron: es la misma
+      lógica de inmutabilidad que ya se aplica a los ajustes y a las liquidaciones.
+
+**Sin librería de gráficos.** Todo es polilínea y rectángulo: SVG a mano con los tokens.
+Una librería trae peso, un tema propio que pelea con el nuestro, y un montón de formas que
+§6 prohíbe. **Lo que sigue prohibido**: torta, dona, área con gradiente, gauge, radar, 3D.
+ARS y USD **nunca** en el mismo eje. El que no tiene dato dice «sin datos», no dibuja cero.
+
+**Hecho cuando**: el tablero contesta «¿este mes fue bueno?» sin abrir otra pantalla.
+Absorbe el ⏳ «Comparar contra el año pasado» de 10.5, con el alcance que en realidad tiene.
+
+### 11.4 · Que la tabla no mande a Excel ⏳
+
+- [ ] **Ordenar por columna.** Ninguna tabla del producto lo permite. En un listado de
+      plata, «¿quién me debe más?» hoy se contesta exportando — que es de donde este
+      producto viene a sacar a la gente.
+- [ ] **Fila de totales** en toda tabla de importes, por moneda.
+- [ ] **Filtros que se recuerdan** y columnas que se eligen.
+- [ ] **Tarjetas por default a `(max-width: 640px)`**, salvo preferencia explícita. La
+      vista existe, está bien resuelta, y el primer encuentro en un teléfono sigue siendo
+      una tabla con scroll lateral.
+- [ ] Acciones de fila sin caja (`.btn.enlace`): tres `secondary` por renglón llevan la
+      fila a 90px, y §1 pide ver 30 contratos.
+
+### 11.5 · Copy y accesibilidad ⏳
+
+- [ ] **`plural(n, 'contrato', 'contratos')`.** Hay **85** `(s)` / `(es)` repartidos:
+      «1 contrato(s)», «2 propiedad(es) sin ubicación», «liquidación(es) armada(s)». En un
+      producto cuya ancla es *exacto*, es la marca más visible de que esa línea no la
+      escribió nadie.
+- [ ] **Ningún `detail` de class-validator es texto de interfaz.** El contrato RFC 9457
+      tiene un `code` estable justamente para que el front decida y muestre castellano.
+- [ ] El aviso de Google Maps deja de ocupar 250px sobre el fold de Propiedades: es
+      documentación, no interfaz.
+- [ ] Lint que prohíba colores a mano fuera de `tokens.css` — hay **39**, y dos de ellos
+      son el defecto B-03.
+- [ ] «Saltar al contenido» y `aria-live` en los listados que se refiltran.
+
+---
+
 ## Cómo se construye cada feature, siempre igual
 
 ```

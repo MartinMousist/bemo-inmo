@@ -52,7 +52,7 @@ function puedeConfirmar(): boolean {
       <div class="fondo" @click="ui.responder(false)" />
 
       <div class="caja card">
-        <h2 id="confirm-titulo">{{ ui.confirmacion.titulo }}</h2>
+        <h2 id="confirm-titulo" class="text-lg">{{ ui.confirmacion.titulo }}</h2>
         <p v-if="ui.confirmacion.detalle" class="detalle">{{ ui.confirmacion.detalle }}</p>
 
         <label v-if="ui.confirmacion.escribir" class="campo">
@@ -70,9 +70,17 @@ function puedeConfirmar(): boolean {
           <button ref="botonCancelar" class="btn secondary" type="button" @click="ui.responder(false)">
             {{ ui.confirmacion.cancelar ?? 'Cancelar' }}
           </button>
+          <!--
+            `peligroso-solido`, no `peligroso`: en la capa familia el
+            contorneado PROPONE y el sólido CONFIRMA, y esto es el confirmar.
+            Antes este componente redefinía `.peligroso` como sólido en su
+            `<style scoped>` —con `color: #fff` a mano, que en oscuro daba
+            3,13:1— y de paso invertía el significado de la clase para todo el
+            que la leyera desde acá.
+          -->
           <button
             class="btn"
-            :class="{ peligroso: ui.confirmacion.peligroso }"
+            :class="{ 'peligroso-solido': ui.confirmacion.peligroso }"
             type="button"
             :disabled="!puedeConfirmar()"
             @click="ui.responder(true)"
@@ -104,13 +112,6 @@ function puedeConfirmar(): boolean {
   gap: var(--s-md);
 }
 
-h2 {
-  margin: 0;
-  font-family: var(--font-title);
-  font-size: 19px;
-  font-weight: 500;
-  color: var(--ink);
-}
 .detalle { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
 
 .campo { display: flex; flex-direction: column; gap: var(--s-xs); font-size: 13px; color: var(--muted); }
@@ -126,7 +127,4 @@ h2 {
 .campo input:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
 
 .acciones { display: flex; justify-content: flex-end; gap: var(--s-sm); }
-.btn.peligroso { background: var(--danger); border-color: var(--danger); color: #fff; }
-.btn.peligroso:hover { filter: brightness(.92); }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
 </style>

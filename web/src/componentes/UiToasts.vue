@@ -53,8 +53,6 @@ const ui = useUi();
   border-radius: var(--r-md);
   box-shadow: var(--sh-2);
 }
-.toast.ok  { border-left-color: var(--success); }
-.toast.err { border-left-color: var(--danger); }
 .toast.info { border-left-color: var(--accent); }
 
 .texto { flex: 1; min-width: 0; }

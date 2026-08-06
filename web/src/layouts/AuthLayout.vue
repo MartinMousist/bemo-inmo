@@ -76,7 +76,7 @@ const capacidades = [
   overflow: hidden;
   /* Tinta profunda: el panel de marca es el único lugar donde el producto se
      permite un fondo oscuro. Da contraste con la tarjeta blanca de al lado. */
-  background: #131f30;
+  background: var(--tinta);
   color: #e8eaee;
 }
 
@@ -87,8 +87,8 @@ const capacidades = [
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 50% at 12% 8%, rgba(210, 112, 63, 0.16), transparent 70%),
-    radial-gradient(50% 40% at 95% 95%, rgba(120, 165, 215, 0.1), transparent 70%);
+    radial-gradient(60% 50% at 12% 8%, rgba(79, 169, 177, 0.16), transparent 70%),
+    radial-gradient(50% 40% at 95% 95%, rgba(14, 124, 134, 0.12), transparent 70%);
   pointer-events: none;
 }
 

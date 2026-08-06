@@ -424,7 +424,11 @@ onMounted(cargar);
                 los controles siguen funcionando por separado.
               -->
               <tr
-                :class="{ marcada: seleccion.has(f.id), ocupada: ocupada(f.id) }"
+                :class="{
+                  marcada: seleccion.has(f.id),
+                  ocupada: ocupada(f.id),
+                  urge: f.proximoAjuste?.estado === 'proyectado' && f.proximoAjuste.vencido,
+                }"
                 :aria-busy="ocupada(f.id)"
                 tabindex="0"
                 :aria-label="`${f.propiedad.etiqueta} · ${f.propiedad.direccion}`"
@@ -467,7 +471,6 @@ onMounted(cargar);
                     <button
                       v-if="f.proximoAjuste.estado === 'proyectado' && puedeOperar"
                       class="btn sm en-linea"
-                      :class="{ urgente: f.proximoAjuste.vencido }"
                       type="button"
                       :disabled="ocupada(f.id)"
                       @click.stop="confirmarAjuste(f)"
@@ -509,7 +512,7 @@ onMounted(cargar);
                     </div>
                     <button
                       v-else-if="f.ultimaCuota.saldo > 0 && puedeOperar"
-                      class="btn sm en-linea secundaria"
+                      class="btn sm en-linea secondary"
                       type="button"
                       @click.stop="abrirCobro(f)"
                     >
@@ -561,7 +564,10 @@ onMounted(cargar);
         v-for="f in items"
         :key="f.id"
         class="card tarjeta"
-        :class="{ marcada: seleccion.has(f.id) }"
+        :class="{
+          marcada: seleccion.has(f.id),
+          urge: f.proximoAjuste?.estado === 'proyectado' && f.proximoAjuste.vencido,
+        }"
       >
         <header>
           <input
@@ -605,7 +611,6 @@ onMounted(cargar);
           <button
             v-if="f.proximoAjuste?.estado === 'proyectado'"
             class="btn sm"
-            :class="{ urgente: f.proximoAjuste.vencido }"
             type="button"
             @click="confirmarAjuste(f)"
           >
@@ -625,7 +630,7 @@ onMounted(cargar);
           </div>
           <button
             v-else-if="(f.ultimaCuota?.saldo ?? 0) > 0"
-            class="btn sm secundaria"
+            class="btn sm secondary"
             type="button"
             @click="abrirCobro(f)"
           >
@@ -649,7 +654,6 @@ onMounted(cargar);
 <style scoped>
 /* ── Filtros ───────────────────────────────────────────────────────────── */
 .filtros { display: flex; gap: var(--s-md); flex-wrap: wrap; align-items: center; }
-.filtros > :first-child { flex: 1; min-width: 220px; }
 .filtros select,
 .filtros input[type='month'] {
   font: inherit; font-size: 13px;
@@ -675,7 +679,11 @@ onMounted(cargar);
   background: transparent; color: var(--muted); cursor: pointer;
 }
 .modos button:last-child { border-right: none; }
-.modos button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
+/* `--accent-ink` y no `--accent`: sobre `--accent-tint` el color base da 4,25 a
+   13px, que es el número exacto que `tokens.css` cita como motivo de la
+   variante. Tercera copia local que se había quedado con el color base —las
+   otras dos eran el avatar del menú y el wordmark— y las tres se veían bien. */
+.modos button.activo { background: var(--accent-tint); color: var(--accent-ink); font-weight: 500; }
 
 /* ── Barra de lote ─────────────────────────────────────────────────────── */
 .lote {
@@ -693,8 +701,6 @@ onMounted(cargar);
 .nota-rol { margin: 0; width: 100%; font-size: 12px; color: var(--muted); }
 
 /* ── Tabla ─────────────────────────────────────────────────────────────── */
-.card.sin-padding { padding: 0; overflow: hidden; }
-.table-wrap { overflow-x: auto; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -704,19 +710,12 @@ table {
      de lista. Antes de eso, la tabla scrollea dentro de su contenedor. */
   min-width: 1080px;
 }
-th {
-  text-align: left; font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
-  padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
 td {
   padding: var(--s-md) var(--s-lg);
   border-bottom: 1px solid var(--line);
   color: var(--ink-2);
   vertical-align: top;
 }
-tbody tr:hover { background: var(--surface-2); }
 tbody tr.marcada { background: var(--accent-tint); }
 /* El `box-shadow` global de :focus-visible no se ve sobre un `<tr>`: las celdas
    lo tapan. Se marca con el fondo y una barra al costado, que sí se ven. */
@@ -728,14 +727,9 @@ tbody tr:focus-visible {
   background: var(--surface-2);
   box-shadow: inset 3px 0 0 var(--accent);
 }
-tbody tr:last-child td { border-bottom: none; }
-.clicable { cursor: pointer; }
 .marca { width: 1%; padding-right: 0; }
 .marca input { accent-color: var(--accent); cursor: pointer; }
 
-.der { text-align: right; }
-.fuerte { color: var(--ink); }
-.cod { display: block; font-size: 11px; color: var(--muted); }
 .dir { color: var(--ink); }
 .cada { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-2); font-family: var(--font-ui); }
 .inter { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-2); }
@@ -746,14 +740,24 @@ tbody tr:last-child td { border-bottom: none; }
 
 /* ── Acciones en línea ─────────────────────────────────────────────────── */
 .en-linea { margin-top: var(--s-xs); }
-.btn.sm.secundaria {
-  background: transparent;
-  border-color: var(--line-strong);
-  color: var(--muted);
-}
-.btn.sm.secundaria:hover { background: var(--surface-2); color: var(--ink); }
-/* El aumento cuya vigencia ya pasó es el único botón que pide atención. */
-.btn.sm.urgente { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/*
+  El aumento cuya vigencia ya pasó pide atención, y antes la pedía pintando el
+  botón de `--danger` sólido. Dos problemas con eso, y el segundo es el grave:
+
+  1. Blanco sobre `--danger` daba 3,13:1 en oscuro — AA fallado a 13px.
+  2. En todo el resto del producto el rojo sólido significa **destructivo**:
+     borrar, rescindir. Confirmar un aumento no destruye nada. Que la pantalla
+     más usada le dé al rojo un segundo significado rompe el código de colores
+     que el usuario aprende en las otras treinta.
+
+  La urgencia va donde corresponde —la FILA— con la barra que ya se usa para
+  marcar estado. El botón se queda primario: la acción es la misma, urgente o
+  no. Lo que cambia es cuánto grita la fila.
+*/
+tr.urge td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.tarjeta.urge { border-left: 3px solid var(--danger); }
+.urge .cuando { color: var(--danger-ink); font-weight: 500; }
 
 .cobro { display: flex; gap: var(--s-xs); margin-top: var(--s-xs); }
 .cobro input {
@@ -794,12 +798,6 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .tarjeta dd { margin: 0; font-size: 13px; color: var(--ink-2); }
 .tarjeta footer { display: flex; gap: var(--s-sm); flex-wrap: wrap; }
-
-.alert {
-  margin: 0; padding: var(--s-sm) var(--s-md);
-  background: var(--danger-tint); border: 1px solid var(--danger-line);
-  border-radius: var(--r-md); color: var(--danger); font-size: 13px;
-}
 
 @media (max-width: 720px) {
   .filtros > :first-child { min-width: 100%; }

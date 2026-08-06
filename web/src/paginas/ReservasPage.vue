@@ -71,22 +71,6 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.card.sin-padding { padding: 0; overflow: hidden; }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th {
-  text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.04em; color: var(--muted); padding: var(--s-md) var(--s-lg);
-  border-bottom: 1px solid var(--line); white-space: nowrap;
-}
-td { padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); color: var(--ink-2); }
-tbody tr:last-child td { border-bottom: none; }
-.der { text-align: right; }
-.fuerte { color: var(--ink); }
 .cod { color: var(--muted); white-space: nowrap; }
 .dir { display: block; font-family: var(--font-ui); color: var(--ink-2); }
-.alert {
-  margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint);
-  border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px;
-}
 </style>

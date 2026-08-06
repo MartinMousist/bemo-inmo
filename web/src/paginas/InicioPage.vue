@@ -46,7 +46,7 @@ interface Inicio {
       inquilino: string | null;
     }>;
   } | null;
-  liquidacionesBorrador: { total: number; neto: Importe[] } | null;
+  liquidacionesBorrador: { total: number; neto: Importe[]; periodoMasViejo: string | null } | null;
   oportunidadesFrias: {
     total: number; dias: number;
     items: Array<{ id: string; nombre: string; desdeHace: number; estado: string; origen: string }>;
@@ -90,6 +90,18 @@ function saludo(): string {
 /** Varias monedas se muestran una debajo de la otra, nunca sumadas. */
 function importes(lista: Importe[] | undefined): Importe[] {
   return lista?.length ? lista : [];
+}
+
+/**
+ * El enlace a Liquidaciones abre en el período donde están los borradores, no
+ * en el mes corriente. La regla, que vale para todos los bloques de acá:
+ * **ningún contador puede llevar a una pantalla que muestre menos de lo que el
+ * contador prometió.**
+ */
+function linkLiquidaciones(b: { periodoMasViejo: string | null }) {
+  const query: Record<string, string> = { estado: 'borrador' };
+  if (b.periodoMasViejo) query.periodo = b.periodoMasViejo.slice(0, 7);
+  return { path: '/liquidaciones', query };
 }
 
 onMounted(cargar);
@@ -288,7 +300,15 @@ onMounted(cargar);
               >{{ money(i.monto, i.moneda) }}</span>
               <span class="pie">a rendir a propietarios</span>
             </p>
-            <RouterLink class="ver-todo" to="/liquidaciones">Revisar y cerrar</RouterLink>
+            <!--
+              El enlace lleva el período del borrador más viejo y el filtro.
+              Sin eso caía en el mes corriente y mostraba "Sin liquidaciones",
+              con los borradores en otro mes: el contador prometía dos y el
+              destino mostraba cero.
+            -->
+            <RouterLink class="ver-todo" :to="linkLiquidaciones(d.liquidacionesBorrador)">
+              Revisar y cerrar
+            </RouterLink>
           </template>
         </section>
 
@@ -407,7 +427,6 @@ a.cifra:hover { border-color: var(--line-strong); background: var(--surface-2); 
   color: var(--muted);
 }
 
-.lista { list-style: none; margin: 0; padding: 0; }
 .lista li {
   display: flex;
   align-items: center;
@@ -415,7 +434,6 @@ a.cifra:hover { border-color: var(--line-strong); background: var(--surface-2); 
   padding: var(--s-sm) var(--s-lg);
   border-bottom: 1px solid var(--line);
 }
-.lista li:last-child { border-bottom: none; }
 .lista li > a {
   flex: 1;
   min-width: 0;
@@ -459,16 +477,6 @@ a.cifra:hover { border-color: var(--line-strong); background: var(--surface-2); 
   text-decoration: none;
 }
 .ver-todo:hover { background: var(--surface-2); }
-
-.alert {
-  margin: 0;
-  padding: var(--s-sm) var(--s-md);
-  background: var(--danger-tint);
-  border: 1px solid var(--danger-line);
-  border-radius: var(--r-md);
-  color: var(--danger);
-  font-size: 13px;
-}
 
 @media (max-width: 560px) {
   .bloques { grid-template-columns: 1fr; }

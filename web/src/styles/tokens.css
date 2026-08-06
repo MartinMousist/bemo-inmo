@@ -1,64 +1,126 @@
 /* Tokens de Bemo INMO. Fuente: DESIGN.md — no editar sin actualizar ese archivo.
-   Ningún componente define un color: todos salen de acá. */
+   Ningún componente define un color: todos salen de acá.
+
+   Esto es la CAPA PRODUCTO de DESIGN.md §0: el acento y el matiz de los
+   neutros, que es lo único que cambia entre productos del grupo BEMO. La forma
+   de los componentes —botones, tablas, chips, modales— es la CAPA FAMILIA y
+   vive en `familia.css`. Los dos se importan desde `main.ts`, en ese orden. */
 
 :root {
-  /* ── Neutros cálidos (papel). El 95% de la interfaz ── */
-  --bg:          #fbfaf8;
+  /* ── Neutros. El 95% de la interfaz ── */
+  --bg:          #fbfbfa;
   --surface:     #ffffff;
-  --surface-2:   #f4f2ee;
-  --surface-3:   #ebe8e2;
-  --line:        #e6e3dd;
-  --line-strong: #d5d1c9;
+  --surface-2:   #f5f3ee;
+  --surface-3:   #efece5;
+  --line:        #e7e5e1;
+  --line-strong: #d8d5cf;
 
-  --ink:     #1a1815;
-  --ink-2:   #3a3630;
-  --muted:   #6b6560;
-  /* Medido: 4,56:1 sobre `--surface-2`, que es el peor fondo donde se usa.
-     Antes era #928b83 y daba 3,01 — por debajo de AA (4,5) para texto normal,
-     y encima este token se usa a 11px, donde el requisito es más estricto y no
-     menos. La revisión de contraste lo encontró calculando, no mirando: a ojo
-     un gris apagado sobre papel parece bien. */
-  --muted-2: #746d65;
+  --ink:     #14201f;
+  --ink-2:   #33403f;
+  --muted:   #5b6766;
+  /* MED lo tiene en #8a9694 y sobre `--surface-2` da 2,75:1 — por debajo de AA,
+     y este token se usa a 11px. Este repo ya había hecho esa corrección una vez
+     (de 3,01 a 4,56) y adoptarla al pie de la letra la habría deshecho. Mismo
+     hue verde-gris de MED, luminancia bajada: 4,83:1 sobre `--surface-2`. */
+  --muted-2: #626d6b;
 
-  /* ── Marca del grupo BEMO. Sólo firma: logo, favicon, portada ── */
+  /* ── Marca del grupo BEMO. Sólo firma: logo, favicon, portada ──
+     No cambia con el acento: el isotipo es el mismo signo para todas las
+     verticales, y por eso vive fuera de la capa producto. */
   --marca:        #d2703f;
   --marca-suave:  #f6e7de;
   --marca-linea:  #ecc9b4;
   --marca-fuerte: #b45c30;
 
-  /* ── Acento de la interfaz: uno solo. Azul de estilográfica ── */
-  --accent:       #1e3a5f;
-  --accent-hover: #162c48;
-  --accent-tint:  #e8edf3;
-  --accent-line:  #c3d0de;
+  /* ── Acento: uno solo ── */
+  --accent:       #0e7c86;
+  --accent-hover: #0b656d;
+  --accent-tint:  #e1f1f2;
+  --accent-line:  #bfe0e2;
   --on-accent:    #ffffff;
 
   /* ── Semánticos, apagados ── */
-  --success: #2f6b4f;  --success-tint: #e6f0ea;  --success-line: #bfd9cc;
-  --warning: #9a6b0f;  --warning-tint: #f7efdd;  --warning-line: #e3d2ab;
-  --danger:  #a33a2e;  --danger-tint:  #f7e8e5;  --danger-line:  #e6c5bf;
+  --success: #2e7d5b;  --success-tint: #e4f2eb;  --success-line: #c3e0d3;
+  --warning: #b5760a;  --warning-tint: #faf0dc;  --warning-line: #ecd9ae;
+  --danger:  #b23a32;  --danger-tint:  #fbeaea;  --danger-line:  #f0cdcb;
+
+  /* ── Variantes de TEXTO sobre el tint del mismo color ──
+     El color de acción y el color de texto sobre su propio tint no pueden ser
+     el mismo: medido, `--accent` sobre `--accent-tint` da 4,25:1, `--success`
+     4,33 y `--warning` 3,34 — los tres por debajo de AA, y los chips van a
+     12px. MED ya resuelve esto para el acento con su `--teal-ink`; acá se
+     extiende el patrón a los semánticos, que en MED quedaron sin resolver.
+     Con estas variantes: 5,83 · 4,88 · 5,01. */
+  --accent-ink:  #0b656d;
+  --success-ink: #2b7455;
+  --warning-ink: #8f5c07;
+  --danger-ink:  #b23a32;   /* ya pasaba: 5,10. Se declara por simetría. */
+
+  /* ── Texto SOBRE el semántico en sólido ──
+     El mismo problema que resolvió `--on-accent` («el teal claro pide texto
+     oscuro encima»), que quedó sin extender a los semánticos. `.btn.peligroso-
+     solido` y `.chip.terminal` fijaban `color: #fff` a mano: en claro va bien
+     —blanco sobre `#b23a32` da 5,93— pero en oscuro `--danger` se aclara a
+     `#d9756c` y el mismo blanco cae a **3,13:1**, con texto de 13px en el
+     botón y de 11,5px en el chip. Los dos son AA fallado, y son el botón que
+     confirma borrar y el chip que dice «vencido».
+     Se declara acá y no en el componente: ningún componente define un color. */
+  --on-danger: #ffffff;   /* sobre #b23a32 → 5,93 */
 
   /* ── Radios: nada de redondeo burbuja ── */
-  --r-sm: 6px;  --r-md: 8px;  --r-lg: 12px;
+  --r-sm: 6px;  --r-md: 8px;  --r-lg: 12px;  --r-full: 999px;
 
   /* ── Espaciado, base 4 ── */
-  --s-xs: 4px;  --s-sm: 8px;  --s-md: 12px;  --s-lg: 16px;
+  --s-2xs: 2px; --s-xs: 4px;  --s-sm: 8px;  --s-md: 12px;  --s-lg: 16px;
   --s-xl: 24px; --s-2xl: 32px; --s-3xl: 48px;
 
-  /* ── Elevación mínima ── */
-  --sh-1: 0 1px 2px rgba(26, 24, 21, .05);
-  --sh-2: 0 4px 12px rgba(26, 24, 21, .08);
+  /* ── Elevación ──
+     `sh-3` es de HOVER y de portada, no de reposo. */
+  --sh-1: 0 1px 2px rgba(20, 32, 31, .05);
+  --sh-2: 0 4px 12px rgba(20, 32, 31, .08);
+  --sh-3: 0 14px 34px rgba(20, 32, 31, .13), 0 3px 10px rgba(20, 32, 31, .07);
+
+  /* ── Superficie oscura de portada ──
+     Derivada del acento, no tomada del tema oscuro de la app.
+     Antes era `#0b1211` —el `--bg` oscuro de MED— y ése es un fondo de APP:
+     está hecho para desaparecer detrás de una tabla. Puesto de hero leía como
+     negro y no como superficie: a esa oscuridad los halos de iluminación no
+     se veían, y el naranja del logo con el teal del botón encima quedaban como
+     tres colores sueltos sin nada que los una.
+     Ahora es la misma rampa de luminosidad con el hue rotado al acento, que es
+     la regla que §0 ya declaraba para los neutros. */
+  --tinta:      #0e2a2d;
+  --tinta-2:    #123033;
+  --tinta-3:    #1a4144;
+  --sobre-tinta:    #e9efed;
+  --sobre-tinta-2:  #93a3a1;
+  --tinta-linea:   rgba(255, 255, 255, .11);
+  --tinta-linea-2: rgba(255, 255, 255, .22);
+  /* La acción sobre superficie oscura es el acento en su versión clara —la que
+     el tema oscuro ya usa— con su texto oscuro encima. El naranja de marca
+     queda donde corresponde: el isotipo. */
+  --sobre-tinta-accent: #4fa9b1;
+  --sobre-tinta-on-accent: #06201f;
 
   /* ── Foco siempre visible ── */
-  --ring: 0 0 0 3px rgba(30, 58, 95, .18);
+  --ring: 0 0 0 3px rgba(14, 124, 134, .18);
 
   /* ── Velocidad = confianza ── */
-  --t-micro: 90ms;  --t-short: 170ms;
+  --t-micro: 90ms;  --t-short: 170ms;  --t-medium: 280ms;
 
-  /* ── Tipografía (capa familia BEMO) ── */
-  --font-title: 'Newsreader', Georgia, serif;
-  --font-ui:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
-  --font-mono:  'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  /* ── Layout ──
+     La topbar es pegada, así que su alto es un dato que otros componentes
+     necesitan: un encabezado de tabla pegado se ancla ABAJO de ella. */
+  --topbar-h: 56px;
+  --sidebar-w: 232px;
+  --sidebar-w-collapsed: 64px;
+
+  /* ── Tipografía: CAPA FAMILIA BEMO, idéntica a la de Bemo MED ──
+     General Sans para display, Geist para UI, Geist Mono para cifras. Es lo
+     que más hace que dos productos se lean como hermanos, más que el color. */
+  --font-title: 'General Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-ui:    'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono:  'Geist Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
 [data-theme='dark'] {
@@ -67,33 +129,55 @@
   --marca-linea:  #5c3d2a;
   --marca-fuerte: #f0a377;
 
-  --bg:          #161513;
-  --surface:     #1e1d1a;
-  --surface-2:   #262421;
-  --surface-3:   #302d29;
-  --line:        #34312c;
-  --line-strong: #46423b;
+  --bg:          #0b1211;
+  --surface:     #141f1e;
+  --surface-2:   #1c2a28;
+  --surface-3:   #253634;
+  --line:        #2a3b39;
+  --line-strong: #3a4c4a;
 
-  --ink:     #f0ede7;
-  --ink-2:   #d6d1c9;
-  --muted:   #9d968c;
-  /* 4,66:1 sobre `--surface-2`. Antes #746e66 daba 3,07. */
-  --muted-2: #938c83;
+  --ink:     #e9efed;
+  --ink-2:   #cbd6d4;
+  --muted:   #93a3a1;
+  /* Mismo caso en oscuro: #6f807e de MED da 3,59:1 sobre `--surface-2`. */
+  --muted-2: #8b9c99;
 
-  --accent:       #8fb3d9;
-  --accent-hover: #a6c4e4;
-  --accent-tint:  #1c2a3a;
-  --accent-line:  #35506e;
+  --accent:       #4fa9b1;
+  --accent-hover: #6cbcc3;
+  --accent-tint:  #12312f;
+  --accent-line:  #1e4c4e;
   /* Oscuro, no blanco: un acento claro con texto blanco no contrasta. */
-  --on-accent:    #10203a;
+  --on-accent:    #06201f;
 
-  --success: #6fbe97;  --success-tint: #1b2f26;  --success-line: #2f5544;
-  --warning: #d9ab55;  --warning-tint: #33290f;  --warning-line: #5c4a1d;
-  --danger:  #d98878;  --danger-tint:  #341f1b;  --danger-line:  #5e3730;
+  --success: #5aa583;  --success-tint: #14291f;  --success-line: #22412f;
+  --warning: #d29a3c;  --warning-tint: #2a2113;  --warning-line: #443419;
+  --danger:  #d9756c;  --danger-tint:  #2c1917;  --danger-line:  #452421;
+
+  /* En oscuro el tint es el fondo oscuro y el texto ya es el color claro: las
+     variantes coinciden con el color base. Se declaran igual para que las
+     reglas de `familia.css` no tengan que ramificar por tema. */
+  --accent-ink:  #7ec6cc;
+  --success-ink: #5aa583;
+  --warning-ink: #d29a3c;
+  --danger-ink:  #d9756c;
+
+  /* Misma lógica que `--on-accent`: sobre un rojo aclarado, texto oscuro.
+     Blanco sobre `#d9756c` da 3,13 y falla; `#2a100e` da **5,69**. Es el rojo
+     del tema llevado hasta el fondo, no un negro puro: un negro sobre el rojo
+     se lee como un agujero. */
+  --on-danger: #2a100e;
 
   --sh-1: 0 1px 2px rgba(0, 0, 0, .3);
   --sh-2: 0 4px 12px rgba(0, 0, 0, .4);
-  --ring: 0 0 0 3px rgba(143, 179, 217, .22);
+  --sh-3: 0 16px 38px rgba(0, 0, 0, .55), 0 3px 10px rgba(0, 0, 0, .35);
+
+  /* En oscuro la tinta se separa apenas del fondo: si fuera la misma, el hero
+     de la portada dejaría de leerse como una superficie aparte. */
+  --tinta:   #081e20;
+  --tinta-2: #0c2527;
+  --tinta-3: #133335;
+
+  --ring: 0 0 0 3px rgba(79, 169, 177, .22);
 }
 
 /* ── Base ── */
@@ -115,79 +199,26 @@ body {
   transition: background var(--t-short), color var(--t-short);
 }
 
-h1, h2, h3 {
+h1, h2, h3, h4 {
   font-family: var(--font-title);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ink);
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
-h1 { font-size: 28px; }
-h2 { font-size: 20px; }
-h3 { font-size: 16px; }
-
-:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-  border-radius: var(--r-sm);
-}
+/* Escala de la capa familia: 12 / 14 (cuerpo) / 16 / 17 / 20 / 24.
+   h1 24 (título de pantalla) · h2 17 (sección) · h3 15 · h4 13 ·
+   `.text-lg` 20 (título de tarjeta o diálogo). */
+h1 { font-size: 24px; line-height: 1.25; }
+h2 { font-size: 17px; line-height: 1.35; }
+h3 { font-size: 15px; line-height: 1.4; }
+h4 { font-size: 13px; line-height: 1.4; }
 
 /* Cualquier cosa con números en columna. No es opcional. */
 .num, table td, table th {
   font-variant-numeric: tabular-nums;
 }
-
-/* ── Componentes base ── */
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-1);
-  padding: var(--s-xl);
-}
-
-.btn {
-  font: inherit;
-  font-weight: 500;
-  padding: var(--s-sm) var(--s-lg);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-md);
-  background: var(--accent);
-  color: var(--on-accent);
-  cursor: pointer;
-  transition: background var(--t-micro), border-color var(--t-micro);
-}
-.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-
-.btn.secondary {
-  background: var(--surface);
-  color: var(--ink);
-  border-color: var(--line-strong);
-}
-.btn.secondary:hover { background: var(--surface-2); }
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-xs);
-  padding: 2px var(--s-sm);
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--surface-2);
-  color: var(--muted);
-}
-.chip.ok      { background: var(--success-tint); border-color: var(--success-line); color: var(--success); }
-.chip.warn    { background: var(--warning-tint); border-color: var(--warning-line); color: var(--warning); }
-.chip.err     { background: var(--danger-tint);  border-color: var(--danger-line);  color: var(--danger); }
-
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-
-.stack { display: flex; flex-direction: column; gap: var(--s-lg); }
-.row   { display: flex; align-items: center; gap: var(--s-md); }
 
 /* ── Impresión ──────────────────────────────────────────────────────────────
    Una liquidación se imprime y se le entrega al propietario. Sin esto sale la

@@ -227,7 +227,6 @@ onMounted(cargar);
 .cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--s-lg); align-items: start; }
 @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
 
-h2 { font-size: 15px; }
 .row.entre { justify-content: space-between; }
 .btn.sm { padding: 4px var(--s-md); font-size: 12px; }
 
@@ -265,8 +264,4 @@ h2 { font-size: 15px; }
 .pct { color: var(--muted); }
 .vacio { margin: 0; color: var(--muted-2); font-size: 13px; }
 .volver { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--s-xs); }
-.alert {
-  margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint);
-  border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px;
-}
 </style>

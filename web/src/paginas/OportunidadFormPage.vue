@@ -80,16 +80,9 @@ async function guardar() {
 
 <style scoped>
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-md); }
-.campo { display: flex; flex-direction: column; gap: var(--s-xs); }
-.campo > span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .campo input, .campo select, .campo textarea {
   font: inherit; padding: var(--s-sm) var(--s-md); border: 1px solid var(--line-strong);
   border-radius: var(--r-md); background: var(--surface); color: var(--ink);
 }
 .campo textarea { resize: vertical; }
-.btn:disabled { opacity: 0.6; cursor: default; }
-.alert {
-  margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint);
-  border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px;
-}
 </style>

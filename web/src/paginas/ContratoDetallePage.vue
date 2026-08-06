@@ -236,9 +236,6 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-h2 { font-size: 15px; }
-.row.entre { justify-content: space-between; }
-.btn.sm { padding: 4px var(--s-md); font-size: 12px; }
 .resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s-lg); }
 .resumen > div { display: flex; flex-direction: column; gap: 2px; }
 .et { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); }
@@ -249,17 +246,11 @@ h2 { font-size: 15px; }
 .desde { font-size: 12px; color: var(--muted); }
 .salto { font-size: 13px; color: var(--ink-2); }
 .memoria { margin: var(--s-sm) 0 0; padding: var(--s-sm) var(--s-md); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 11px; line-height: 1.7; color: var(--ink-2); white-space: pre-wrap; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding-bottom: var(--s-sm); border-bottom: 1px solid var(--line); }
 td { padding: var(--s-sm) 0; border-bottom: 1px solid var(--line); color: var(--ink-2); }
-tbody tr:last-child td { border-bottom: none; }
-.der { text-align: right; }
-.fuerte { color: var(--ink); }
-.neg { color: var(--danger); }
 .cobro { display: inline-flex; gap: var(--s-xs); }
 .cobro input { width: 110px; font: inherit; font-size: 12px; padding: 2px var(--s-sm); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); text-align: right; }
 .vacio { margin: 0; color: var(--muted-2); font-size: 13px; }
 .nota-inter { color: var(--muted); font-size: 13px; }
 .ok { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--success-tint); border: 1px solid var(--success-line); border-radius: var(--r-md); color: var(--success); font-size: 13px; }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>

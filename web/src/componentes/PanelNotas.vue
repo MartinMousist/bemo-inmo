@@ -183,7 +183,6 @@ onMounted(cargar);
 
 <style scoped>
 .cab { display: flex; align-items: center; gap: var(--s-sm); }
-h2 { font-size: 16px; }
 .cuenta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .alta { display: flex; flex-direction: column; gap: var(--s-sm); }
@@ -209,7 +208,6 @@ textarea:focus-visible { outline: none; box-shadow: var(--ring); border-color: v
 
 .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .lista li { padding: var(--s-md) 0; border-bottom: 1px solid var(--line); }
-.lista li:last-child { border-bottom: none; }
 /* El pendiente se marca con una barra al costado, no con fondo de color: el
    fondo compite con el texto, que es lo que hay que leer. */
 .lista li.pendiente { border-left: 2px solid var(--warning); padding-left: var(--s-md); }

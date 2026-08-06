@@ -141,8 +141,8 @@ onMounted(cargar);
         <option value="">Todos los movimientos</option>
         <option v-for="(t, k) in ACCION" :key="k" :value="k">{{ t }}</option>
       </select>
-      <label class="campo"><span>Desde</span><input v-model="desde" type="date" /></label>
-      <label class="campo"><span>Hasta</span><input v-model="hasta" type="date" /></label>
+      <label class="campo suave"><span>Desde</span><input v-model="desde" type="date" /></label>
+      <label class="campo suave"><span>Hasta</span><input v-model="hasta" type="date" /></label>
       <button
         v-if="q || accion || desde || hasta"
         class="btn secondary sm"
@@ -191,17 +191,13 @@ onMounted(cargar);
 
 <style scoped>
 .filtros { display: flex; gap: var(--s-md); flex-wrap: wrap; align-items: flex-end; }
-.filtros > :first-child { flex: 1; min-width: 220px; }
 .filtros select, .filtros input {
   font: inherit; font-size: 13px;
   padding: var(--s-sm) var(--s-md);
   border: 1px solid var(--line-strong); border-radius: var(--r-md);
   background: var(--surface); color: var(--ink);
 }
-.campo { display: flex; flex-direction: column; gap: var(--s-xs); font-size: 12px; color: var(--muted); }
 
-.card.sin-padding { padding: 0; overflow: hidden; }
-.lista { list-style: none; margin: 0; padding: 0; }
 .lista li {
   display: grid;
   grid-template-columns: 140px auto 1fr auto;
@@ -211,14 +207,11 @@ onMounted(cargar);
   border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
-.lista li:last-child { border-bottom: none; }
 .cuando { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .que { display: flex; flex-direction: column; min-width: 0; }
 .quien { color: var(--ink); }
 .ctx { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .monto { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
-
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 
 @media (max-width: 760px) {
   .lista li { grid-template-columns: 1fr auto; row-gap: var(--s-xs); }

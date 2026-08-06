@@ -168,21 +168,12 @@ async function guardar() {
 </template>
 
 <style scoped>
-h2 { font-size: 15px; }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--s-md);
 }
 .ancho2 { grid-column: span 2; }
-.campo { display: flex; flex-direction: column; gap: var(--s-xs); }
-.campo > span {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
 .campo input,
 .campo select,
 .campo textarea {
@@ -194,7 +185,6 @@ h2 { font-size: 15px; }
   color: var(--ink);
 }
 .campo textarea { resize: vertical; }
-.nota { margin: 0; font-size: 12px; color: var(--muted-2); }
 .nota.aviso {
   padding: var(--s-sm) var(--s-md);
   background: var(--warning-tint);
@@ -204,14 +194,4 @@ h2 { font-size: 15px; }
 }
 .nota-mapa { display: flex; flex-direction: column; gap: var(--s-md); }
 .acciones { padding-bottom: var(--s-xl); }
-.btn:disabled { opacity: 0.6; cursor: default; }
-.alert {
-  margin: 0;
-  padding: var(--s-sm) var(--s-md);
-  background: var(--danger-tint);
-  border: 1px solid var(--danger-line);
-  border-radius: var(--r-md);
-  color: var(--danger);
-  font-size: 13px;
-}
 </style>

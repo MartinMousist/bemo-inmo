@@ -100,7 +100,7 @@ onMounted(cargar);
       <UiEmpty v-else-if="!items.length" titulo="Todavía no hay ventas"
         detalle="Una venta se abre desde la operación de la propiedad, con el precio de cierre. Después se reparte la comisión en sus tres niveles." />
       <div v-else class="table-wrap">
-        <table>
+        <table class="table-clicable">
           <thead>
             <tr><th>Propiedad</th><th>Comprador</th><th class="der">Cierre</th>
                 <th class="der">Comisión</th><th class="der">A la casa</th><th>Estado</th></tr>
@@ -139,37 +139,7 @@ onMounted(cargar);
 </template>
 
 <style scoped>
-.filtros { display: flex; gap: var(--s-md); flex-wrap: wrap; }
-.filtros > :first-child { flex: 1; min-width: 220px; }
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  background: var(--surface);
-}
-.segmented button {
-  font: inherit; font-size: 13px;
-  padding: var(--s-sm) var(--s-lg);
-  border: none; border-right: 1px solid var(--line);
-  background: transparent; color: var(--muted); cursor: pointer;
-  white-space: nowrap;
-}
-.segmented button:last-child { border-right: none; }
-.segmented button.activo { background: var(--accent-tint); color: var(--accent); font-weight: 500; }
 
-.card.sin-padding { padding: 0; overflow: hidden; }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--line); color: var(--ink-2); }
-tbody tr { cursor: pointer; transition: background var(--t-micro); }
-tbody tr:hover { background: var(--surface-2); }
-tbody tr:last-child td { border-bottom: none; }
-.der { text-align: right; }
-.fuerte { color: var(--ink); }
-.cod { display: block; font-size: 11px; color: var(--muted); }
 .dir { color: var(--ink); }
 .cuando { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-2); }
-.alert { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--danger-tint); border: 1px solid var(--danger-line); border-radius: var(--r-md); color: var(--danger); font-size: 13px; }
 </style>
