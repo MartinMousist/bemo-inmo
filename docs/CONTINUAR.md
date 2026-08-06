@@ -3,10 +3,11 @@
 > Documento de traspaso. Si arrancás una sesión nueva, **leé esto primero** y
 > después `CLAUDE.md`, `DESIGN.md` y `docs/roadmap.md`.
 >
-> Para el detalle de la última jornada —qué se construyó, qué se rompió y por
-> qué— está `docs/SESION-2026-08-04.md`. Se lee una vez y no se vuelve.
+> Para el detalle de una jornada vieja está `docs/SESION-2026-08-04.md`. Se lee
+> una vez y no se vuelve.
 >
-> Última actualización: 2026-08-04 (segunda sesión del día).
+> Última actualización: 2026-08-06. La etapa 11 quedó cerrada; lo que sigue
+> está en la sección 5, con su diseño ya resuelto.
 
 ---
 
@@ -25,8 +26,8 @@ docker compose up -d          # db + s3 (MinIO) + api + web
 | Consola de MinIO | http://localhost:9001 | las de `.env` (`S3_ACCESS_KEY` / `S3_SECRET_KEY`) |
 
 ```bash
-docker compose exec api npm test           # 437 tests contra Postgres real
-docker compose exec web npm test           # 45 tests de front (Vitest)
+docker compose exec api npm test           # 480 tests contra Postgres real
+docker compose exec web npm test           # 57 tests de front (Vitest)
 docker compose exec api npx tsc --noEmit   # typecheck backend
 docker compose exec web npx vue-tsc --noEmit
 
@@ -45,11 +46,10 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 
 | | |
 |---|---|
-| Commits | 31 |
-| Migraciones | 15 |
-| Tests | **437 de API** contra Postgres real + **45 de front**. Todo en verde |
-| Rutas de API | 170 |
-| Pantallas | 31 |
+| Commits | 40 |
+| Migraciones | 16 |
+| Tests | **480 de API** contra Postgres real + **57 de front**. Todo en verde |
+| Pantallas | 34 |
 
 ### Etapas
 
@@ -65,6 +65,8 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | 7 | Recordatorios | ⚠️ generación lista | Proveedor de mail · verificación de WhatsApp |
 | 8 | Piloto | ⚠️ lista | 30 días de uso diario |
 | 9 | Planes | ⚠️ lista | Un cliente y un medio de pago |
+| 10 | Mejoras | ✅ | — |
+| 11 | Lo que se ve usando la app | ✅ | — |
 
 **Ningún gate abierto depende de código.** Están marcados así a propósito: dar por
 cerrado un gate cuya evidencia no existe es el error #2 del playbook con otra cara.
@@ -73,7 +75,7 @@ cerrado un gate cuya evidencia no existe es el error #2 del playbook con otra ca
 
 | Integración | Estado |
 |---|---|
-| **BCRA** (ICL + UVA) | ✅ **Funcionando.** Contrato verificado contra la API real (v4.0, variables 40 y 31). 74 períodos cargados de cada uno. Idempotente. `POST /v1/indices/sincronizar` |
+| **BCRA** (ICL + UVA) | ✅ **Funcionando y automático.** Contrato verificado contra la API real (v4.0, variables 40 y 31). Se sincroniza solo cada 12 h (`SINCRONIZAR_INDICES`), y sigue estando `POST /v1/indices/sincronizar` a mano. Idempotente |
 | **INDEC** (IPC) | ❌ Manual **a propósito**. No hay API estable; raspar un HTML que cambia sin aviso pondría un número equivocado en un aviso de aumento |
 | **Google Maps** | ⚙️ Todo el circuito listo, **falta sólo la API key**. Con la key puesta en `.env` ya llega al contenedor (antes el compose no la pasaba), hay diagnóstico que le pega a Google de verdad y un backfill de las propiedades cargadas antes. Sin key no inventa coordenadas: ofrece cargarlas a mano y dice por qué |
 | **S3** (fotos) | ✅ Funcionando con MinIO en dev. Mismo protocolo que S3/R2/Spaces |
@@ -153,56 +155,112 @@ Lo que no sé y estoy interpretando:
 
 ---
 
-### ✅ Hecho en esta sesión
+### ✅ Hecho en la sesión del 2026-08-06
 
-Todo lo que era prioridad 1 y 2 está cerrado, con tests. El detalle de cada
-decisión está en los mensajes de commit; acá va sólo el titular y lo que
-apareció en el camino.
+La etapa 11 entera, más tres pedidos de producto. El detalle de cada decisión
+está en los mensajes de commit; acá va el titular y **lo que apareció al
+hacerlo**, que es lo que sirve.
 
-| | Qué | Lo que apareció al hacerlo |
-|---|---|---|
-| 1.1 | Límite de intentos en `/auth`: por IP **y** por cuenta | `@SkipThrottle()` pelado no salta contadores con nombre. Habría limitado `/auth/yo` |
-| 1.2 | Paginación en los cinco endpoints + `UiPager` | `avisos` tenía un `LIMIT 200` pelado: eso no es paginar, es truncar en silencio |
-| 1.3 | Seis N+1 pasados a lote | **Bug de plata**: rearmar una liquidación borraba los gastos cargados a mano y se los transfería de más al propietario |
-| 2.1 | Pantalla de inicio en `/` | Los bloques de plata vienen en `null` para el asesor, no en cero |
-| 2.2 | Cartera de alquileres con acciones en línea y en lote | Un aumento confirmado y en vigencia **no** es el "próximo aumento" |
-| 2.3 | Portada: el problema, las garantías y el cierre | La portada prometía el **dólar como índice**, que no existe. Corregido |
-| 2.4 | `UiToasts` + `UiConfirm` como promesa | — |
-| — | Google Maps: diagnóstico + backfill | El compose **nunca** le pasaba la key al contenedor |
-
----
-
-### ✅ La etapa 10 está cerrada
-
-Punitorios (motor puro, 14 casos de papel), renovación de contrato, devolución
-del depósito, auditoría de la plata, segunda tanda de paginación, request-id con
-logging estructurado, backup que corre solo y se verifica restaurando, 45 tests
-de frontend donde había cero, caja del día, ⌘K completa, **portal del
-propietario**, **notas de seguimiento**, **recibo de cobro**, el contador de
-intentos compartido en Postgres, el artefacto de deploy y la pasada de
-accesibilidad.
-
-El detalle está en `docs/roadmap.md`, etapa 10, con lo hecho tildado y lo que
-queda marcado con ⏳ y su motivo.
-
-**Lo que se midió en vez de suponer**: la cartera con 500 contratos da 20 ms y
-no hace falta optimizar nada; el contraste de `--muted-2` estaba por debajo de
-AA en los dos temas y se veía bien.
-
----
-
-### 🟠 Lo que queda, y de qué depende
-
-Marcado con ⏳ en el roadmap. **Nada de esto se destraba escribiendo código**:
-
-| Qué | De qué depende |
+| Qué | Lo que apareció en el camino |
 |---|---|
-| Expensas: quién las cobra | Una decisión tuya. Es una de las cinco preguntas del gate de la etapa 0 |
-| Que el deploy esté probado | Un servidor. El artefacto está entero y validado: ver `docs/deploy.md` |
-| Verificar CI | Un repo remoto |
-| Google Maps | La API key. Los tres pasos están en `.env.example` |
-| Los gates de las etapas 0, 4, 5, 8 y 9 | Datos reales tuyos, un cliente y un medio de pago |
-| Archivar lo viejo · comparar contra el año pasado | Nada, pero no duelen todavía. Quedan descriptos con su porqué |
+| **11.1 · Cinco defectos** encontrados usando la app | Vencimientos no cargaba y mostraba «0» en vez de decirlo; la primera fila de Propiedades era invisible; blanco sobre `--danger` daba 3,13:1 en oscuro |
+| **11.2 · Gastos y reclamos** con entidad propia | El gasto sólo entraba si el propietario también había cobrado ese mes: un mes con una unidad vacía y techo roto no generaba nada |
+| **11.3 · El tablero** | «Subir» no siempre es bueno: el delta de días de cobro se pintaba verde al empeorar. Y «Perdida · 200%» era un porcentaje de nada |
+| **11.4 · Ordenar, totales, tarjetas** | `columnas['constructor']` devuelve una función, no `undefined`. La misma trampa de prototipos del motor de plantillas |
+| **11.5 · Copy y accesibilidad** | El filtro RFC 9457 lee `message`, no `detail`: el texto redactado quedaba sin usar y salía «Bad Request Exception» |
+| **Seed con volumen real** | Corre como OWNER y **saltea RLS**: sin filtro por `tenant_id` marcó como pagadas siete cuotas de una inmobiliaria ajena |
+| **Carteras de venta y alquiler** separadas | La de alquiler mostraba **3 de 13**: el filtro excluía `estado = 'cerrada'`, que es el estado de una unidad alquilada |
+| **Pre-contratos**: la pantalla que faltaba | El motor estaba entero e invisible. La sintaxis `{{ }}` no se puede mostrar dentro de un template de Vue |
+| **Índices que se sincronizan solos** | El «pensado para un cron» de la etapa 4 no tenía cron |
+
+---
+
+### 🟠 Lo que sigue, con su diseño ya resuelto
+
+Ordenado por lo que más duele. Los tres primeros son **el mismo error #3**:
+columnas que existen, tienen sentido y **no las lee nadie**.
+
+#### 1. Config de comisiones por inmobiliaria ← *empezado y revertido a propósito*
+
+**`tenant.comisiones` existe desde la migración 008** con este default:
+
+```json
+{"venta": {"compradora": 3, "vendedora": 3},
+ "alquiler": {"locataria": 0, "locadora": 0},
+ "repartoInterno": {"captador": 25, "cerrador": 25}}
+```
+
+Que es exactamente el modelo que pidió el dueño: 1,5% al captador, 1,5% al que
+vende, 3% a la casa, 6% total. **Nadie lo lee.** Cada venta obliga a tipear los
+cuatro números, y el día que alguien tipea 30 donde iba 25 no se entera nadie.
+
+**`propiedad.agente_captador_id`** también existe, se guarda desde la ficha, y
+no pre-llena nada. El captador está ahí y el reparto lo pide a mano.
+
+**La trampa de unidades, que es la razón por la que estas cuentas dan mal.** El
+motor pide el nivel 3 en **% de lo que le queda a la casa**; una inmobiliaria
+piensa en **% de la venta**. Con 6% de honorarios: `captador 25% de lo que queda
+== 1,5% de la venta`.
+
+Se guarda en la unidad del motor y se **muestran las dos**. Guardar «% de la
+venta» sería peor y no es obvio por qué: cuando la operación se comparte con
+otra inmobiliaria lo que queda se parte al medio, y un captador con 1,5% fijo
+sobre la venta se llevaría la mitad de lo que entró. La proporción es lo que se
+mantiene.
+
+Qué falta: `GET`/`PUT` de la config, la sugerencia de reparto con captador desde
+la propiedad y cerrador desde el usuario que carga, la pantalla con las dos
+unidades al lado, y tests. **Se empezó el servicio y se revirtió**: quedaba a
+medias y `puntas` opcional sin fallback rompía el reparto. Media feature no va.
+
+Y un cuidado que no es técnico: el captador no siempre es quien cargó la
+propiedad. Lo automático tiene que ser un **valor por defecto editable**.
+
+#### 2. Personas por rol
+
+Los roles **se derivan, no se guardan** — decisión de la etapa 3, escrita en
+`personas.service.ts`: *«una persona es propietaria porque tiene una
+titularidad, no porque alguien marcó una casilla»*.
+
+Hoy se derivan tres —propietario, interesado, reservante— y **la base sabe tres
+más que nadie calcula**:
+
+| Rol | De dónde sale |
+|---|---|
+| Inquilino | `contrato_parte` rol `locatario` |
+| Garante | `contrato_parte` rol `garante`/`fiador` |
+| Comprador | `operacion_venta.comprador_id` |
+
+Plan acordado: **cuatro pantallas** —Leads, Inquilinos, Propietarios, Garantes—
+más filtro por rol en Personas, con **estados derivados** y no un campo manual.
+
+**«Locador» y «vendedor» NO llevan pantalla propia**: son el propietario visto
+desde un contrato o desde una venta. Dos pantallas con los mismos nombres y otro
+título.
+
+#### 3. El IPC sigue siendo manual
+
+ICL y UVA ahora se traen solos del BCRA cada 12 h. El IPC no: INDEC no tiene API
+estable y raspar un HTML que cambia sin aviso pondría un número equivocado en un
+aviso de aumento. Lo que sí se puede hacer sin romper esa decisión: **avisar en
+el inicio** cuando el mes ya pasó y el IPC de ese período no está cargado.
+
+#### 4. Lo demás, marcado con ⏳ en el roadmap
+
+`metrica_mes` persistida para la comparación interanual · gastos y reclamos en
+el portal del propietario · columnas configurables · lint de colores a mano ·
+archivar lo viejo.
+
+---
+
+### ⚠️ Dos cosas del entorno, no del código
+
+**El CI falló por una caída de GitHub Actions**, no por los cambios: *«The job
+was not acquired by Runner»*, *«Service Unavailable»*. Hay que reintentarlo.
+
+**El hostname de la máquina cambió** y git dejó de autodetectar la identidad.
+Ya está configurado en global (`bemotech.ok@gmail.com`). Los commits de esta
+sesión quedaron con el hostname viejo, igual que todos los anteriores.
 
 ---
 
@@ -225,17 +283,22 @@ Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 
 Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
 docs/roadmap.md.
-Ya están las diez etapas construidas: 437 tests de API y 45 de front, en verde.
+
+Estado: once etapas cerradas, 480 tests de API contra Postgres real y 57 de
+front, todo en verde. El seed trae 16 propiedades, 15 contratos y su ciclo de
+cobranza: entrás con owner@andes.test / unaclavelarga1.
+
+Lo que sigue es la etapa 12 del roadmap, con el diseño ya resuelto en
+CONTINUAR.md §5. Arrancá por 12.1, la config de comisiones — el servicio se
+empezó y se revirtió a propósito porque quedaba a medias.
 
 Trabajamos como siempre:
 - Cada feature va completa: migración con RLS, servicio, controlador con roles,
   tests (camino feliz + cada denegación + aislamiento) y pantalla.
-- Verificá de verdad: tests contra la base real y la app en el navegador.
+- Verificá de verdad: tests contra la base real y la app en el navegador. La
+  etapa 11 entera salió de mirar la app, no el código.
 - Si algo queda sin hacer o no lo pudiste probar, decímelo explícitamente.
 - Nada de datos falsos: lo que no existe se marca "en desarrollo" con el motivo.
-
-Lo que queda abierto NO se destraba escribiendo código (ver la sección 5).
-Si hay algo nuevo para hacer, decímelo; si no, arranquemos por cerrar un gate.
 ```
 
 ---
@@ -252,6 +315,8 @@ api/src/
   auditoria/            quién tocó la plata
   notas/                seguimiento sobre cualquier entidad
   portal/               lo que ve el propietario, sin sesión
+  tablero/              los KPIs del mes: cobranza, cartera, negocio y embudo
+  gastos/               gasto, reclamo y proveedor. La liquidación TOMA el gasto
   alquileres/
     ajustes.motor.ts    el cálculo del aumento. PURO, 17 tests de papel
     bcra.service.ts     ICL y UVA. Contrato verificado
@@ -260,6 +325,7 @@ api/src/
     ciclo.service.ts    renovación y devolución del depósito
     punitorios.motor.ts el interés por mora. PURO, 14 tests de papel
     liquidaciones.service.ts
+    indices.cron.ts     ICL y UVA del BCRA, solos, cada 12 h. Idempotente
   ventas/
     comisiones.motor.ts los TRES niveles de reparto. PURO, 11 tests
   publicaciones/
@@ -275,13 +341,14 @@ web/src/
   dominio/formato.ts    money/fecha/periodo. Reglas de negocio, no cosmética
   api/cliente.ts        refresh single-flight + descarga autenticada
   dominio/pagina.ts     la forma de una lista paginada, igual que en el back
+  dominio/filtros.ts    filtros que se recuerdan, con sus tres reglas escritas
   stores/ui.ts          toasts + confirmar() como promesa
   componentes/          AppShell, CommandPalette, GaleriaFotos, UiPager, primitivos
-  paginas/              31 pantallas
+  paginas/              34 pantallas
 ```
 
-**Los cinco motores puros** (`ajustes`, `punitorios`, `comisiones`, `aviso`,
-`plantillas`) no
+**Los seis motores puros** (`ajustes`, `punitorios`, `comisiones`, `aviso`,
+`plantillas` y `orden`) no
 tocan base ni red: entra data, sale un resultado. Ahí es donde hay que agregar
 casos cuando aparezca una regla nueva — son baratos de testear y es donde un error
 se paga caro.

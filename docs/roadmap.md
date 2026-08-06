@@ -433,7 +433,7 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
 
 ---
 
-## Etapa 11 — Lo que se ve mirando la app corriendo 🔨 EN CURSO (2026-08-05)
+## Etapa 11 — Lo que se ve mirando la app corriendo ✅ CERRADA (2026-08-06)
 
 > La etapa 10 salió de recorrer el **código**. Ésta sale de abrir la **aplicación** con
 > `owner@prueba.test` y usarla. Ningún test agarró nada de esto, porque los gates que
@@ -633,6 +633,58 @@ elemento pensada para el caso común, aplicada a controles que no son ese caso. 
       eso, quien usa lector filtra y escucha silencio.
 - [ ] ⏳ Lint que prohíba colores a mano fuera de `tokens.css`. Los dos que importaban
       —los botones de B-03— ya salieron; los que quedan son de la portada y del logo.
+
+---
+
+## Etapa 12 — Lo que pidió el dueño ⏳ POR EMPEZAR
+
+> Tres pedidos de producto de la sesión del 06/08, con el diseño ya resuelto y
+> el detalle completo en `docs/CONTINUAR.md` §5. Los tres primeros puntos son
+> **el mismo error #3**: columnas que existen, tienen sentido y no lee nadie.
+
+### 12.1 · Config de comisiones por inmobiliaria
+
+- [ ] `tenant.comisiones` existe desde la migración 008 y **nadie lo lee**. Su
+      default ya es el modelo que pidió el dueño: 3% + 3% a las puntas y 25% +
+      25% puertas adentro, o sea 1,5% al captador, 1,5% al que vende y 3% a la
+      casa sobre un total de 6%.
+- [ ] `propiedad.agente_captador_id` también existe y no pre-llena nada.
+- [ ] **Las dos unidades a la vista.** El motor pide el nivel 3 en % de lo que
+      le queda a la casa; la inmobiliaria piensa en % de la venta. Se guarda en
+      la del motor —cuando la operación se comparte, lo que queda se parte, y un
+      % fijo sobre la venta dejaría de cerrar— y se muestran las dos.
+- [ ] El pre-llenado es un **valor por defecto editable**: el captador no
+      siempre es quien cargó la propiedad.
+
+**Hecho cuando**: cargar una venta no obliga a tipear ningún porcentaje, y la
+pantalla muestra «captador 25% de lo que queda ≡ 1,5% de la venta».
+
+*Se empezó el servicio en la sesión del 06/08 y se revirtió a propósito*: quedaba
+a medias y con `puntas` opcional sin fallback el reparto rompía. Media feature
+no va.
+
+### 12.2 · Personas por rol
+
+- [ ] Derivar los **tres roles que la base ya sabe**: inquilino
+      (`contrato_parte` rol locatario), garante (rol garante/fiador) y comprador
+      (`operacion_venta.comprador_id`). Hoy sólo salen propietario, interesado y
+      reservante.
+- [ ] Cuatro pantallas —Leads, Inquilinos, Propietarios, Garantes— más filtro
+      por rol en Personas.
+- [ ] **Estados derivados, no un campo manual.** Un inquilino está «en mora»
+      porque tiene cuotas vencidas; un lead está en «negociación» porque su
+      oportunidad lo está. Es la misma decisión que la etapa 3 tomó para los
+      roles: un dato derivado no se desincroniza.
+- [ ] **«Locador» y «vendedor» NO llevan pantalla propia**: son el propietario
+      visto desde un contrato o desde una venta, y serían dos pantallas con los
+      mismos nombres y otro título.
+
+### 12.3 · El IPC, que sigue siendo manual
+
+- [ ] Avisar en el inicio cuando el mes ya pasó y falta el IPC de ese período.
+      **No** raspar INDEC: no tiene API estable y un número equivocado en un
+      aviso de aumento es de lo peor que este producto puede hacer. La decisión
+      de la etapa 4 no cambia; lo que falta es que la ausencia se vea.
 
 ---
 

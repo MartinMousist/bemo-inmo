@@ -38,20 +38,23 @@ vez y no se vuelve.
 Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 
 Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
-docs/roadmap.md. Si querés el detalle de la última jornada, está en
-docs/SESION-2026-08-04.md.
+docs/roadmap.md.
 
-Están las diez etapas construidas, con 437 tests de API contra Postgres real
-y 45 de front, todo en verde.
+Estado: once etapas cerradas, 480 tests de API contra Postgres real y 57 de
+front, todo en verde. El seed trae 16 propiedades, 15 contratos y su ciclo de
+cobranza: entrás con owner@andes.test / unaclavelarga1.
+
+Lo que sigue es la etapa 12 del roadmap, con el diseño ya resuelto en
+CONTINUAR.md §5. Arrancá por 12.1, la config de comisiones — el servicio se
+empezó y se revirtió a propósito porque quedaba a medias.
 
 Trabajamos como siempre:
 - Cada feature va completa: migración con RLS, servicio, controlador con roles,
   tests (camino feliz + cada denegación + aislamiento) y pantalla.
-- Verificá de verdad: tests contra la base real y la app en el navegador.
+- Verificá de verdad: tests contra la base real y la app en el navegador. La
+  etapa 11 entera salió de mirar la app, no el código.
 - Si algo queda sin hacer o no lo pudiste probar, decímelo explícitamente.
 - Nada de datos falsos: lo que no existe se marca "en desarrollo" con el motivo.
-
-Empezá por [lo que elijas de la etapa 10 del roadmap].
 ```
 
 ---
@@ -87,8 +90,8 @@ producción**. Un schema armado a mano para los tests prueba otra cosa que la qu
 se despliega.
 
 ```bash
-docker compose exec api npm test            # 437 tests
-docker compose exec web npm test            #  45 tests
+docker compose exec api npm test            # 480 tests
+docker compose exec web npm test            #  57 tests
 docker compose exec api npx tsc --noEmit
 docker compose exec web npx vue-tsc --noEmit
 ```
@@ -164,8 +167,12 @@ del pool, sin contexto, y no ve nada.
 
 ## Estado
 
-**Las diez etapas construibles están hechas.** 437 tests de API contra Postgres
-real y 45 de front, todo en verde. CI verificado.
+**Once etapas cerradas.** 480 tests de API contra Postgres real y 57 de front,
+todo en verde.
+
+La etapa 11 salió de **abrir la aplicación y usarla**, no de leer código: dos
+pantallas estaban rotas en `main` y ningún test las agarró, porque los gates que
+las cubrían eran de API. Un gate de API no cierra una feature que tiene pantalla.
 
 Los gates que quedan abiertos **no dependen de código**: necesitan un precio
 concreto, tres liquidaciones reales, un convenio comercial, una API key o un
