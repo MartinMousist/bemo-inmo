@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from '../database/db.service';
 import { armarPagina, offset, type Pagina } from '../common/paginacion';
+import { ordenSeguro } from '../common/orden';
 import { ContratosService } from './contratos.service';
 import type { FiltroCarteraDto, LoteContratosDto } from './alquileres.dto';
 
@@ -90,15 +91,36 @@ export class CarteraService {
         params,
       );
 
+      // El orden por defecto pone lo urgente primero: mora, después aumento
+      // vencido sin confirmar, después vencimiento de contrato. Ordenar por
+      // fecha de firma pondría arriba lo que no requiere nada.
+      //
+      // Y se puede pedir otro. En un listado de plata, «¿quién me debe más?» se
+      // contestaba exportando a Excel — que es de donde este producto viene a
+      // sacar a la gente. La lista blanca es lo que hace que ordenar por una
+      // columna no sea dejar que el cliente escriba SQL.
+      const orden = ordenSeguro(
+        {
+          // Los cuatro del medio son ALIAS de salida, no columnas: se calculan
+          // en el `SELECT` con subconsultas. Postgres deja ordenar por el alias
+          // y evita repetir la subconsulta entera en el `ORDER BY`.
+          propiedad: 'propiedad_codigo',
+          inquilino: 'inquilino',
+          alquiler: 'monto_vigente',
+          saldo: 'adeudado',
+          vence: 'c.fecha_fin',
+          aumento: 'aj_desde',
+        },
+        `(r.en_mora > 0) DESC,
+         (aj.vigente_desde <= current_date AND aj.estado = 'proyectado') DESC,
+         c.fecha_fin`,
+        f.orden,
+        f.dir,
+      );
+
       const { rows } = await ej.query<Fila>(
         `${BASE} ${SELECT} ${DESDE} ${DONDE}
-          ORDER BY
-            -- Lo urgente primero: mora, después aumento vencido sin confirmar,
-            -- después por vencimiento de contrato. Ordenar por fecha de firma
-            -- pone arriba lo que no requiere nada.
-            (r.en_mora > 0) DESC,
-            (aj.vigente_desde <= current_date AND aj.estado = 'proyectado') DESC,
-            c.fecha_fin
+          ORDER BY ${orden}
           LIMIT $6 OFFSET $7`,
         [...params, f.porPagina, offset(f)],
       );

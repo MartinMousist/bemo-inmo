@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min, MaxLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength } from 'class-validator';
 
 /**
  * Paginación del lado del servidor desde el día uno.
@@ -25,6 +25,22 @@ export class PaginacionDto {
   @IsString()
   @MaxLength(120)
   q?: string;
+
+  /**
+   * Columna por la que ordenar. **Nunca se interpola en el SQL**: cada endpoint
+   * la traduce con `ordenSeguro()` —en `common/orden.ts`— contra su propia
+   * lista blanca. Un `ORDER BY` armado con texto del cliente es una inyección
+   * con otro nombre, y la parte peligrosa es que `ORDER BY` no acepta bind
+   * parameters: la tentación de concatenar es real.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  orden?: string;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  dir?: 'asc' | 'desc';
 }
 
 export interface Pagina<T> {

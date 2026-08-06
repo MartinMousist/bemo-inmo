@@ -31,6 +31,33 @@ export function numero(n: number | null | undefined, sufijo = ''): string {
 }
 
 /**
+ * `plural(1, 'contrato', 'contratos')` → «1 contrato».
+ *
+ * Existe para terminar con las **85 apariciones** de `(s)` y `(es)` que había
+ * repartidas por el producto: «1 contrato(s)», «2 propiedad(es) sin ubicación»,
+ * «liquidación(es) armada(s)». En un producto cuya ancla es *exacto*, es la
+ * marca más visible de que esa línea no la escribió nadie — y en castellano el
+ * paréntesis además no siempre funciona: el plural de «liquidación» no es
+ * «liquidación(es)» sino «liquidaciones», sin tilde.
+ *
+ * Por eso pide las dos formas completas en vez de intentar derivar la segunda:
+ * las reglas de acentuación no entran en un `+ 's'`.
+ *
+ * `incluirNumero: false` devuelve sólo el sustantivo, para cuando el número ya
+ * está en pantalla como cifra grande y repetirlo sería ruido.
+ */
+export function plural(
+  n: number | null | undefined,
+  singular: string,
+  plural: string,
+  incluirNumero = true,
+): string {
+  const cantidad = n ?? 0;
+  const palabra = Math.abs(cantidad) === 1 ? singular : plural;
+  return incluirNumero ? `${ENTERO_FMT.format(cantidad)} ${palabra}` : palabra;
+}
+
+/**
  * Un `YYYY-MM-DD` es una fecha de calendario, NO un instante.
  *
  * `new Date('2026-01-01')` lo interpreta como medianoche UTC; al mostrarlo en

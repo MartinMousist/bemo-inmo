@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { plural } from '../dominio/formato';
 import { onMounted, ref } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import { useAuth } from '../stores/auth';
@@ -67,7 +68,7 @@ async function sincronizar() {
 
     if (r.resueltas) {
       ui.ok(
-        `${r.resueltas} propiedad(es) ubicada(s)`,
+        `${plural(r.resueltas, 'propiedad ubicada', 'propiedades ubicadas')}`,
         pendientes.value ? `quedan ${pendientes.value} por resolver` : 'no queda ninguna',
       );
       emit('sincronizado');
@@ -107,17 +108,26 @@ onMounted(cargar);
          habilitar o QUÉ restricción rebotó. Se muestra tal cual. -->
     <pre v-if="diag.mensajeDeGoogle" class="mono google">{{ diag.mensajeDeGoogle }}</pre>
 
-    <p v-if="!diag.configurado" class="como">
-      Se crea en Google Cloud: habilitar <b>Geocoding API</b>, activar la
-      facturación del proyecto, y restringir la key <b>por IP</b> (no por
-      referrer HTTP: las consultas salen del servidor, no del navegador).
-      Después va en <code class="mono">GOOGLE_MAPS_API_KEY</code> del
-      <code class="mono">.env</code> y se reinicia la API.
-    </p>
+    <!--
+      Las instrucciones de Google Cloud van PLEGADAS. Es documentación, no
+      interfaz: se llevaban 250px arriba del fold de Propiedades, en cada carga,
+      contándole a un administrador cómo se activa la facturación de un proyecto
+      de Google. Quien tiene que hacerlo lo hace una vez; el resto ve la lista.
+    -->
+    <details v-if="!diag.configurado" class="como">
+      <summary>Cómo se configura</summary>
+      <p>
+        Se crea en Google Cloud: habilitar <b>Geocoding API</b>, activar la
+        facturación del proyecto, y restringir la key <b>por IP</b> (no por
+        referrer HTTP: las consultas salen del servidor, no del navegador).
+        Después va en <code class="mono">GOOGLE_MAPS_API_KEY</code> del
+        <code class="mono">.env</code> y se reinicia la API.
+      </p>
+    </details>
 
     <template v-if="pendientes > 0">
       <p class="pendientes">
-        <b>{{ pendientes }}</b> propiedad(es) sin ubicación.
+        <b>{{ pendientes }}</b> {{ plural(pendientes, 'propiedad', 'propiedades', false) }} sin ubicación.
         <template v-if="diag.funciona">
           Se resuelven de a 50 por vez — cada consulta a Google se paga.
         </template>
@@ -173,6 +183,19 @@ header { display: flex; align-items: center; gap: var(--s-md); }
   max-width: 76ch;
 }
 .como { color: var(--muted); }
+.como > summary {
+  cursor: pointer;
+  color: var(--accent-ink);
+  font-size: 13px;
+  /* El marcador nativo cambia de forma entre navegadores y no se puede alinear
+     con el resto. Se apaga y la flecha va en el pseudo-elemento. */
+  list-style: none;
+}
+.como > summary::-webkit-details-marker { display: none; }
+.como > summary::before { content: '▸ '; }
+.como[open] > summary::before { content: '▾ '; }
+.como > summary:focus-visible { outline: 0; box-shadow: var(--ring); border-radius: var(--r-sm); }
+.como > p { margin: var(--s-sm) 0 0; }
 .como code, .cod { font-size: 12px; }
 
 .google {

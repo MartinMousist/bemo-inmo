@@ -9,7 +9,7 @@ import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
-import { money, periodo as fmtPeriodo } from '../dominio/formato';
+import { money, periodo as fmtPeriodo, plural } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
 
 interface Linea { concepto: string; tipo: string; signo: 1 | -1; monto: number }
@@ -84,7 +84,7 @@ async function generar() {
     );
     await cargar();
     ui.ok(
-      `${r.generadas} liquidación(es) armada(s)`,
+      `${plural(r.generadas, 'liquidación armada', 'liquidaciones armadas')}`,
       r.omitidasCerradas
         ? `${r.omitidasCerradas} ya estaban cerradas y no se tocaron`
         : `período ${fmtPeriodo(`${mes.value}-01`)}`,

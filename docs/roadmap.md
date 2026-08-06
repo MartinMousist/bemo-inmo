@@ -584,32 +584,55 @@ ARS y USD **nunca** en el mismo eje. El que no tiene dato dice «sin datos», no
 
 Absorbe el ⏳ «Comparar contra el año pasado» de 10.5, con el alcance que en realidad tenía.
 
-### 11.4 · Que la tabla no mande a Excel ⏳
+### 11.4 · Que la tabla no mande a Excel ✅ CERRADO
 
-- [ ] **Ordenar por columna.** Ninguna tabla del producto lo permite. En un listado de
-      plata, «¿quién me debe más?» hoy se contesta exportando — que es de donde este
-      producto viene a sacar a la gente.
-- [ ] **Fila de totales** en toda tabla de importes, por moneda.
-- [ ] **Filtros que se recuerdan** y columnas que se eligen.
-- [ ] **Tarjetas por default a `(max-width: 640px)`**, salvo preferencia explícita. La
-      vista existe, está bien resuelta, y el primer encuentro en un teléfono sigue siendo
-      una tabla con scroll lateral.
-- [ ] Acciones de fila sin caja (`.btn.enlace`): tres `secondary` por renglón llevan la
-      fila a 90px, y §1 pide ver 30 contratos.
+- [x] **Ordenar por columna**, con `ordenSeguro()` — motor puro, 5 tests de papel. La
+      lista blanca no es una validación más: **`ORDER BY` no acepta bind parameters**, así
+      que la columna hay que concatenarla sí o sí y ésa es la única defensa. Escribir el
+      test hizo aparecer que `columnas[orden]` con `orden = 'constructor'` devuelve una
+      función en vez de `undefined`: va con `Object.hasOwn`, la misma trampa de prototipos
+      que ya había aparecido en el motor de plantillas.
+- [x] El ciclo es asc → desc → **sin orden**. La tercera parada importa: sin ella no hay
+      forma de volver al orden que eligió el backend, que en varias pantallas es el útil.
+- [x] **Fila de totales por moneda** en Gastos, con el rótulo «de esta página»: mostrar la
+      suma de 25 filas como si fuera el total del período sería un número falso.
+- [x] **Filtros que se recuerdan**, con tres reglas escritas en `dominio/filtros.ts`: la
+      página no se recuerda, un valor guardado que ya no es válido se descarta (si no, el
+      backend contesta 400 y la pantalla no carga nunca sin que el usuario entienda por
+      qué), y un `localStorage` que falla no rompe la pantalla.
+- [x] **Tarjetas por default abajo de 640px**, y una preferencia explícita gana sobre el
+      ancho.
+- [x] `.btn.enlace` para acciones de fila, y área táctil de 44px bajo `(pointer: coarse)`
+      sin tocar el escritorio.
+- [ ] ⏳ Columnas que se eligen. No duele todavía: con diez columnas se ve todo.
 
-### 11.5 · Copy y accesibilidad ⏳
+**Encontrado a 375px**: el checkbox de la tarjeta de contrato medía **195px**, aplastaba
+el título a 0 y empujaba el chip fuera de la tarjeta. Es el `input, select, textarea
+{ width: 100% }` de `familia.css` mordiendo por **tercera** vez — la primera fueron los
+`<select>` de la barra de filtros (B-04). El patrón es siempre el mismo: una regla de
+elemento pensada para el caso común, aplicada a controles que no son ese caso. Ahora
+`checkbox` y `radio` están acotados en la capa familia.
 
-- [ ] **`plural(n, 'contrato', 'contratos')`.** Hay **85** `(s)` / `(es)` repartidos:
-      «1 contrato(s)», «2 propiedad(es) sin ubicación», «liquidación(es) armada(s)». En un
-      producto cuya ancla es *exacto*, es la marca más visible de que esa línea no la
-      escribió nadie.
-- [ ] **Ningún `detail` de class-validator es texto de interfaz.** El contrato RFC 9457
-      tiene un `code` estable justamente para que el front decida y muestre castellano.
-- [ ] El aviso de Google Maps deja de ocupar 250px sobre el fold de Propiedades: es
-      documentación, no interfaz.
-- [ ] Lint que prohíba colores a mano fuera de `tokens.css` — hay **39**, y dos de ellos
-      son el defecto B-03.
-- [ ] «Saltar al contenido» y `aria-live` en los listados que se refiltran.
+### 11.5 · Copy y accesibilidad ✅ CERRADO
+
+- [x] **`plural(n, 'contrato', 'contratos')`**, con 6 tests. Pide las dos formas completas
+      en vez de derivar la segunda porque las reglas de acentuación no entran en un
+      `+ 's'`: el plural de «liquidación» es «liquidaciones», sin tilde, y el paréntesis
+      nunca lo iba a resolver.
+- [x] **Ningún `detail` de class-validator llega a la pantalla.** Salían en inglés y con
+      el nombre interno de la propiedad —«porPagina must not be greater than 100»—, que es
+      exactamente lo que se leyó en Vencimientos en B-01. Ahora se redacta en castellano y
+      el detalle técnico queda en `errores`, para el log y para quien integre.
+      *Trampa al hacerlo*: el filtro RFC 9457 lee `message`, no `detail`; poner `detail`
+      dejaba el texto redactado sin usar y salía «Bad Request Exception» — el mismo texto
+      de librería que esto vino a sacar.
+- [x] El aviso de Google Maps pasa a `<details>` plegado: son instrucciones de Google
+      Cloud, y quien tiene que hacerlo lo hace una vez.
+- [x] «Saltar al contenido» como primer elemento enfocable, y `aria-live="polite"` en la
+      bajada de `PageHeader`, que es donde vive el conteo que cambia al refiltrar. Sin
+      eso, quien usa lector filtra y escucha silencio.
+- [ ] ⏳ Lint que prohíba colores a mano fuera de `tokens.css`. Los dos que importaban
+      —los botones de B-03— ya salieron; los que quedan son de la portada y del logo.
 
 ---
 

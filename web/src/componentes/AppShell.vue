@@ -90,6 +90,11 @@ window.addEventListener('keydown', (e) => {
 
 <template>
   <div class="shell">
+    <!-- Primer elemento enfocable del documento, a propósito: es lo primero que
+         encuentra quien navega por teclado. Sin esto recorría los veinte ítems
+         de la barra antes de llegar a la tabla, en cada carga. -->
+    <a class="saltar" href="#contenido">Saltar al contenido</a>
+
     <aside id="barra-lateral" class="sidebar" :class="{ abierto: drawerAbierto, collapsed: plegado }">
       <RouterLink to="/inicio" class="marca" :title="plegado ? 'Bemo INMO' : undefined">
         <!-- Plegada, el wordmark no se oculta por CSS: se deja de renderizar.
@@ -158,7 +163,7 @@ window.addEventListener('keydown', (e) => {
         <MenuUsuario />
       </header>
 
-      <main class="contenido">
+      <main id="contenido" class="contenido" tabindex="-1">
         <slot />
       </main>
     </div>

@@ -6,7 +6,7 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
-import { fecha, money, periodo as fmtPeriodo } from '../dominio/formato';
+import { fecha, money, periodo as fmtPeriodo, plural } from '../dominio/formato';
 
 /**
  * La caja del día.
@@ -88,7 +88,7 @@ onMounted(cargar);
   <div class="stack">
     <PageHeader
       titulo="Caja"
-      :bajada="cargando || !d ? '' : `${d.total} movimiento(s)`"
+      :bajada="cargando || !d ? '' : plural(d.total, 'movimiento', 'movimientos')"
     >
       <template #acciones>
         <div class="segmented">

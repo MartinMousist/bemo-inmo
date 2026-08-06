@@ -6,6 +6,7 @@ import {
   numero,
   periodo,
   proximidad,
+  plural,
 } from '../src/dominio/formato';
 
 /**
@@ -155,5 +156,44 @@ describe('numero', () => {
   it('distingue el cero de la ausencia', () => {
     expect(numero(0)).toBe('0');
     expect(numero(null)).toBe('—');
+  });
+});
+
+/**
+ * `plural`.
+ *
+ * Existe para terminar con las 85 apariciones de `(s)` y `(es)` que había
+ * repartidas por el producto. Los casos de acá son los que el paréntesis NO
+ * resolvía: el plural de «liquidación» no es «liquidación(es)».
+ */
+describe('plural', () => {
+  it('elige la forma según la cantidad', () => {
+    expect(plural(1, 'contrato', 'contratos')).toBe('1 contrato');
+    expect(plural(2, 'contrato', 'contratos')).toBe('2 contratos');
+  });
+
+  it('cero va en plural, como en castellano', () => {
+    expect(plural(0, 'contrato', 'contratos')).toBe('0 contratos');
+  });
+
+  it('resuelve los plurales que el paréntesis rompía', () => {
+    // «liquidación(es)» no existe: al pluralizar se pierde la tilde.
+    expect(plural(2, 'liquidación', 'liquidaciones')).toBe('2 liquidaciones');
+    expect(plural(1, 'liquidación', 'liquidaciones')).toBe('1 liquidación');
+  });
+
+  it('formatea el número con separador de miles', () => {
+    expect(plural(1200, 'fila', 'filas')).toBe('1.200 filas');
+  });
+
+  it('sin número devuelve sólo el sustantivo', () => {
+    // Para cuando la cifra ya está en pantalla en grande y repetirla es ruido.
+    expect(plural(3, 'propiedad', 'propiedades', false)).toBe('propiedades');
+    expect(plural(1, 'propiedad', 'propiedades', false)).toBe('propiedad');
+  });
+
+  it('null y undefined se tratan como cero, no revientan', () => {
+    expect(plural(null, 'gasto', 'gastos')).toBe('0 gastos');
+    expect(plural(undefined, 'gasto', 'gastos')).toBe('0 gastos');
   });
 });

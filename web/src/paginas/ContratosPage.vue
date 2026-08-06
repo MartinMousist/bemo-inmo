@@ -10,8 +10,10 @@ import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
-import { fecha, money, moneyCorto, periodo as fmtPeriodo, proximidad } from '../dominio/formato';
+import ThOrden from '../componentes/ThOrden.vue';
+import { fecha, money, moneyCorto, periodo as fmtPeriodo, proximidad, plural } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
+import { filtrosRecordados } from '../dominio/filtros';
 
 /**
  * La cartera de alquileres.
@@ -83,19 +85,48 @@ const cargando = ref(true);
 const error = ref('');
 
 const q = ref('');
-const cobranza = ref('');
-const indice = ref('');
-const venceEn = ref('');
 
 /**
- * Lista o tarjetas. La lista es el modo por defecto —densidad es una virtud en
- * DESIGN.md— y las tarjetas existen para pantallas angostas y para revisar de a
- * pocos contratos con más contexto a la vista.
+ * Los filtros se recuerdan entre visitas. Cada usuario mira dos o tres cosas
+ * —«los que están en mora», «los que vencen este trimestre»— y hasta acá las
+ * volvía a tipear en cada carga. La búsqueda NO: un texto guardado hace que la
+ * pantalla arranque mostrando doce de doscientos contratos sin que se vea por
+ * qué.
  */
-const modo = ref<'lista' | 'tarjetas'>(
-  (localStorage.getItem('bemo_inmo_cartera_modo') as 'lista' | 'tarjetas') || 'lista',
+const { valores: filtros, limpiar: limpiarFiltros } = filtrosRecordados(
+  'cartera',
+  { cobranza: '', indice: '', venceEn: '' },
+  { cobranza: Object.keys(ETIQUETA_COBRANZA), indice: Object.keys(ETIQUETA_INDICE) },
 );
-watch(modo, (m) => localStorage.setItem('bemo_inmo_cartera_modo', m));
+
+/** Orden pedido por el usuario. `null` = el del backend, que es por urgencia. */
+const orden = ref<string | null>(null);
+const dir = ref<'asc' | 'desc'>('asc');
+
+function ordenarPor(campo: string | null, d: 'asc' | 'desc') {
+  orden.value = campo;
+  dir.value = d;
+  pagina.value = 1;
+  void cargar();
+}
+
+/**
+ * Lista o tarjetas.
+ *
+ * La lista es el default en escritorio —densidad es una virtud en DESIGN.md— y
+ * las tarjetas, el default **en pantalla angosta**: ahí la tabla tiene diez
+ * columnas y el primer encuentro en un teléfono era un scroll lateral. La vista
+ * de tarjetas ya existía y estaba bien resuelta; lo que faltaba era elegirla.
+ *
+ * Una preferencia explícita gana sobre el ancho: quien eligió lista en el
+ * teléfono la quiere en el teléfono.
+ */
+const CLAVE_MODO = 'bemo_inmo_cartera_modo';
+const guardado = localStorage.getItem(CLAVE_MODO) as 'lista' | 'tarjetas' | null;
+const angosta = typeof window !== 'undefined'
+  && window.matchMedia('(max-width: 640px)').matches;
+const modo = ref<'lista' | 'tarjetas'>(guardado ?? (angosta ? 'tarjetas' : 'lista'));
+watch(modo, (m) => localStorage.setItem(CLAVE_MODO, m));
 
 const seleccion = ref(new Set<string>());
 /** Sólo quien puede tocar plata ve las acciones que la mueven. */
@@ -134,9 +165,11 @@ async function cargar() {
         { pagina: pagina.value, porPagina: POR_PAGINA },
         {
           q: q.value.trim(),
-          cobranza: cobranza.value,
-          indice: indice.value,
-          venceEn: venceEn.value,
+          cobranza: filtros.value.cobranza,
+          indice: filtros.value.indice,
+          venceEn: filtros.value.venceEn,
+          orden: orden.value ?? '',
+          dir: orden.value ? dir.value : '',
         },
       )}`,
     );
@@ -154,7 +187,7 @@ async function cargar() {
 }
 
 let debounce: ReturnType<typeof setTimeout> | undefined;
-watch([q, cobranza, indice, venceEn], () => {
+watch([q, filtros], () => {
   clearTimeout(debounce);
   pagina.value = 1;
   debounce = setTimeout(cargar, 220);
@@ -247,7 +280,7 @@ async function enLote(ruta: string, verbo: string) {
   if (!ids.length) return;
 
   const ok = await ui.confirmar({
-    titulo: `¿${verbo} en ${ids.length} contrato(s)?`,
+    titulo: `¿${verbo} en ${plural(ids.length, 'contrato', 'contratos')}?`,
     detalle: 'Se procesan de a uno. Si alguno falla, los demás siguen igual.',
     confirmar: verbo,
   });
@@ -269,7 +302,7 @@ async function enLote(ruta: string, verbo: string) {
         `${fallados.length} con problema · ${fallados[0].detalle}`,
       );
     } else {
-      ui.ok(`${r.exitosos} contrato(s) procesado(s)`, r.resultados[0]?.detalle);
+      ui.ok(`${plural(r.exitosos, 'contrato procesado', 'contratos procesados')}`, r.resultados[0]?.detalle);
     }
     await cargar();
   } catch (e) {
@@ -288,8 +321,17 @@ async function exportar() {
 function irA(id: string) { router.push(`/contratos/${id}`); }
 
 const hayFiltro = computed(
-  () => !!(q.value || cobranza.value || indice.value || venceEn.value),
+  () => !!(q.value || filtros.value.cobranza || filtros.value.indice || filtros.value.venceEn
+           || orden.value),
 );
+
+/** Limpiar borra también el orden: si no, «Limpiar» no limpia todo. */
+function limpiarTodo() {
+  q.value = '';
+  orden.value = null;
+  dir.value = 'asc';
+  limpiarFiltros();
+}
 
 onMounted(cargar);
 </script>
@@ -298,7 +340,7 @@ onMounted(cargar);
   <div class="stack">
     <PageHeader
       titulo="Cartera de alquileres"
-      :bajada="cargando ? '' : `${total} contrato(s)`"
+      :bajada="cargando ? '' : plural(total, 'contrato', 'contratos')"
     >
       <template #acciones>
         <div class="modos" role="group" aria-label="Formato de la lista">
@@ -320,26 +362,26 @@ onMounted(cargar);
     <div class="filtros">
       <SearchInput v-model="q" placeholder="Dirección, código, inquilino o propietario…" />
 
-      <select v-model="cobranza" aria-label="Estado de cobranza">
+      <select v-model="filtros.cobranza" aria-label="Estado de cobranza">
         <option value="">Toda la cobranza</option>
         <option v-for="(t, k) in ETIQUETA_COBRANZA" :key="k" :value="k">{{ t }}</option>
       </select>
 
-      <select v-model="indice" aria-label="Índice de actualización">
+      <select v-model="filtros.indice" aria-label="Índice de actualización">
         <option value="">Todos los índices</option>
         <option v-for="(t, k) in ETIQUETA_INDICE" :key="k" :value="k">{{ t }}</option>
       </select>
 
       <label class="mes">
         <span>Vence en</span>
-        <input v-model="venceEn" type="month" />
+        <input v-model="filtros.venceEn" type="month" />
       </label>
 
       <button
         v-if="hayFiltro"
         class="btn secondary sm"
         type="button"
-        @click="q = ''; cobranza = ''; indice = ''; venceEn = ''"
+        @click="limpiarTodo"
       >
         Limpiar
       </button>
@@ -347,7 +389,7 @@ onMounted(cargar);
 
     <!-- ── Barra de selección ───────────────────────────────────────────── -->
     <div v-if="seleccion.size" class="lote">
-      <span class="cuenta">{{ seleccion.size }} seleccionado(s)</span>
+      <span class="cuenta">{{ plural(seleccion.size, 'seleccionado', 'seleccionados') }}</span>
       <div class="acciones-lote">
         <button
           class="btn secondary sm"
@@ -403,14 +445,26 @@ onMounted(cargar);
                   @change="alternarTodos"
                 />
               </th>
-              <th>Propiedad</th>
-              <th>Inquilino</th>
-              <th class="der">Alquiler</th>
-              <th>Próximo aumento</th>
+              <ThOrden campo="propiedad" :actual="orden" :dir="dir" @ordenar="ordenarPor">
+                Propiedad
+              </ThOrden>
+              <ThOrden campo="inquilino" :actual="orden" :dir="dir" @ordenar="ordenarPor">
+                Inquilino
+              </ThOrden>
+              <ThOrden campo="alquiler" num :actual="orden" :dir="dir" @ordenar="ordenarPor">
+                Alquiler
+              </ThOrden>
+              <ThOrden campo="aumento" :actual="orden" :dir="dir" @ordenar="ordenarPor">
+                Próximo aumento
+              </ThOrden>
               <th>Última cuota</th>
-              <th class="der">Saldo</th>
+              <ThOrden campo="saldo" num :actual="orden" :dir="dir" @ordenar="ordenarPor">
+                Saldo
+              </ThOrden>
               <th>Cobranza</th>
-              <th>Vence</th>
+              <ThOrden campo="vence" :actual="orden" :dir="dir" @ordenar="ordenarPor">
+                Vence
+              </ThOrden>
               <th>Estado</th>
             </tr>
           </thead>

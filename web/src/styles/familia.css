@@ -215,7 +215,32 @@ a:hover {
   filter: brightness(0.92);
 }
 
+/* El tercer nivel de la jerarquía: acción de FILA.
+   `secondary` trae borde, fondo y sombra; tres de ésos en un renglón llevan la
+   fila a 90px y con 200 contratos son 18.000px de scroll — en un producto cuyo
+   §1 dice "un administrador quiere ver 30 contratos". `enlace` pesa lo que un
+   texto y sigue siendo un botón: mismo alto de toque, mismo foco. */
+.btn.enlace {
+  padding: 4px 2px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-ink);
+  box-shadow: none;
+  font-weight: 500;
+}
+.btn.enlace:hover { background: transparent; text-decoration: underline; border-color: transparent; }
+.btn.enlace:disabled { text-decoration: none; }
+.btn.enlace.peligro { color: var(--danger-ink); }
+
 .btn.sm { padding: 5px 10px; font-size: 13px; border-radius: var(--r-sm); }
+
+/* Área táctil en pantallas de dedo. No toca el desktop: el mismo botón que en
+   un mouse tiene que ser chico para que entren 30 filas, con el dedo tiene que
+   ser tocable. `.btn.sm` medía 29px, bastante por debajo de los 44. */
+@media (pointer: coarse) {
+  .btn.sm, .btn.xs { min-height: 44px; }
+  .btn.enlace { min-height: 44px; display: inline-flex; align-items: center; }
+}
 .btn.xs { padding: 3px 8px; font-size: 12px; border-radius: var(--r-sm); }
 .btn.lg { padding: 11px 18px; font-size: 15px; }
 .btn.block { width: 100%; }
@@ -309,6 +334,21 @@ textarea {
   min-height: 72px;
   line-height: 1.55;
 }
+/* Un checkbox y un radio NO son campos de texto: el `width: 100%` de arriba no
+   les corresponde. Es la tercera vez que esa regla muerde. Las dos anteriores:
+   los `<select>` de la barra de filtros, que ocupaban la fila entera (B-04), y
+   —encontrado a 375px— el checkbox de la tarjeta de contrato, que medía 195px,
+   aplastaba el título a 0 y empujaba el chip fuera de la tarjeta.
+
+   El patrón es siempre el mismo: una regla de elemento pensada para el caso
+   común, aplicada a controles que no son ese caso. Acotarla acá es más barato
+   que descubrir el cuarto. */
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+  accent-color: var(--accent);
+}
+
 input::placeholder,
 textarea::placeholder { color: var(--muted-2); }
 input:hover,
@@ -597,6 +637,39 @@ td.acciones {
   width: 1%;
 }
 .table-wrap { overflow-x: auto; }
+
+/* ── Ordenar por columna ────────────────────────────────────────────────────
+   Ninguna tabla del producto lo permitía. En un listado de plata no es una
+   comodidad: la respuesta a «¿quién me debe más?» era exportar a Excel, que es
+   de donde este producto viene a sacar a la gente.
+
+   El encabezado es un `<button>` de verdad —no un `<th>` con `@click`— así que
+   entra por teclado y se anuncia como control. El estado va en
+   `aria-sort` del `<th>`, que es lo que lee un lector de pantalla; la flecha
+   es la versión visual de ese mismo dato, no un adorno. */
+th.ordenable { padding: 0; }
+th.ordenable > button {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 11px var(--s-lg);
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+th.ordenable.num > button { justify-content: flex-end; }
+th.ordenable > button:hover { color: var(--ink); background: var(--surface-3); }
+th.ordenable > button:focus-visible { outline: 0; box-shadow: var(--ring); }
+/* La flecha ocupa lugar aunque no se muestre: sin esto el encabezado se corre
+   un par de píxeles al ordenar y la tabla "salta". */
+th.ordenable .flecha { width: 8px; opacity: 0; transition: opacity var(--t-micro); }
+th[aria-sort] .flecha { opacity: 1; color: var(--accent-ink); }
+th[aria-sort] > button { color: var(--ink); }
 
 /* Fila entera clicable (la fila navega al detalle). `.clicable` suelto sirve
    para la celda, que es lo que hace falta cuando sólo algunas columnas navegan
@@ -1259,6 +1332,41 @@ td.acciones {
 
 .espaciador { flex: 1; }
 .w-full { width: 100%; }
+
+/* ── Accesibilidad ──────────────────────────────────────────────────────────
+
+   Texto que existe para el lector de pantalla y no para la vista. No es
+   `display: none` ni `visibility: hidden`: los dos lo sacan también del árbol
+   de accesibilidad, que es justo lo contrario de lo que hace falta. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* «Saltar al contenido». Sin esto, quien navega por teclado recorre los veinte
+   ítems de la barra lateral en CADA carga antes de llegar a la tabla. Sólo se
+   ve al enfocarlo — mientras no haga falta, no ocupa lugar. */
+.saltar {
+  position: absolute;
+  left: var(--s-sm);
+  top: -100px;
+  z-index: 100;
+  padding: var(--s-sm) var(--s-md);
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--r-md);
+  font-size: 14px;
+  text-decoration: none;
+  transition: top var(--t-micro);
+}
+.saltar:focus { top: var(--s-sm); }
 .oculto { display: none !important; }
 
 /* --- 12b. Efectos -------------------------------------------------------- */

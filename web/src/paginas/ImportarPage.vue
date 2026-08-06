@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { plural } from '../dominio/formato';
 import { computed, ref } from 'vue';
 import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
@@ -131,7 +132,7 @@ function columnas(o: Record<string, unknown>): Array<[string, unknown]> {
         </div>
 
         <div v-if="graves.length" class="problemas err">
-          <p><strong>{{ graves.length }} fila(s) no se van a importar</strong></p>
+          <p><strong>{{ plural(graves.length, 'fila', 'filas') }} {{ graves.length === 1 ? 'no se va' : 'no se van' }} a importar</strong></p>
           <ul>
             <li v-for="(p, i) in graves.slice(0, 12)" :key="i">
               Fila {{ p.fila }}: {{ p.mensaje }}
@@ -141,7 +142,7 @@ function columnas(o: Record<string, unknown>): Array<[string, unknown]> {
         </div>
 
         <div v-if="avisos.length" class="problemas warn">
-          <p><strong>{{ avisos.length }} aviso(s)</strong> — se importan igual</p>
+          <p><strong>{{ plural(avisos.length, 'aviso', 'avisos') }}</strong> — se importan igual</p>
           <ul>
             <li v-for="(p, i) in avisos.slice(0, 8)" :key="i">
               Fila {{ p.fila }}: {{ p.mensaje }}
@@ -151,7 +152,7 @@ function columnas(o: Record<string, unknown>): Array<[string, unknown]> {
 
         <div class="row">
           <button class="btn" type="button" :disabled="cargando || !prev.aImportar" @click="importar">
-            {{ cargando ? 'Importando…' : `Importar ${prev.aImportar} fila(s)` }}
+            {{ cargando ? 'Importando…' : `Importar ${plural(prev.aImportar, 'fila', 'filas')}` }}
           </button>
           <button class="btn secondary" type="button" @click="prev = null; csv = ''; nombreArchivo = ''">
             Cancelar
@@ -163,7 +164,7 @@ function columnas(o: Record<string, unknown>): Array<[string, unknown]> {
     <section v-if="resultado" class="card stack">
       <h2>Listo</h2>
       <p>
-        Se importaron <strong>{{ resultado.importadas }}</strong> fila(s).
+        Se importaron <strong>{{ resultado.importadas }}</strong> {{ plural(resultado.importadas, 'fila', 'filas', false) }}.
         <template v-if="resultado.omitidas">Se omitieron {{ resultado.omitidas }}.</template>
       </p>
       <div v-if="resultado.problemas.length" class="problemas err">

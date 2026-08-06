@@ -7,7 +7,7 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import PanelNotas from '../componentes/PanelNotas.vue';
-import { fecha, money, periodo as fmtPeriodo, proximidad } from '../dominio/formato';
+import { fecha, money, periodo as fmtPeriodo, proximidad, plural } from '../dominio/formato';
 import type { Pagina } from '../dominio/pagina';
 
 interface Ajuste {
@@ -72,7 +72,7 @@ async function proyectar() {
       `/contratos/${id}/ajustes/proyectar`, { method: 'POST' });
     aviso.value = r.sinIndice.length
       ? `${r.creados} ajuste(s) calculado(s). Falta el índice para ${r.sinIndice.map((f) => fecha(f)).join(', ')} — cargalo en Índices.`
-      : `${r.creados} ajuste(s) calculado(s).`;
+      : `${plural(r.creados, 'ajuste calculado', 'ajustes calculados')}.`;
     await cargar();
   } catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo proyectar.'; }
 }
