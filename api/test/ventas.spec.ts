@@ -281,4 +281,77 @@ describe('Ventas y comisiones', () => {
     // paginador de la vecina revelaría cuántas ventas tenemos.
     expect(res.body.total).toBe(0);
   });
+
+  // ── La política de comisiones de la inmobiliaria ───────────────────────────
+
+  describe('config de comisiones', () => {
+    const CONFIG_BASE = {
+      venta: { compradora: 3, vendedora: 3 },
+      alquiler: { locataria: 0, locadora: 100 },
+      repartoInterno: { captador: 25, cerrador: 25 },
+    };
+
+    afterEach(async () => {
+      await http().put('/v1/comisiones/config').set(...como(inmo)).send(CONFIG_BASE);
+    });
+
+    it('trae el default y las dos unidades del reparto', async () => {
+      const r = await http().get('/v1/comisiones/config').set(...como(inmo)).expect(200);
+
+      expect(r.body.venta).toEqual({ compradora: 3, vendedora: 3 });
+      expect(r.body.totalVenta).toBe(6);
+      // La traducción que evita media discusión por mes: el motor pide el nivel
+      // 3 en % de lo que le queda a la casa, la inmobiliaria piensa en % de la
+      // venta, y con 6% de honorarios 25% de lo que queda ES 1,5% de la venta.
+      expect(r.body.sobreLaVenta).toEqual({ captador: 1.5, cerrador: 1.5, casa: 3 });
+      expect(r.body.casa).toBe(50);
+    });
+
+    it('lo que se guarda es lo que después usa el reparto', async () => {
+      await http().put('/v1/comisiones/config').set(...como(inmo))
+        .send({ ...CONFIG_BASE, venta: { compradora: 4, vendedora: 2 } }).expect(200);
+
+      const r = await http().get('/v1/comisiones/config').set(...como(inmo)).expect(200);
+      expect(r.body.venta).toEqual({ compradora: 4, vendedora: 2 });
+      expect(r.body.totalVenta).toBe(6);
+      expect(r.body.sobreLaVenta.captador).toBe(1.5);
+    });
+
+    it('el captador y quien cierra no pueden dejar a la casa en negativo', async () => {
+      // Sin este corte, el motor no emite la línea de la casa —el resto es
+      // negativo— y el reparto deja de cuadrar contra el total: un 500 en vez
+      // de un mensaje.
+      const r = await http().put('/v1/comisiones/config').set(...como(inmo))
+        .send({ ...CONFIG_BASE, repartoInterno: { captador: 70, cerrador: 40 } })
+        .expect(422);
+      expect(r.body.detail).toContain('no quedaría nada para la casa');
+    });
+
+    it('un PUT parcial no escribe la punta que falta', async () => {
+      // La misma trampa del PATCH parcial que borraba número, ambientes y
+      // metros: acá dejaría `vendedora` en undefined y el motor calcularía una
+      // punta menos sin decir nada.
+      await http().put('/v1/comisiones/config').set(...como(inmo))
+        .send({ ...CONFIG_BASE, venta: { compradora: 3 } }).expect(400);
+
+      const r = await http().get('/v1/comisiones/config').set(...como(inmo)).expect(200);
+      expect(r.body.venta.vendedora).toBe(3);
+    });
+
+    it('el asesor la ve pero no la cambia', async () => {
+      await http().get('/v1/comisiones/config').set(...como(inmo, 'agente')).expect(200);
+      await http().put('/v1/comisiones/config').set(...como(inmo, 'agente'))
+        .send(CONFIG_BASE).expect(403);
+      await http().put('/v1/comisiones/config').set(...como(inmo, 'contable'))
+        .send(CONFIG_BASE).expect(403);
+    });
+
+    it('cada inmobiliaria tiene la suya', async () => {
+      await http().put('/v1/comisiones/config').set(...como(inmo))
+        .send({ ...CONFIG_BASE, venta: { compradora: 5, vendedora: 1 } }).expect(200);
+
+      const vecina = await http().get('/v1/comisiones/config').set(...como(otra)).expect(200);
+      expect(vecina.body.venta).toEqual({ compradora: 3, vendedora: 3 });
+    });
+  });
 });

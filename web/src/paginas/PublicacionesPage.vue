@@ -7,7 +7,7 @@ import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
-import { fechaHora } from '../dominio/formato';
+import { ETIQUETA_OPERACION, fechaHora } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
 
 interface Publicacion {
@@ -29,16 +29,13 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   pausada: 'Pausada', error: 'Error', baja: 'De baja',
 };
 /**
- * La operación, en la fila.
- *
- * Sin esto, una propiedad en venta Y en alquiler —que es un caso normal, no un
- * borde— muestra dos filas idénticas: mismo código, misma dirección, y lo único
- * distinto es el portal. El dato venía en la respuesta desde el primer día y no
- * se mostraba; apareció recién cuando la lista tuvo avisos de las dos puntas.
+ * La operación va en la fila —con la etiqueta compartida de `dominio/formato`—
+ * porque sin ella una propiedad en venta Y en alquiler, que es un caso normal y
+ * no un borde, muestra dos filas idénticas: mismo código, misma dirección, y lo
+ * único distinto es el portal. El dato venía en la respuesta desde el primer
+ * día y no se mostraba; apareció recién cuando la lista tuvo avisos de las dos
+ * puntas.
  */
-const ETIQUETA_OPERACION: Record<string, string> = {
-  venta: 'Venta', alquiler: 'Alquiler', alquiler_temporario: 'Temporario',
-};
 
 const POR_PAGINA = 25;
 

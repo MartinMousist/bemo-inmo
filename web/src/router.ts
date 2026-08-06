@@ -60,6 +60,7 @@ const router = createRouter({
     { path: '/publicaciones', component: () => import('./paginas/PublicacionesPage.vue') },
     { path: '/avisos', component: () => import('./paginas/AvisosPage.vue') },
     { path: '/equipo', component: () => import('./paginas/EquipoPage.vue') },
+    { path: '/comisiones', component: () => import('./paginas/ComisionesPage.vue') },
     { path: '/plan', component: () => import('./paginas/PlanPage.vue') },
     { path: '/importar', component: () => import('./paginas/ImportarPage.vue') },
 

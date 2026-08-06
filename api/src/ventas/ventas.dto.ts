@@ -47,6 +47,35 @@ export class RepartoDto {
   repartoInterno?: RepartoInternoDto;
 }
 
+/**
+ * La política de comisiones de la inmobiliaria.
+ *
+ * Los seis números van **obligatorios**, no opcionales: un PUT parcial que
+ * dejara `vendedora` afuera la escribiría como `undefined` y el motor
+ * calcularía una punta menos sin decir nada. Es la misma trampa del `PATCH`
+ * parcial que borraba número, ambientes y metros de una propiedad.
+ */
+export class PuntasVentaDto {
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) compradora!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) vendedora!: number;
+}
+
+export class PuntasAlquilerDto {
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) locataria!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) locadora!: number;
+}
+
+export class RepartoInternoConfigDto {
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) captador!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) cerrador!: number;
+}
+
+export class ConfigComisionesDto {
+  @ValidateNested() @Type(() => PuntasVentaDto) venta!: PuntasVentaDto;
+  @ValidateNested() @Type(() => PuntasAlquilerDto) alquiler!: PuntasAlquilerDto;
+  @ValidateNested() @Type(() => RepartoInternoConfigDto) repartoInterno!: RepartoInternoConfigDto;
+}
+
 export class CerrarVentaDto {
   @IsIn(['en_curso', 'boleto', 'escriturada', 'caida']) estado!: string;
   @IsOptional() @IsISO8601() fechaBoleto?: string;

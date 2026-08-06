@@ -1,9 +1,11 @@
 import {
-  Body, Controller, Get, Param, ParseUUIDPipe, Post, Patch, Query,
+  Body, Controller, Get, Param, ParseUUIDPipe, Post, Patch, Put, Query,
 } from '@nestjs/common';
 import { VentasService } from './ventas.service';
+import { ComisionesConfigService } from './comisiones.config.service';
 import {
-  CerrarVentaDto, CobrarComisionDto, CrearVentaDto, FiltroVentasDto, RepartoDto,
+  CerrarVentaDto, CobrarComisionDto, ConfigComisionesDto, CrearVentaDto,
+  FiltroVentasDto, RepartoDto,
 } from './ventas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
@@ -57,7 +59,29 @@ export class VentasController {
 
 @Controller('comisiones')
 export class ComisionesController {
-  constructor(private readonly ventas: VentasService) {}
+  constructor(
+    private readonly ventas: VentasService,
+    private readonly config: ComisionesConfigService,
+  ) {}
+
+  /**
+   * La política de comisiones de la inmobiliaria.
+   *
+   * La lee cualquiera del equipo —un agente necesita saber con qué números
+   * trabaja— y la escriben titular y administración.
+   *
+   * Va ANTES de `:id/cobrar`: Nest resuelve por orden de declaración.
+   */
+  @Get('config')
+  leerConfig(@ActorActual() a: Actor) {
+    return this.config.leer(a.tenantId);
+  }
+
+  @Put('config')
+  @Roles('owner', 'admin')
+  guardarConfig(@ActorActual() a: Actor, @Body() dto: ConfigComisionesDto) {
+    return this.config.guardar(a.tenantId, dto);
+  }
 
   @Post(':id/cobrar')
   @Roles('owner', 'admin')

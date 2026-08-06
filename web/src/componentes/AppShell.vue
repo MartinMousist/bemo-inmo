@@ -59,6 +59,7 @@ const grupos = [
     items: [
       { a: '/plantillas', icono: 'documento', texto: 'Pre-contratos' },
       { a: '/equipo', icono: 'equipo', texto: 'Equipo' },
+      { a: '/comisiones', icono: 'moneda', texto: 'Comisiones' },
       { a: '/importar', icono: 'mas', texto: 'Importar' },
       { a: '/movimientos', icono: 'grafico', texto: 'Movimientos' },
       { a: '/plan', icono: 'documento', texto: 'Tu plan' },

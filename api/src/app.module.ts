@@ -41,6 +41,7 @@ import { BcraService } from './alquileres/bcra.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
 import { ComisionesController, VentasController } from './ventas/ventas.controller';
 import { VentasService } from './ventas/ventas.service';
+import { ComisionesConfigService } from './ventas/comisiones.config.service';
 import {
   FeedController,
   PublicacionesController,
@@ -159,6 +160,7 @@ import { InicioService } from './inicio/inicio.service';
     BcraService,
     LiquidacionesService,
     VentasService,
+    ComisionesConfigService,
     PublicacionesService,
     RecordatoriosService,
     ExportarService,
