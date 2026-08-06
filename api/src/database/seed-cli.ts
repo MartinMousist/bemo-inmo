@@ -10,7 +10,14 @@ async function main(): Promise<void> {
   }
 
   await correrSql(env.DATABASE_OWNER_URL, join(__dirname, '..', '..', 'seeds', 'demo.sql'));
-  console.log('Seed demo aplicado: 2 inmobiliarias.');
+
+  // El seed es idempotente y corre en cada arranque de dev (`SEED_ON_BOOT`),
+  // así que decir "aplicado" no significa "insertado": la segunda corrida no
+  // toca nada. Se informa lo que quedó en la base, que es lo comprobable.
+  console.log(
+    'Seed demo aplicado. 2 inmobiliarias, 16 propiedades, 15 contratos y su ' +
+      'ciclo de cobranza. Usuarios `*@prueba.test`, contraseña `unaclavelarga1`.',
+  );
 }
 
 main().catch((err) => {
