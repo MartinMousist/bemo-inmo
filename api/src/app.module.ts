@@ -64,6 +64,8 @@ import { PlantillasController } from './plantillas/plantillas.controller';
 import { PlantillasService } from './plantillas/plantillas.service';
 import { CajaController, InicioController } from './inicio/inicio.controller';
 import { CajaService } from './inicio/caja.service';
+import { TableroController } from './tablero/tablero.controller';
+import { TableroService } from './tablero/tablero.service';
 import { NotasController } from './notas/notas.controller';
 import { NotasService } from './notas/notas.service';
 import {
@@ -95,6 +97,7 @@ import { InicioService } from './inicio/inicio.service';
     AuthController,
     InicioController,
     CajaController,
+    TableroController,
     AuditoriaController,
     NotasController,
     AccesosPropietarioController,
@@ -128,6 +131,7 @@ import { InicioService } from './inicio/inicio.service';
     TokensService,
     InicioService,
     CajaService,
+    TableroService,
     NotasService,
     PortalService,
     EquipoService,

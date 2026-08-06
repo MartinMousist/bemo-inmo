@@ -12,8 +12,14 @@ const auth = useAuth();
 /** Sidebar agrupado por función, no una lista plana de 12 ítems. */
 const grupos = [
   {
+    // El tablero va acá y no en Administración: es el MISMO usuario en el mismo
+    // momento del día. `Inicio` contesta "qué tengo que hacer hoy" y `Tablero`
+    // "cómo viene el mes"; separarlos por grupo haría buscar el segundo.
     titulo: 'Hoy',
-    items: [{ a: '/inicio', icono: 'monitor', texto: 'Inicio' }],
+    items: [
+      { a: '/inicio', icono: 'monitor', texto: 'Inicio' },
+      { a: '/tablero', icono: 'grafico', texto: 'Tablero' },
+    ],
   },
   {
     titulo: 'Cartera',

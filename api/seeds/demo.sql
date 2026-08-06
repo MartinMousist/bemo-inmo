@@ -23,13 +23,19 @@
 --    los seis índices, la cadena de renovación, el contrato sólo intermediado.
 --    El tablero y el embudo no se pueden probar con diez filas iguales.
 --
--- Todos los usuarios demo tienen la misma contraseña: `unaclavelarga1`.
+-- Entrar: `owner@andes.test` / `unaclavelarga1`. Todos los usuarios demo usan
+-- la misma contraseña.
 --
--- ⚠️ **El seed se cree dueño de `@prueba.test`.** `usuario.email` es único
--- GLOBAL, así que si alguien ya se registró a mano con `owner@prueba.test`, el
--- INSERT choca contra `usuario_email_key` y el seed no corre. No se resuelve
--- borrando por las suyas —esto es una base de desarrollo de alguien— sino
--- liberando el email a mano. Pasa una sola vez, en bases que ya venían usadas.
+-- ⚠️ **Los emails van en un dominio que el seed se reserva** —`@andes.test` y
+-- `@plata.test`— y no en `@prueba.test`, que es el que usa cualquiera que se
+-- registre a mano probando el signup. `usuario.email` es único GLOBAL: si el
+-- seed pide un email que ya existe, revienta `usuario_email_key`.
+--
+-- Y eso no era una molestia menor: con `SEED_ON_BOOT` prendido, el seed corre
+-- ANTES de que levante Nest, así que un choque de email dejaba a la API en
+-- ciclo de reinicio y al front con `ERR_CONNECTION_RESET`. Pasó de verdad al
+-- escribir este archivo. Se arregló por los dos lados: acá, con un dominio
+-- propio; y en `main.ts`, donde un seed que falla ahora avisa y deja arrancar.
 -- ============================================================================
 
 
@@ -65,12 +71,12 @@ ON CONFLICT (id) DO NOTHING;
 -- —no en cero— es media pantalla de inicio verificada sin escribir un test.
 
 INSERT INTO usuario (id, email, password_hash, nombre, estado) VALUES
-  ('11000000-0000-4000-8000-000000000001','owner@prueba.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Ana Torres',  'activo'),
-  ('11000000-0000-4000-8000-000000000002','admin@prueba.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Diego Paz',   'activo'),
-  ('11000000-0000-4000-8000-000000000003','asesor@prueba.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Sofía Luna',  'activo'),
-  ('11000000-0000-4000-8000-000000000004','contable@prueba.test','$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Raúl Vega',   'activo'),
-  ('11000000-0000-4000-8000-000000000005','asesor2@prueba.test', '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Nicolás Paz', 'activo'),
-  ('22000000-0000-4000-8000-000000000001','plata@prueba.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Laura Giménez','activo')
+  ('11000000-0000-4000-8000-000000000001','owner@andes.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Ana Torres',  'activo'),
+  ('11000000-0000-4000-8000-000000000002','admin@andes.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Diego Paz',   'activo'),
+  ('11000000-0000-4000-8000-000000000003','asesor@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Sofía Luna',  'activo'),
+  ('11000000-0000-4000-8000-000000000004','contable@andes.test','$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Raúl Vega',   'activo'),
+  ('11000000-0000-4000-8000-000000000005','asesor2@andes.test', '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Nicolás Paz', 'activo'),
+  ('22000000-0000-4000-8000-000000000001','owner@plata.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Laura Giménez','activo')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO membresia (id, tenant_id, usuario_id, rol, estado, sucursal_id) VALUES
@@ -375,6 +381,20 @@ ON CONFLICT (id) DO NOTHING;
 -- El contrato 7 no genera nada: es `administrado = false`. Un contrato sólo
 -- intermediado no tiene ciclo de cobranza, y que la tabla lo respete es la
 -- diferencia entre el supuesto A1 del spec y una suposición.
+--
+-- ⚠️ **Todo lo generado va filtrado por `tenant_id`, y no es decorativo.**
+-- El seed corre como OWNER, que es dueño del schema y por lo tanto **saltea
+-- RLS**: una sentencia sin `WHERE tenant_id IN (...)` toca las filas de TODAS
+-- las inmobiliarias de la base, incluidas las que cargó una persona a mano.
+--
+-- Pasó de verdad escribiendo este archivo: el `UPDATE` de estados no filtraba
+-- y marcó como pagadas siete cuotas de una inmobiliaria de prueba ajena al
+-- seed, inventándoles el cobro. En la app el efecto fue que una cartera con
+-- seis cuotas en mora amaneció "al día".
+--
+-- La lección no es "acordate de filtrar": es que **la protección que sostiene
+-- todo el producto —RLS— no aplica acá**, y este archivo es de los pocos
+-- lugares del repositorio donde eso es cierto.
 
 INSERT INTO periodo_alquiler (id, tenant_id, contrato_id, periodo, vence_el, monto_alquiler, expensas, otros, total, moneda, estado)
 SELECT
@@ -398,6 +418,8 @@ CROSS JOIN LATERAL generate_series(
 ) AS m
 WHERE c.administrado
   AND c.estado IN ('vigente','vencido','renovado','rescindido')
+  AND c.tenant_id IN ('11111111-1111-4111-8111-111111111111',
+                      '22222222-2222-4222-8222-222222222222')
 ON CONFLICT (contrato_id, periodo) DO NOTHING;
 
 
@@ -427,6 +449,8 @@ ordenados AS (
          p.vence_el
     FROM periodo_alquiler p
     LEFT JOIN regla r ON r.contrato_id = p.contrato_id
+   WHERE p.tenant_id IN ('11111111-1111-4111-8111-111111111111',
+                         '22222222-2222-4222-8222-222222222222')
 )
 UPDATE periodo_alquiler p
    SET estado = CASE
@@ -463,6 +487,8 @@ SELECT
   'alquiler'
 FROM periodo_alquiler p
 WHERE p.estado = 'pagado'
+  AND p.tenant_id IN ('11111111-1111-4111-8111-111111111111',
+                      '22222222-2222-4222-8222-222222222222')
 ON CONFLICT (id) DO NOTHING;
 
 -- El pago parcial: la mitad justa, para que el saldo se vea distinto del total.
@@ -479,6 +505,8 @@ SELECT
   'alquiler'
 FROM periodo_alquiler p
 WHERE p.estado = 'parcial'
+  AND p.tenant_id IN ('11111111-1111-4111-8111-111111111111',
+                      '22222222-2222-4222-8222-222222222222')
 ON CONFLICT (id) DO NOTHING;
 
 
@@ -743,11 +771,11 @@ INSERT INTO sucursal (id, tenant_id, nombre, direccion, telefono) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO usuario (id, email, password_hash, nombre, estado) VALUES
-  ('11000000-0000-4000-8000-000000000006','asesor3@prueba.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Belén Ortiz',   'activo'),
-  ('11000000-0000-4000-8000-000000000007','asesor4@prueba.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Martín Aguirre','activo'),
-  ('11000000-0000-4000-8000-000000000008','admin2@prueba.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Paula Bravo',   'activo'),
-  ('11000000-0000-4000-8000-000000000009','suspendido@prueba.test','$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Iván Sosa',    'suspendido'),
-  ('22000000-0000-4000-8000-000000000002','plata2@prueba.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Damián Ruiz',   'activo')
+  ('11000000-0000-4000-8000-000000000006','asesor3@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Belén Ortiz',   'activo'),
+  ('11000000-0000-4000-8000-000000000007','asesor4@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Martín Aguirre','activo'),
+  ('11000000-0000-4000-8000-000000000008','admin2@andes.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Paula Bravo',   'activo'),
+  ('11000000-0000-4000-8000-000000000009','suspendido@andes.test','$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Iván Sosa',    'suspendido'),
+  ('22000000-0000-4000-8000-000000000002','asesor@plata.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Damián Ruiz',   'activo')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO membresia (id, tenant_id, usuario_id, rol, estado, sucursal_id) VALUES

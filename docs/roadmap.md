@@ -517,32 +517,51 @@ liquidación, rearmar la liquidación puede destruirlo.
 **Hecho cuando**: se carga una reparación en marzo, se liquida en abril, y rearmar la
 liquidación de abril **no la toca**. Con test que lo fije.
 
-### 11.3 · El tablero ⏳
+### 11.3 · El tablero ✅ CERRADO
+
+`GET /v1/tablero?periodo=` y la pantalla `/tablero`, con 15 tests contra
+Postgres real. Lo que devuelve, y por qué cada uno:
 
 Hoy el producto muestra la plata **de terceros** y no muestra la propia: los honorarios
 devengados no están en ninguna pantalla. Y los cuatro números del inicio no tienen contra
 qué compararse — un indicador sin base es un número.
 
-- [ ] `GET /v1/tablero?desde&hasta&comparar` con el mismo contrato que `/inicio`: agrupado
-      por moneda, `null` —no cero— donde el rol no ve.
-- [ ] Cobranza: tasa del mes, aging de mora por tramo (1-30 / 31-60 / 61-90 / +90), deuda
-      vencida total, días promedio de cobro.
-- [ ] Cartera: ocupación, vacancia, renovación (el dato ya está en `contrato_anterior_id`),
-      carga de los próximos 30/60/90/180 días.
-- [ ] Negocio: **honorarios devengados**, comisiones por cobrar, ranking por asesor.
-- [ ] Embudo: conversión por etapa, leads por origen, tiempo de primera respuesta y
-      motivos de pérdida — las cuatro columnas ya se llenan y no las lee nadie (error #3).
-- [ ] `metrica_mes` persistida al cerrar el período. «Comparar contra el año pasado» no
-      puede depender de recalcular sobre datos que desde entonces cambiaron: es la misma
-      lógica de inmutabilidad que ya se aplica a los ajustes y a las liquidaciones.
+- [x] `GET /v1/tablero?periodo=` con el mismo contrato que `/inicio`: agrupado por moneda,
+      `null` —no cero— donde el rol no ve. Sin `@Roles`: lo que cambia por rol es el
+      contenido, no el acceso, y las consultas de plata **no se ejecutan** para quien no
+      las puede ver.
+- [x] Cobranza: tasa del mes, aging por tramo (1-30 / 31-60 / 61-90 / +90), deuda vencida,
+      días promedio de cobro y la serie de doce meses.
+- [x] Cartera: ocupación, vacancia, renovación (el dato ya estaba en `contrato_anterior_id`
+      desde la etapa 10 y nadie lo agregaba), y la carga de los próximos 30/60/90/180 días.
+- [x] Negocio: **honorarios devengados** —el ingreso propio de la inmobiliaria, que no
+      estaba en ninguna pantalla—, comisiones por cobrar y ranking por asesor.
+- [x] Embudo: conversión por etapa, leads por origen, tiempo de primera respuesta y
+      motivos de pérdida. Las cuatro columnas se llenaban desde la etapa 3 y no las leía
+      nadie: error #3 del playbook, cerrado.
+- [ ] ⏳ `metrica_mes` persistida al cerrar el período. Hoy la comparación interanual se
+      recalcula en vivo, y eso alcanza mientras el histórico no cambie. Cuando haya una
+      nota de crédito sobre un período cerrado va a dejar de alcanzar: es la misma lógica
+      de inmutabilidad que ya se aplica a los ajustes y a las liquidaciones.
 
 **Sin librería de gráficos.** Todo es polilínea y rectángulo: SVG a mano con los tokens.
 Una librería trae peso, un tema propio que pelea con el nuestro, y un montón de formas que
 §6 prohíbe. **Lo que sigue prohibido**: torta, dona, área con gradiente, gauge, radar, 3D.
 ARS y USD **nunca** en el mismo eje. El que no tiene dato dice «sin datos», no dibuja cero.
 
-**Hecho cuando**: el tablero contesta «¿este mes fue bueno?» sin abrir otra pantalla.
-Absorbe el ⏳ «Comparar contra el año pasado» de 10.5, con el alcance que en realidad tiene.
+**Tres cosas que aparecieron al construirlo**, y las tres son de criterio, no de código:
+
+- **Subir no siempre es bueno.** El delta se pintaba verde para todo lo que creciera, y en
+  «días promedio de cobro» crecer es empeorar. Un tablero que felicita a alguien por tardar
+  más en cobrar es peor que no tener tablero.
+- **«Perdida · 200%»** salía de calcular la conversión de cada etapa contra la anterior sin
+  notar que `perdida` no es el paso siguiente a `ganada`, es la otra salida. Un porcentaje
+  que no es porcentaje de nada, en una pantalla de indicadores, alguien lo va a leer.
+- **`null` y cero se separaron a mano en cada consulta.** «No cobramos nada» y «cobramos el
+  mismo día» dan los dos un número chico y significan lo contrario. Hay dos tests que fijan
+  justo ese borde.
+
+Absorbe el ⏳ «Comparar contra el año pasado» de 10.5, con el alcance que en realidad tenía.
 
 ### 11.4 · Que la tabla no mande a Excel ⏳
 

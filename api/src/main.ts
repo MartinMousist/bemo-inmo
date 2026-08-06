@@ -24,8 +24,28 @@ async function bootstrap(): Promise<void> {
   }
 
   if (env.SEED_ON_BOOT) {
-    await correrSql(env.DATABASE_OWNER_URL, join(__dirname, '..', 'seeds', 'demo.sql'));
-    logger.log('Seed demo aplicado');
+    // El seed NO puede voltear la API. Son datos de demostración: que fallen es
+    // un problema de la demo, no de la aplicación, y dejar el backend caído por
+    // eso convierte una molestia en una mañana perdida.
+    //
+    // No es hipotético: al ampliar el seed, un `owner@prueba.test` que ya
+    // existía en la base de desarrollo hizo que `usuario_email_key` reventara
+    // en cada arranque, y la API quedó en un ciclo de reinicio con el front
+    // dando `ERR_CONNECTION_RESET`. El error decía "duplicate key" y no decía
+    // "es el seed", que es la parte que costó.
+    //
+    // Las migraciones sí frenan el arranque, a propósito: una base con el
+    // esquema viejo no es una molestia, es corrupción esperando pasar.
+    try {
+      await correrSql(env.DATABASE_OWNER_URL, join(__dirname, '..', 'seeds', 'demo.sql'));
+      logger.log('Seed demo aplicado');
+    } catch (err) {
+      logger.warn(
+        `El seed demo no se pudo aplicar y la API arranca igual: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {

@@ -31,6 +31,7 @@ const router = createRouter({
 
     { path: '/app', redirect: '/inicio' },
     { path: '/inicio', component: () => import('./paginas/InicioPage.vue') },
+    { path: '/tablero', component: () => import('./paginas/TableroPage.vue') },
     { path: '/propiedades', component: () => import('./paginas/PropiedadesPage.vue') },
     { path: '/propiedades/nueva', component: () => import('./paginas/PropiedadFormPage.vue') },
     { path: '/propiedades/:id/editar', component: () => import('./paginas/PropiedadFormPage.vue') },

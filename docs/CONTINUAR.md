@@ -19,7 +19,7 @@ docker compose up -d          # db + s3 (MinIO) + api + web
 
 | Qué | Dónde | Credenciales |
 |---|---|---|
-| App | http://localhost:5173 | `owner@prueba.test` / `unaclavelarga1` |
+| App | http://localhost:5173 | `owner@andes.test` / `unaclavelarga1` |
 | Portada pública | http://localhost:5173/ | — |
 | API | http://localhost:3000/v1/health | — |
 | Consola de MinIO | http://localhost:9001 | las de `.env` (`S3_ACCESS_KEY` / `S3_SECRET_KEY`) |
