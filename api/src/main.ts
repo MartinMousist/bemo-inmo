@@ -6,7 +6,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { configurarApp } from './configurar-app';
-import { migrar, correrSql } from './database/migrator';
+import { migrar } from './database/migrator';
+import { sembrarDemo } from './database/seed';
 
 async function bootstrap(): Promise<void> {
   // Primero de todo: si el entorno está incompleto, morimos acá y no a mitad
@@ -37,8 +38,7 @@ async function bootstrap(): Promise<void> {
     // Las migraciones sí frenan el arranque, a propósito: una base con el
     // esquema viejo no es una molestia, es corrupción esperando pasar.
     try {
-      await correrSql(env.DATABASE_OWNER_URL, join(__dirname, '..', 'seeds', 'demo.sql'));
-      logger.log('Seed demo aplicado');
+      await sembrarDemo(env.DATABASE_OWNER_URL, (m) => logger.log(m));
     } catch (err) {
       logger.warn(
         `El seed demo no se pudo aplicar y la API arranca igual: ${

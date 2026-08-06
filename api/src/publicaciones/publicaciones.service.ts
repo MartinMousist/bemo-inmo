@@ -9,6 +9,7 @@ import {
   type Aviso,
   type ItemFeed,
 } from './aviso.motor';
+import { CAMPOS_AVISO, datosParaAviso, type FilaAviso } from './publicaciones.datos';
 import { INTEGRACION_ACTIVA } from './etiquetas';
 import type {
   ActualizarPublicacionDto,
@@ -208,42 +209,25 @@ export class PublicacionesService {
         [tenantId],
       );
 
-      const { rows } = await ej.query<FilaFeed>(
-        `SELECT pr.codigo, pr.tipo, pr.calle, pr.numero, pr.piso, pr.localidad,
-                pr.provincia, pr.sup_total, pr.sup_cubierta, pr.ambientes,
-                pr.dormitorios, pr.banos, pr.cocheras, pr.antiguedad,
-                pr.orientacion, pr.amenities, pr.descripcion, pr.lat, pr.lng,
-                o.tipo AS op_tipo, o.precio, o.moneda, o.expensas,
-                o.expensas_moneda, o.updated_at
+      const { rows } = await ej.query<FilaAviso>(
+        `SELECT ${CAMPOS_AVISO}
            FROM operacion o
            JOIN propiedad pr ON pr.id = o.propiedad_id
           WHERE o.estado = 'disponible'
           ORDER BY pr.codigo`,
       );
 
-      const items: ItemFeed[] = rows.map((r) => ({
-        codigo: `PROP-${String(r.codigo).padStart(4, '0')}`,
-        operacion: r.op_tipo,
-        lat: r.lat === null ? null : Number(r.lat),
-        lng: r.lng === null ? null : Number(r.lng),
-        actualizado: r.updated_at.toISOString(),
-        aviso: generarAviso(
-          {
-            tipo: r.tipo, calle: r.calle, numero: r.numero, piso: r.piso,
-            localidad: r.localidad, provincia: r.provincia,
-            supTotal: n(r.sup_total), supCubierta: n(r.sup_cubierta),
-            ambientes: r.ambientes, dormitorios: r.dormitorios, banos: r.banos,
-            cocheras: r.cocheras, antiguedad: r.antiguedad,
-            orientacion: r.orientacion, amenities: r.amenities,
-            descripcion: r.descripcion,
-          },
-          {
-            tipo: r.op_tipo as 'venta' | 'alquiler' | 'alquiler_temporario',
-            precio: n(r.precio), moneda: r.moneda,
-            expensas: n(r.expensas), expensasMoneda: r.expensas_moneda,
-          },
-        ),
-      }));
+      const items: ItemFeed[] = rows.map((r) => {
+        const d = datosParaAviso(r);
+        return {
+          codigo: `PROP-${String(r.codigo).padStart(4, '0')}`,
+          operacion: r.op_tipo,
+          lat: r.lat === null ? null : Number(r.lat),
+          lng: r.lng === null ? null : Number(r.lng),
+          actualizado: r.updated_at.toISOString(),
+          aviso: generarAviso(d.propiedad, d.operacion),
+        };
+      });
 
       return generarFeedXml(t[0]?.nombre ?? 'Inmobiliaria', items);
     });
@@ -252,52 +236,13 @@ export class PublicacionesService {
   // ── Internos ───────────────────────────────────────────────────────────────
 
   private async datosDeOperacion(ej: Ejecutor, operacionId: string) {
-    const { rows } = await ej.query<FilaFeed>(
-      `SELECT pr.codigo, pr.tipo, pr.calle, pr.numero, pr.piso, pr.localidad,
-              pr.provincia, pr.sup_total, pr.sup_cubierta, pr.ambientes,
-              pr.dormitorios, pr.banos, pr.cocheras, pr.antiguedad,
-              pr.orientacion, pr.amenities, pr.descripcion, pr.lat, pr.lng,
-              o.tipo AS op_tipo, o.precio, o.moneda, o.expensas,
-              o.expensas_moneda, o.updated_at
+    const { rows } = await ej.query<FilaAviso>(
+      `SELECT ${CAMPOS_AVISO}
          FROM operacion o JOIN propiedad pr ON pr.id = o.propiedad_id
         WHERE o.id = $1`,
       [operacionId],
     );
     if (!rows.length) throw AppError.notFound('No se encontró esa operación.');
-    const r = rows[0];
-
-    return {
-      propiedad: {
-        tipo: r.tipo, calle: r.calle, numero: r.numero, piso: r.piso,
-        localidad: r.localidad, provincia: r.provincia,
-        supTotal: n(r.sup_total), supCubierta: n(r.sup_cubierta),
-        ambientes: r.ambientes, dormitorios: r.dormitorios, banos: r.banos,
-        cocheras: r.cocheras, antiguedad: r.antiguedad,
-        orientacion: r.orientacion, amenities: r.amenities,
-        descripcion: r.descripcion,
-      },
-      operacion: {
-        tipo: r.op_tipo as 'venta' | 'alquiler' | 'alquiler_temporario',
-        precio: n(r.precio), moneda: r.moneda,
-        expensas: n(r.expensas), expensasMoneda: r.expensas_moneda,
-      },
-    };
+    return datosParaAviso(rows[0]);
   }
-}
-
-interface FilaFeed {
-  codigo: number; tipo: string; calle: string; numero: string | null;
-  piso: string | null; localidad: string | null; provincia: string | null;
-  sup_total: string | null; sup_cubierta: string | null;
-  ambientes: number | null; dormitorios: number | null; banos: number | null;
-  cocheras: number | null; antiguedad: number | null; orientacion: string | null;
-  amenities: string[]; descripcion: string | null;
-  lat: string | null; lng: string | null;
-  op_tipo: string; precio: string | null; moneda: string;
-  expensas: string | null; expensas_moneda: string;
-  updated_at: Date;
-}
-
-function n(v: string | null): number | null {
-  return v === null ? null : Number(v);
 }
