@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { armarPagina, offset, type Pagina } from '../common/paginacion';
+import { ordenSeguro } from '../common/orden';
 import { GeocodingService } from './geocoding.service';
 import type {
   CrearOperacionDto,
@@ -21,6 +22,19 @@ export interface Operacion {
   expensasMoneda: string;
   estado: string;
   exclusividadHasta: string | null;
+  /** Desde cuándo se publica. Es lo que da los «días en mercado». */
+  fechaPublicacion: string | null;
+  /**
+   * Sólo en operaciones de alquiler: hasta cuándo corre el contrato vigente, o
+   * `null` si la unidad está libre.
+   *
+   * «Disponible» es el estado de la PUBLICACIÓN y no dice si la unidad está
+   * ocupada: una con contrato hasta 2028 puede seguir figurando disponible
+   * porque nadie tocó el estado de la operación. Sin este dato, un listado de
+   * alquileres no contesta la única pregunta que se le hace — qué tengo para
+   * ofrecer hoy.
+   */
+  contratoHasta: string | null;
 }
 
 export interface Propiedad {
@@ -65,7 +79,8 @@ export class PropiedadesService {
   async listar(tenantId: string, f: FiltroPropiedadesDto): Promise<Pagina<Propiedad>> {
     return this.db.withTenant(tenantId, async (ej) => {
       const q = f.q ? `%${f.q.trim()}%` : null;
-      const params = [q, f.tipo ?? null, f.operacion ?? null, f.estado ?? null];
+      const params = [q, f.tipo ?? null, f.operacion ?? null, f.estado ?? null,
+                      f.incluirCerradas ?? false];
 
       const donde = `
         WHERE ($1::text IS NULL
@@ -74,7 +89,8 @@ export class PropiedadesService {
           AND ($2::text IS NULL OR p.tipo = $2)
           AND ($3::text IS NULL OR EXISTS (
                 SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id
-                  AND o.tipo = $3 AND o.estado <> 'cerrada'))
+                  AND o.tipo = $3
+                  AND ($5::boolean OR o.estado <> 'cerrada')))
           AND ($4::text IS NULL OR EXISTS (
                 SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id AND o.estado = $4))`;
 
@@ -84,9 +100,28 @@ export class PropiedadesService {
       );
 
       const { rows } = await ej.query<FilaPropiedad>(
-        `${SELECT_PROPIEDAD} ${donde}
-         ORDER BY p.created_at DESC
-         LIMIT $5 OFFSET $6`,
+        `${selectPropiedad(f.incluirCerradas ?? false)} ${donde}
+         ORDER BY ${ordenSeguro(
+           {
+             codigo: 'p.codigo',
+             direccion: 'p.calle',
+             superficie: 'p.sup_total',
+             // El precio y la fecha de publicación viven en `operacion`, y una
+             // propiedad puede tener DOS. Se ordena por la del listado que se
+             // está mirando —el mismo `f.operacion` que ya filtra— o el número
+             // sería el de la otra punta.
+             precio: `(SELECT o.precio FROM operacion o
+                        WHERE o.propiedad_id = p.id
+                          AND ($3::text IS NULL OR o.tipo = $3) LIMIT 1)`,
+             publicada: `(SELECT o.fecha_publicacion FROM operacion o
+                           WHERE o.propiedad_id = p.id
+                             AND ($3::text IS NULL OR o.tipo = $3) LIMIT 1)`,
+           },
+           'p.created_at DESC',
+           f.orden,
+           f.dir,
+         )}
+         LIMIT $6 OFFSET $7`,
         [...params, f.porPagina, offset(f)],
       );
 
@@ -519,14 +554,28 @@ interface FilaPropiedad {
   titulares: Array<Record<string, unknown>> | null;
 }
 
-const SELECT_PROPIEDAD = `
+/**
+ * `incluirCerradas` decide si el array de operaciones trae también las cerradas.
+ *
+ * El listado general muestra lo que se está ofreciendo, así que las cerradas
+ * sobran. Las carteras de venta y de alquiler muestran lo que la inmobiliaria
+ * TIENE, y ahí esconderlas es lo contrario de lo que se pide: una unidad
+ * alquilada tiene su operación en `cerrada`, y sin ella la cartera de alquiler
+ * mostraba 3 de 13 — justo las tres que no están alquiladas.
+ */
+const selectPropiedad = (incluirCerradas = false): string => `
   SELECT p.*,
     (SELECT json_agg(json_build_object(
         'id', o.id, 'tipo', o.tipo, 'precio', o.precio, 'moneda', o.moneda,
         'expensas', o.expensas, 'expensasMoneda', o.expensas_moneda,
-        'estado', o.estado, 'exclusividadHasta', o.exclusividad_hasta)
+        'estado', o.estado, 'exclusividadHasta', o.exclusividad_hasta,
+        'fechaPublicacion', o.fecha_publicacion,
+        'contratoHasta', (
+          SELECT max(c.fecha_fin) FROM contrato_alquiler c
+           WHERE c.propiedad_id = p.id AND c.estado = 'vigente'))
       ORDER BY o.tipo)
-     FROM operacion o WHERE o.propiedad_id = p.id AND o.estado <> 'cerrada') AS operaciones,
+     FROM operacion o WHERE o.propiedad_id = p.id
+       AND (${incluirCerradas ? 'TRUE' : "o.estado <> 'cerrada'"})) AS operaciones,
     (SELECT json_agg(json_build_object(
         'personaId', t.persona_id,
         'nombre', trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')),
@@ -535,6 +584,8 @@ const SELECT_PROPIEDAD = `
      FROM titularidad t JOIN persona pe ON pe.id = t.persona_id
      WHERE t.propiedad_id = p.id) AS titulares
   FROM propiedad p`;
+
+const SELECT_PROPIEDAD = selectPropiedad();
 
 function aPropiedad(f: FilaPropiedad): Propiedad {
   const direccion = [
@@ -582,6 +633,8 @@ function aPropiedad(f: FilaPropiedad): Propiedad {
       expensasMoneda: String(o.expensasMoneda),
       estado: String(o.estado),
       exclusividadHasta: (o.exclusividadHasta as string) ?? null,
+      fechaPublicacion: (o.fechaPublicacion as string) ?? null,
+      contratoHasta: (o.contratoHasta as string) ?? null,
     })),
     titulares: (f.titulares ?? []).map((t) => ({
       personaId: String(t.personaId),

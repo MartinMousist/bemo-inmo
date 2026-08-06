@@ -24,7 +24,9 @@ const grupos = [
   {
     titulo: 'Cartera',
     items: [
-      { a: '/propiedades', icono: 'edificio', texto: 'Propiedades' },
+      { a: '/propiedades', icono: 'edificio', texto: 'Todas' },
+      { a: '/propiedades/venta', icono: 'moneda', texto: 'En venta' },
+      { a: '/propiedades/alquiler', icono: 'documento', texto: 'En alquiler' },
       { a: '/personas', icono: 'personas', texto: 'Personas' },
     ],
   },

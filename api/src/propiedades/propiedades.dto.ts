@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsISO8601,
@@ -104,4 +105,18 @@ export class FiltroPropiedadesDto extends PaginacionDto {
   @IsOptional() @IsIn(TIPOS_OPERACION as unknown as string[]) operacion?: string;
   @IsOptional() @IsIn(['borrador', 'disponible', 'reservada', 'cerrada', 'suspendida'])
   estado?: string;
+
+  /**
+   * Traer también las operaciones cerradas.
+   *
+   * El listado general muestra lo que se está OFRECIENDO y las cerradas sobran.
+   * Las carteras de venta y alquiler muestran lo que la inmobiliaria TIENE: una
+   * unidad alquilada tiene su operación en `cerrada`, y sin esto la cartera de
+   * alquiler mostraba 3 de 13 — justo las tres que NO están alquiladas.
+   *
+   * Es opt-in y no el default para no cambiarle el significado al listado que
+   * ya existía.
+   */
+  @IsOptional() @IsBoolean() @Type(() => Boolean)
+  incluirCerradas?: boolean;
 }

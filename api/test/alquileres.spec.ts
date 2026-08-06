@@ -131,9 +131,20 @@ describe('Alquileres: contrato, ajustes, cuotas, cobros y liquidación', () => {
 
     // Un índice sin datos lo dice; no aparece en cero, que se leería como
     // "el IPC de ese mes fue 0".
-    const icp = res.body.find((c: { tipo: string }) => c.tipo === 'icp');
-    expect(icp.valores).toBe(0);
-    expect(icp.ultimo).toBeNull();
+    //
+    // Se afirma la RELACIÓN entre los dos campos y no que `icp` esté vacío.
+    // Decir "icp tiene 0 valores" es una afirmación sobre el estado global de
+    // una tabla compartida, y se rompe la primera vez que alguien carga un
+    // valor a mano desde la pantalla de Índices — que es exactamente lo que
+    // pasó. La invariante que importa vale para los cuatro índices y no
+    // depende de quién cargó qué:
+    //
+    //   sin valores  ⇒  `ultimo` es null   (no un cero disfrazado de dato)
+    //   con valores  ⇒  `ultimo` tiene fecha
+    for (const c of res.body as Array<{ tipo: string; valores: number; ultimo: string | null }>) {
+      if (c.valores === 0) expect(c.ultimo).toBeNull();
+      else expect(c.ultimo).not.toBeNull();
+    }
   });
 
   // ── Contratos ──────────────────────────────────────────────────────────────
