@@ -34,6 +34,7 @@ const router = createRouter({
     { path: '/tablero', component: () => import('./paginas/TableroPage.vue') },
     { path: '/reclamos', component: () => import('./paginas/ReclamosPage.vue') },
     { path: '/gastos', component: () => import('./paginas/GastosPage.vue') },
+    { path: '/plantillas', component: () => import('./paginas/PlantillasPage.vue') },
     // Las dos carteras van ANTES de `/propiedades/:id`: Vue Router resuelve por
     // orden de declaración y si no, `venta` se leería como un id.
     { path: '/propiedades/venta', component: () => import('./paginas/CarteraPropiedadesPage.vue') },

@@ -57,6 +57,7 @@ const grupos = [
   {
     titulo: 'Administración',
     items: [
+      { a: '/plantillas', icono: 'documento', texto: 'Pre-contratos' },
       { a: '/equipo', icono: 'equipo', texto: 'Equipo' },
       { a: '/importar', icono: 'mas', texto: 'Importar' },
       { a: '/movimientos', icono: 'grafico', texto: 'Movimientos' },

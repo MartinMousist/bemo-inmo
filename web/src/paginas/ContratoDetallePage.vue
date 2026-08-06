@@ -7,6 +7,7 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import PanelNotas from '../componentes/PanelNotas.vue';
+import PanelDocumentos from '../componentes/PanelDocumentos.vue';
 import { fecha, money, periodo as fmtPeriodo, proximidad, plural } from '../dominio/formato';
 import type { Pagina } from '../dominio/pagina';
 
@@ -230,6 +231,8 @@ onMounted(cargar);
 
       <!-- Va último y siempre visible: el seguimiento es lo que se consulta
            cuando alguien pregunta "¿qué pasó con este contrato?". -->
+      <PanelDocumentos :contrato-id="c.id" :etiqueta="c.propiedad.etiqueta" />
+
       <PanelNotas entidad-tipo="contrato_alquiler" :entidad-id="c.id" />
     </template>
   </div>

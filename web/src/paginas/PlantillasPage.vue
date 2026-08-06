@@ -1,0 +1,404 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue';
+import { api, ApiError } from '../api/cliente';
+import { useUi } from '../stores/ui';
+import PageHeader from '../componentes/PageHeader.vue';
+import StatusChip from '../componentes/StatusChip.vue';
+import UiEmpty from '../componentes/UiEmpty.vue';
+import UiSkeleton from '../componentes/UiSkeleton.vue';
+import { plural } from '../dominio/formato';
+
+/**
+ * Pre-contratos y plantillas.
+ *
+ * **El motor estaba construido y no tenía ni una pantalla.** `GET/PUT/DELETE
+ * /v1/plantillas`, previsualizar, sembrar las cuatro plantillas base y generar
+ * el documento con los datos reales de un contrato: todo con su test suite,
+ * invisible para el usuario. Y la portada anunciaba «Pre-contratos y
+ * plantillas» como listo. Es el error #3 del playbook al revés — hecho en el
+ * back, que para quien usa el sistema es lo mismo que no existir.
+ *
+ * Dos decisiones de esta pantalla:
+ *
+ * **La previsualización va al lado del editor y se actualiza al pedirla, no en
+ * cada tecla.** Un pre-contrato son tres carillas de texto legal: refrescar
+ * mientras alguien escribe es un salto de scroll cada dos letras. El botón lo
+ * hace explícito.
+ *
+ * **Las variables que la plantilla usa se muestran siempre.** Es lo único que
+ * convierte un textarea en algo editable por alguien que no escribió el motor:
+ * sin la lista, la única forma de saber que existe `{{ locatario.nombre }}` es
+ * leer el código.
+ */
+
+interface Plantilla {
+  id: string;
+  tipo: string;
+  nombre: string;
+  contenido: string;
+  activa: boolean;
+  variables: string[];
+}
+
+interface Documento {
+  texto: string;
+  faltantes: string[];
+  plantilla: { id: string; nombre: string };
+  advertencia?: string;
+}
+
+const TIPO: Record<string, string> = {
+  pre_contrato_alquiler: 'Pre-contrato de alquiler',
+  pre_contrato_venta: 'Pre-contrato de venta',
+  reserva: 'Reserva',
+  aviso_aumento: 'Aviso de aumento',
+  aviso_vencimiento: 'Aviso de vencimiento',
+  recibo: 'Recibo',
+  liquidacion: 'Liquidación',
+  otro: 'Otro',
+};
+
+const ui = useUi();
+
+const items = ref<Plantilla[]>([]);
+const cargando = ref(true);
+const error = ref('');
+const guardando = ref(false);
+
+/** La que se está editando. `null` = ninguna; `'nueva'` = alta. */
+const editando = ref<string | null>(null);
+const form = ref({ id: '', tipo: 'pre_contrato_alquiler', nombre: '', contenido: '' });
+const vista = ref<Documento | null>(null);
+
+const esNueva = computed(() => editando.value === 'nueva');
+
+async function cargar() {
+  cargando.value = true;
+  error.value = '';
+  try {
+    items.value = await api<Plantilla[]>('/plantillas');
+  } catch (e) {
+    items.value = [];
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las plantillas.';
+  } finally {
+    cargando.value = false;
+  }
+}
+onMounted(cargar);
+
+function abrirNueva() {
+  editando.value = 'nueva';
+  vista.value = null;
+  form.value = {
+    id: '',
+    tipo: 'pre_contrato_alquiler',
+    nombre: '',
+    // Un textarea en blanco no dice cómo se escribe una plantilla. El esqueleto
+    // muestra la sintaxis de las tres cosas que el motor sabe hacer.
+    contenido:
+      'CONTRATO DE LOCACIÓN\n\n' +
+      'Entre {{ locador.nombre }}, DNI {{ locador.documento }}, en adelante EL LOCADOR,\n' +
+      'y {{ locatario.nombre }}, DNI {{ locatario.documento }}, en adelante EL LOCATARIO,\n' +
+      'se conviene la locación de {{ propiedad.direccion }}.\n\n' +
+      'PLAZO: desde {{ contrato.inicio }} hasta {{ contrato.fin }}.\n' +
+      'PRECIO: {{ contrato.monto }} por mes, pagadero el día {{ contrato.diaVencimiento }}.\n\n' +
+      '{{#if contrato.deposito }}\n' +
+      'DEPÓSITO: {{ contrato.deposito }}, que se reintegra al finalizar.\n' +
+      '{{/if}}\n',
+  };
+}
+
+function abrirEdicion(p: Plantilla) {
+  editando.value = p.id;
+  vista.value = null;
+  form.value = { id: p.id, tipo: p.tipo, nombre: p.nombre, contenido: p.contenido };
+}
+
+function cerrar() {
+  editando.value = null;
+  vista.value = null;
+}
+
+async function previsualizar() {
+  try {
+    vista.value = await api<Documento>('/plantillas/previsualizar', {
+      method: 'POST',
+      body: JSON.stringify({ contenido: form.value.contenido }),
+    });
+  } catch (e) {
+    ui.error('No se pudo previsualizar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+  }
+}
+
+async function guardar() {
+  if (!form.value.nombre.trim() || !form.value.contenido.trim()) {
+    ui.error('Faltan datos', 'El nombre y el contenido son obligatorios.');
+    return;
+  }
+  guardando.value = true;
+  try {
+    await api('/plantillas', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...(form.value.id ? { id: form.value.id } : {}),
+        tipo: form.value.tipo,
+        nombre: form.value.nombre.trim(),
+        contenido: form.value.contenido,
+      }),
+    });
+    ui.ok(esNueva.value ? 'Plantilla creada' : 'Plantilla guardada', form.value.nombre.trim());
+    cerrar();
+    await cargar();
+  } catch (e) {
+    ui.error('No se pudo guardar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+  } finally {
+    guardando.value = false;
+  }
+}
+
+async function borrar(p: Plantilla) {
+  const ok = await ui.confirmar({
+    titulo: '¿Eliminar la plantilla?',
+    detalle:
+      `«${p.nombre}». Los documentos que ya se generaron con ella no se tocan: ` +
+      'salieron impresos y no dependen de esto. Lo que se pierde es el modelo.',
+    confirmar: 'Eliminar',
+    peligroso: true,
+  });
+  if (!ok) return;
+
+  try {
+    await api(`/plantillas/${p.id}`, { method: 'DELETE' });
+    ui.ok('Plantilla eliminada', p.nombre);
+    if (editando.value === p.id) cerrar();
+    await cargar();
+  } catch (e) {
+    ui.error('No se pudo eliminar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+  }
+}
+
+async function sembrar() {
+  try {
+    const r = await api<{ creadas: number; yaEstaban: number }>('/plantillas/sembrar', {
+      method: 'POST',
+    });
+    ui.ok(
+      plural(r.creadas, 'plantilla creada', 'plantillas creadas'),
+      r.yaEstaban ? `${r.yaEstaban} ya estaban y no se tocaron` : 'Listas para usar y editar',
+    );
+    await cargar();
+  } catch (e) {
+    ui.error('No se pudieron sembrar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+  }
+}
+
+/**
+ * La sintaxis del motor, como texto.
+ *
+ * Va acá y no en el template porque Vue interpola `{{ }}`: escribir la sintaxis
+ * literal adentro de una interpolación hace que el compilador la lea como
+ * código y falle. Es el mismo motivo por el que estas cadenas se arman a mano
+ * en vez de escribirse tal cual.
+ */
+const SINTAXIS = {
+  variable: ['{', '{ variable }', '}'].join(''),
+  condicional: ['{', '{#if x }', '}…{', '{/if }', '}'].join(''),
+  lista: ['{', '{#each lista }', '}…{', '{/each }', '}'].join(''),
+};
+
+/** Agrupadas por tipo: es como se buscan, no por nombre. */
+const porTipo = computed(() => {
+  const m = new Map<string, Plantilla[]>();
+  for (const p of items.value) {
+    if (!m.has(p.tipo)) m.set(p.tipo, []);
+    m.get(p.tipo)!.push(p);
+  }
+  return [...m.entries()].map(([tipo, lista]) => ({ tipo, lista }));
+});
+</script>
+
+<template>
+  <div class="stack">
+    <PageHeader
+      titulo="Pre-contratos y plantillas"
+      :bajada="cargando || error ? '' : plural(items.length, 'plantilla', 'plantillas')"
+    >
+      <template #acciones>
+        <button class="btn secondary" type="button" @click="sembrar">Traer las base</button>
+        <button class="btn" type="button" @click="abrirNueva">Nueva plantilla</button>
+      </template>
+    </PageHeader>
+
+    <p v-if="error" class="alert con-accion" role="alert">
+      <span>{{ error }}</span>
+      <button class="btn secondary sm" type="button" @click="cargar()">Reintentar</button>
+    </p>
+
+    <UiSkeleton v-if="cargando" :filas="4" :alto="64" />
+
+    <UiEmpty
+      v-else-if="!error && !items.length"
+      titulo="Todavía no hay plantillas"
+      detalle="Vienen cuatro listas para usar: pre-contrato de locación, aviso de aumento, aviso de vencimiento y recibo. Se traen una vez y después se editan como cualquier texto."
+    >
+      <button class="btn" type="button" @click="sembrar">Traer las cuatro base</button>
+    </UiEmpty>
+
+    <template v-else>
+      <section v-for="g in porTipo" :key="g.tipo" class="grupo">
+        <h2>{{ TIPO[g.tipo] ?? g.tipo }}</h2>
+
+        <div class="card sin-padding">
+          <ul class="lista">
+            <li v-for="p in g.lista" :key="p.id">
+              <div class="que">
+                <span class="nombre">{{ p.nombre }}</span>
+                <span class="vars">
+                  <template v-if="p.variables.length">
+                    {{ plural(p.variables.length, 'variable', 'variables') }}:
+                    <code v-for="v in p.variables.slice(0, 6)" :key="v" class="mono">{{ v }}</code>
+                    <span v-if="p.variables.length > 6" class="mas">
+                      y {{ p.variables.length - 6 }} más
+                    </span>
+                  </template>
+                  <!-- Una plantilla sin variables es texto fijo: sale igual para
+                       todos los contratos. Casi siempre es un error de carga. -->
+                  <span v-else class="sin-vars">
+                    Sin variables — sale el mismo texto para todos los contratos
+                  </span>
+                </span>
+              </div>
+
+              <div class="acciones">
+                <StatusChip v-if="!p.activa" texto="Inactiva" tono="neutro" />
+                <button class="btn enlace sm" type="button" @click="abrirEdicion(p)">
+                  {{ editando === p.id ? 'Cerrar' : 'Editar' }}
+                </button>
+                <button class="btn enlace sm peligro" type="button" @click="borrar(p)">
+                  Eliminar
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </template>
+
+    <!-- ── Editor ────────────────────────────────────────────────────────── -->
+    <section v-if="editando" class="card pad-sm editor">
+      <h2 class="text-lg">{{ esNueva ? 'Nueva plantilla' : 'Editar plantilla' }}</h2>
+
+      <div class="cabecera">
+        <label class="campo">
+          <span>Tipo</span>
+          <select v-model="form.tipo">
+            <option v-for="(t, k) in TIPO" :key="k" :value="k">{{ t }}</option>
+          </select>
+        </label>
+        <label class="campo crece">
+          <span>Nombre</span>
+          <input v-model="form.nombre" placeholder="Pre-contrato de locación" required />
+        </label>
+      </div>
+
+      <div class="dos">
+        <label class="campo">
+          <span>Contenido</span>
+          <textarea v-model="form.contenido" rows="18" spellcheck="false" class="mono texto" />
+          <span class="ayuda">
+            <code class="mono">{{ SINTAXIS.variable }}</code> reemplaza,
+            <code class="mono">{{ SINTAXIS.condicional }}</code> muestra si hay dato,
+            <code class="mono">{{ SINTAXIS.lista }}</code> repite.
+            No hay negación ni operadores: lo que haga falta se calcula en el contexto.
+          </span>
+        </label>
+
+        <div class="vista">
+          <div class="vista-cab">
+            <h3>Previsualización</h3>
+            <button class="btn secondary sm" type="button" @click="previsualizar">
+              Actualizar
+            </button>
+          </div>
+
+          <!-- Con datos de ejemplo y dicho: nunca se toca un contrato real
+               desde acá. -->
+          <p v-if="!vista" class="ayuda">
+            Se arma con datos de ejemplo, sin tocar ningún contrato.
+          </p>
+
+          <template v-else>
+            <p v-if="vista.advertencia" class="alert aviso">{{ vista.advertencia }}</p>
+            <p v-if="vista.faltantes.length" class="alert aviso">
+              {{ plural(vista.faltantes.length, 'variable sin dato', 'variables sin dato') }}:
+              <code v-for="f in vista.faltantes" :key="f" class="mono">{{ f }}</code>.
+              En un pre-contrato puede ser normal —hay huecos que se completan a mano—
+              pero conviene mirarlo antes de imprimir.
+            </p>
+            <pre class="mono salida">{{ vista.texto }}</pre>
+          </template>
+        </div>
+      </div>
+
+      <div class="pie">
+        <button class="btn secondary" type="button" @click="cerrar">Cancelar</button>
+        <button class="btn" type="button" :disabled="guardando" @click="guardar">
+          {{ guardando ? 'Guardando…' : 'Guardar' }}
+        </button>
+      </div>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.grupo { display: flex; flex-direction: column; gap: var(--s-sm); }
+.grupo > h2 { margin: 0; }
+
+.lista li {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--s-lg); padding: var(--s-md) var(--s-lg);
+  border-bottom: 1px solid var(--line);
+}
+.lista li:last-child { border-bottom: none; }
+.que { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nombre { color: var(--ink); font-size: 14px; }
+.vars { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+.vars code { font-size: 11px; padding: 0 4px; }
+.sin-vars { color: var(--warning-ink); }
+.mas { color: var(--muted-2); }
+.acciones { display: flex; align-items: center; gap: var(--s-sm); flex: none; }
+
+.editor { display: flex; flex-direction: column; gap: var(--s-md); }
+.editor h2 { margin: 0; }
+.cabecera { display: flex; gap: var(--s-md); flex-wrap: wrap; }
+.cabecera .crece { flex: 1 1 240px; }
+
+.dos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--s-lg);
+  align-items: start;
+}
+.texto { line-height: 1.55; font-size: 12.5px; }
+.ayuda { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+.ayuda code { font-size: 11px; }
+
+.vista { display: flex; flex-direction: column; gap: var(--s-sm); min-width: 0; }
+.vista-cab { display: flex; align-items: center; justify-content: space-between; gap: var(--s-md); }
+.vista-cab h3 { margin: 0; }
+.salida {
+  margin: 0;
+  padding: var(--s-md);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 460px;
+  overflow-y: auto;
+  color: var(--ink-2);
+}
+.pie { display: flex; justify-content: flex-end; gap: var(--s-sm); }
+</style>
