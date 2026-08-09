@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import { useUi } from '../stores/ui';
 import StatusChip from './StatusChip.vue';
 import { fechaHora, plural } from '../dominio/formato';
+
+/**
+ * El editor entra perezoso: `starter-kit` arrastra ProseMirror y unos
+ * veinticuatro subpaquetes de `@tiptap/*`. Con un import normal lo pagaría
+ * también quien entra a la ficha de un contrato y nunca abre el pre-contrato.
+ */
+const EditorDocumento = defineAsyncComponent(
+  () => import('./EditorDocumento.vue'),
+);
 
 /**
  * El pre-contrato de ESTE contrato: generarlo, editarlo, mandarlo y guardarlo.
@@ -52,6 +61,18 @@ interface Documento {
   titulo: string | null;
   textoGenerado: string;
   textoFinal: string;
+  /** Congelado al generar: decide si esto se edita con formato o como texto. */
+  formato: 'texto' | 'html';
+  /**
+   * El documento dicho en texto plano, tal como lo calcula el backend.
+   *
+   * Es lo que baja como `.txt`, lo que copia «Copiar» y lo que se mide para
+   * decidir si el envío va completo o adjunto. **Viene de la API a propósito**:
+   * una segunda implementación de `htmlATexto()` acá serían dos textos
+   * distintos el día que se toque una. Es la misma regla que ya estaba escrita
+   * en este archivo sobre no copiar el límite del envío al front.
+   */
+  textoPlano: string;
   editado: boolean;
   faltantes: string[];
   generadoPor: string | null;
@@ -101,6 +122,8 @@ const guardando = ref(false);
 const error = ref('');
 
 /** A quién se le manda. Editable: el teléfono de la ficha puede estar mal. */
+/** Lo que dejó el último pegado desde Word. Se muestra hasta abrir otro documento. */
+const avisosPegado = ref<string[]>([]);
 const destinoWa = ref('');
 const destinoMail = ref('');
 const waPrep = ref<Preparado | null>(null);
@@ -199,6 +222,7 @@ async function generar() {
 function abrir(d: Documento) {
   doc.value = d;
   texto.value = d.textoFinal;
+  avisosPegado.value = [];
   waPrep.value = null;
   mailPrep.value = null;
   void preparar();
@@ -312,14 +336,35 @@ async function abrirCanal(ev: MouseEvent, prep: Preparado | null, destino: strin
   // En modo adjunto el texto NO viaja en el enlace: baja como archivo y el
   // mensaje lleva sólo la carátula. Sin esto, del otro lado llega un «te paso
   // el pre-contrato» sin ningún pre-contrato.
-  if (prep.modo === 'adjunto') descargarTxt();
+  if (prep.modo === 'adjunto') descargarTxt(await textoPlano());
   await registrar(prep.canal, destino);
   await preparar();
 }
 
+/**
+ * El documento en texto plano, pedido al backend.
+ *
+ * NO se calcula acá. Con el editor con formato, `texto.value` es HTML: bajarlo
+ * como `.txt` mandaría un archivo con las etiquetas a la vista, y copiarlo
+ * pegaría `<p>` en el WhatsApp de alguien. La proyección vive en
+ * `plantillas.html.ts`, que es donde se prueba.
+ */
+async function textoPlano(): Promise<string> {
+  if (!doc.value) return '';
+  if (doc.value.formato !== 'html') return texto.value;
+  try {
+    const r = await api<{ texto: string }>(`/documentos/${doc.value.id}/texto`);
+    return r.texto;
+  } catch {
+    // Se devuelve lo último que el back ya había calculado en vez de improvisar
+    // una conversión distinta acá.
+    return doc.value.textoPlano;
+  }
+}
+
 /** Descarga como `.txt`: el navegador no necesita ninguna librería para esto. */
-function descargarTxt() {
-  const blob = new Blob([texto.value], { type: 'text/plain;charset=utf-8' });
+function descargarTxt(contenido: string) {
+  const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `${props.etiqueta}-${doc.value?.plantillaNombre ?? 'documento'}`
@@ -329,16 +374,36 @@ function descargarTxt() {
   URL.revokeObjectURL(a.href);
 }
 
+/**
+ * Guarda antes de proyectar a texto plano.
+ *
+ * `GET /documentos/:id/texto` proyecta lo que está EN LA BASE. «Copiar» y
+ * «Descargar» no están trabados por `sinGuardar` como sí lo están los tres
+ * canales, así que sin esto, quien edita un párrafo y aprieta «Copiar» antes de
+ * que corra el guardado automático de 500 ms se lleva la versión ANTERIOR del
+ * documento, sin que nada se lo diga. Antes del editor con formato no pasaba:
+ * los dos botones copiaban `texto.value`, que es lo que está en pantalla.
+ *
+ * Devuelve `false` si el guardado falló —`guardar()` ya avisó por qué— y
+ * entonces no se copia ni se baja nada: mejor sin archivo que con el viejo.
+ */
+async function guardarAntesDeProyectar(): Promise<boolean> {
+  if (!doc.value || doc.value.bloqueado) return true;
+  return guardar();
+}
+
 async function descargar() {
   if (!doc.value) return;
-  descargarTxt();
+  if (!(await guardarAntesDeProyectar())) return;
+  descargarTxt(await textoPlano());
   await registrar('descarga');
 }
 
 async function copiar() {
+  if (!(await guardarAntesDeProyectar())) return;
   try {
-    await navigator.clipboard.writeText(texto.value);
-    ui.ok('Copiado', 'Pegalo donde lo necesites.');
+    await navigator.clipboard.writeText(await textoPlano());
+    ui.ok('Copiado', 'Se copió sin el formato: es texto para pegar donde sea.');
     await registrar('copia');
   } catch {
     ui.error('No se pudo copiar', 'Seleccioná el texto y copialo a mano.');
@@ -394,17 +459,34 @@ async function verDelHistorial(d: Documento) {
           Para cambiarlo, generá uno nuevo con «Generar».
         </p>
 
-        <label class="campo suave">
+        <div class="campo suave">
           <span class="cab-texto">
             Texto del documento
             <StatusChip v-if="cambiado" texto="Editado" tono="acento" />
             <span v-if="sinGuardar && !doc.bloqueado" class="pend">· sin guardar</span>
           </span>
+
+          <p v-for="a in avisosPegado" :key="a" class="alert aviso chico">{{ a }}</p>
+
+          <!-- Sin menú de variables: en un documento YA GENERADO no quedan
+               `{{ }}`, el motor los resolvió. Ofrecer el menú acá insertaría un
+               token que nadie va a volver a renderizar y saldría impreso. -->
+          <EditorDocumento
+            v-if="doc.formato === 'html'"
+            v-model="texto"
+            :solo-lectura="doc.bloqueado"
+            etiqueta="Texto del documento"
+            :alto="380"
+            @avisos="avisosPegado = $event"
+          />
+          <!-- Los documentos viejos salieron en texto plano y se siguen
+               editando así: convertirlos cambiaría un papel que ya se entregó. -->
           <textarea
+            v-else
             v-model="texto" rows="18" spellcheck="false" class="mono texto"
             :readonly="doc.bloqueado"
           />
-        </label>
+        </div>
 
         <p v-if="cambiado && !doc.bloqueado" class="ayuda">
           Se está mandando el texto editado, no el de la plantilla. La diferencia

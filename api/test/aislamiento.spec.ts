@@ -109,6 +109,57 @@ describe('RLS — aislamiento entre inmobiliarias', () => {
     ).rejects.toMatchObject({ code: '42501' });
   });
 
+  it('la subconsulta de la foto de portada tampoco cruza inmobiliarias', async () => {
+    // El listado de propiedades trae la portada con una subconsulta
+    // CORRELACIONADA sobre `propiedad_foto`. Una subconsulta también pasa por
+    // RLS, pero eso hay que probarlo: si no lo hiciera, la cartera de una
+    // inmobiliaria mostraría la foto de la propiedad de otra, que es la peor
+    // forma de la fuga —visible, y en la pantalla que se le muestra al cliente.
+    const propiedadPlata = await db.withTenant(PLATA, async (ej) => {
+      const { rows } = await ej.query<{ id: string }>('SELECT id FROM propiedad LIMIT 1');
+      return rows[0].id;
+    });
+
+    const url = `http://localhost:9000/aislamiento/${Date.now()}.png`;
+    await db.withTenant(PLATA, async (ej) => {
+      await ej.query(
+        `INSERT INTO propiedad_foto (tenant_id, propiedad_id, url, orden, es_portada)
+         VALUES ($1, $2, $3, 99, false)`,
+        [PLATA, propiedadPlata, url],
+      );
+    });
+
+    try {
+      const urls = await db.withTenant(ANDES, async (ej) => {
+        const { rows } = await ej.query<{ foto_portada: string | null }>(
+          `SELECT (SELECT f.url FROM propiedad_foto f
+                    WHERE f.propiedad_id = p.id
+                    ORDER BY f.es_portada DESC, f.orden, f.created_at
+                    LIMIT 1) AS foto_portada
+             FROM propiedad p`,
+        );
+        return rows.map((r) => r.foto_portada);
+      });
+
+      expect(urls).not.toContain(url);
+
+      // Y por la puerta directa tampoco: con el id de la propiedad ajena en la
+      // mano, la subconsulta sigue sin devolver nada.
+      const directo = await db.withTenant(ANDES, async (ej) => {
+        const { rows } = await ej.query<{ url: string }>(
+          'SELECT url FROM propiedad_foto WHERE propiedad_id = $1',
+          [propiedadPlata],
+        );
+        return rows;
+      });
+      expect(directo).toHaveLength(0);
+    } finally {
+      await db.withTenant(PLATA, async (ej) => {
+        await ej.query('DELETE FROM propiedad_foto WHERE url = $1', [url]);
+      });
+    }
+  });
+
   it('withTenant sin tenant explota en vez de correr sin contexto', async () => {
     await expect(db.withTenant('', async () => undefined)).rejects.toMatchObject({
       code: 'TENANT_CONTEXT_MISSING',

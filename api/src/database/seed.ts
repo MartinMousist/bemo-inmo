@@ -3,7 +3,9 @@ import { join } from 'node:path';
 import { Client } from 'pg';
 import { correrSql } from './migrator';
 import { AlmacenamientoService } from '../archivos/almacenamiento.service';
+import { generarFotoDemo } from '../archivos/foto-demo.motor';
 import { PLANTILLAS_POR_DEFECTO } from '../plantillas/plantillas.defecto';
+import { textoAHtml } from '../plantillas/plantillas.html';
 import { generarAviso } from '../publicaciones/aviso.motor';
 import { CAMPOS_AVISO, datosParaAviso, type FilaAviso } from '../publicaciones/publicaciones.datos';
 import {
@@ -15,8 +17,9 @@ import {
 } from '../alquileres/ajustes.motor';
 
 /**
- * El seed demo: `demo.sql` primero, y después lo que **no se puede escribir en
- * SQL sin duplicar el código que ya lo genera**.
+ * El seed demo: los dos `.sql` primero —`demo.sql` con la historia y
+ * `demo-cartera.sql` con la cartera ofrecida, en ese orden—, y después lo que
+ * **no se puede escribir en SQL sin duplicar el código que ya lo genera**.
  *
  * Las plantillas son tres carillas de texto legal que viven en
  * `plantillas.defecto.ts`, y el aviso de una publicación lo arma
@@ -113,6 +116,23 @@ const DOCUMENTOS_GARANTE: Array<{ garantiaId: string; tipos: string[] }> = [
 const OWNER_ANDES = '11000000-0000-4000-8000-000000000001';
 
 /**
+ * Las propiedades de Andes que se dejan **sin foto a propósito**.
+ *
+ * El placeholder de la tarjeta es código que nadie mira si en la demo todas
+ * las propiedades tienen imagen: la primera vez que alguien lo ve es con un
+ * cliente adelante. Se deja el mismo hueco que `demo-cartera.sql` ya deja con
+ * las cuatro propiedades sin lat/lng.
+ *
+ * Y no son cuatro cualesquiera: los dos terrenos y las dos cocheras son
+ * justamente lo que en una inmobiliaria de verdad se carga sin foto. Un lote y
+ * una cochera no tienen ambientes que fotografiar.
+ */
+const SIN_FOTO_A_PROPOSITO = [13, 20, 12, 30];
+
+/** Cuántas fotos por propiedad siembra la demo. La primera es la portada. */
+const FOTOS_POR_PROPIEDAD = 2;
+
+/**
  * Los cuatro contratos que existen para que el ajuste se vea proyectar.
  *
  * Sus aumentos NO se escriben a mano en el `.sql`: se calculan acá con
@@ -147,8 +167,33 @@ export interface ResultadoSeed {
   plantillas: number;
   publicaciones: number;
   documentos: number;
+  fotos: number;
   indices: number;
   ajustes: number;
+  /** Lo que quedó en la base, no lo que se insertó en esta corrida. */
+  cartera: ResumenCartera;
+}
+
+/**
+ * El inventario de la demo, CONTADO de la base.
+ *
+ * El mensaje del CLI decía «20 propiedades» escrito a mano, y era verdad hasta
+ * que `demo-cartera.sql` agregó dieciséis: el número no se movió solo y quedó
+ * mintiendo. Un seed que informa un inventario que no dejó es exactamente el
+ * dato falso que este producto no negocia, así que se cuenta.
+ *
+ * ⚠️ Filtra por las dos inmobiliarias de la demo a propósito. Corre como OWNER
+ * —sin RLS— y en cualquier base de desarrollo conviven las propiedades que
+ * dejan los tests: sin ese filtro el CLI informaría 55 propiedades de las que
+ * la demo no puso ni la mitad.
+ */
+export interface ResumenCartera {
+  propiedades: number;
+  personas: number;
+  contratos: number;
+  ofrecidasVenta: number;
+  ofrecidasAlquiler: number;
+  oportunidades: number;
 }
 
 export async function sembrarDemo(
@@ -156,6 +201,17 @@ export async function sembrarDemo(
   log: (msg: string) => void = () => undefined,
 ): Promise<ResultadoSeed> {
   await correrSql(ownerUrl, join(__dirname, '..', '..', 'seeds', 'demo.sql'));
+  // Y DESPUÉS la cartera ofrecida, nunca antes: `demo-cartera.sql` cuelga sus
+  // dieciséis unidades de los asesores y las sucursales que crea `demo.sql`
+  // (`agente_captador_id`, `sucursal_id`, `agente_id` de cada lead). Invertir el
+  // orden no da un seed a medias: da un error de foreign key en la primera fila
+  // y la API no arranca.
+  //
+  // Va en SQL y no acá arriba con las plantillas y los avisos porque es dato
+  // puro —direcciones, precios, dueños—: no hay ninguna función de la app que
+  // lo genere, así que no hay nada que pudiera envejecer respecto del código.
+  // Es exactamente el criterio inverso al de las plantillas.
+  await correrSql(ownerUrl, join(__dirname, '..', '..', 'seeds', 'demo-cartera.sql'));
 
   const client = new Client({ connectionString: ownerUrl });
   await client.connect();
@@ -164,20 +220,57 @@ export async function sembrarDemo(
       (await sembrarPlantillas(client, ANDES)) + (await sembrarPlantillas(client, PLATA));
     const publicaciones = await sembrarPublicaciones(client);
     const documentos = await sembrarDocumentosGarantes(client, log);
+    const fotos = await sembrarFotosPropiedades(client, log);
     // El orden importa: primero los índices, después los ajustes. Sin la serie
     // de IPC, los dos contratos que ajustan por IPC no proyectan ni uno.
     const indices = await sembrarIpcDemo(client, log);
     const ajustes = await proyectarAjustesDemo(client, log);
+    const cartera = await contarCartera(client);
 
     log(
       `Seed demo aplicado. Plantillas nuevas: ${plantillas}. ` +
         `Avisos nuevos: ${publicaciones}. Documentos de garantes nuevos: ${documentos}. ` +
+        `Fotos de propiedades nuevas: ${fotos}. ` +
         `Valores de IPC demo: ${indices}. Ajustes proyectados: ${ajustes}.`,
     );
-    return { plantillas, publicaciones, documentos, indices, ajustes };
+    return { plantillas, publicaciones, documentos, fotos, indices, ajustes, cartera };
   } finally {
     await client.end();
   }
+}
+
+/**
+ * Cuenta lo que quedó en la base para las dos inmobiliarias de la demo.
+ *
+ * Ver `ResumenCartera` para el porqué del filtro por `tenant_id`.
+ *
+ * «Ofrecida» es `operacion.estado = 'disponible'`, y se cuentan OPERACIONES y no
+ * propiedades porque la misma unidad puede estar en venta y en alquiler a la vez
+ * —`demo-cartera.sql` deja dos casos así a propósito—. Contar propiedades daría
+ * un número más chico que lo que muestra la cartera, que lista operaciones.
+ */
+async function contarCartera(client: Client): Promise<ResumenCartera> {
+  const { rows } = await client.query<Record<keyof ResumenCartera, string>>(
+    `SELECT
+       (SELECT count(*) FROM propiedad          WHERE tenant_id = ANY($1)) AS propiedades,
+       (SELECT count(*) FROM persona            WHERE tenant_id = ANY($1)) AS personas,
+       (SELECT count(*) FROM contrato_alquiler  WHERE tenant_id = ANY($1)) AS contratos,
+       (SELECT count(*) FROM operacion          WHERE tenant_id = ANY($1)
+          AND tipo = 'venta'    AND estado = 'disponible')                 AS "ofrecidasVenta",
+       (SELECT count(*) FROM operacion          WHERE tenant_id = ANY($1)
+          AND tipo = 'alquiler' AND estado = 'disponible')                 AS "ofrecidasAlquiler",
+       (SELECT count(*) FROM oportunidad        WHERE tenant_id = ANY($1)) AS oportunidades`,
+    [[ANDES, PLATA]],
+  );
+  const r = rows[0];
+  return {
+    propiedades: Number(r.propiedades),
+    personas: Number(r.personas),
+    contratos: Number(r.contratos),
+    ofrecidasVenta: Number(r.ofrecidasVenta),
+    ofrecidasAlquiler: Number(r.ofrecidasAlquiler),
+    oportunidades: Number(r.oportunidades),
+  };
 }
 
 /**
@@ -194,8 +287,8 @@ export async function sembrarDemo(
  */
 async function sembrarPlantillas(client: Client, tenantId: string): Promise<number> {
   const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido)
-     SELECT $1, x.tipo, x.nombre, x.contenido
+    `INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido, contenido_formato)
+     SELECT $1, x.tipo, x.nombre, x.contenido, 'html'
        FROM unnest($2::text[], $3::text[], $4::text[]) AS x(tipo, nombre, contenido)
       WHERE NOT EXISTS (
         SELECT 1 FROM plantilla_doc d
@@ -206,7 +299,11 @@ async function sembrarPlantillas(client: Client, tenantId: string): Promise<numb
       tenantId,
       PLANTILLAS_POR_DEFECTO.map((p) => p.tipo),
       PLANTILLAS_POR_DEFECTO.map((p) => p.nombre),
-      PLANTILLAS_POR_DEFECTO.map((p) => p.contenido),
+      // `plantillas.defecto.ts` sigue en texto plano: es la fuente única del
+      // texto legal y no se duplica en HTML. Se convierte acá con el mismo
+      // `textoAHtml()` de la migración, así el conversor queda probado contra
+      // las cuatro plantillas reales en cada corrida del seed.
+      PLANTILLAS_POR_DEFECTO.map((p) => textoAHtml(p.contenido)),
     ],
   );
   return rows.length;
@@ -321,6 +418,117 @@ async function sembrarDocumentosGarantes(
   }
 
   return creados;
+}
+
+/**
+ * Las etiquetas de tipo, para el rótulo impreso adentro de la foto.
+ *
+ * Es la misma lista que `ETIQUETA_TIPO` del front, y sí, está dos veces. La
+ * alternativa era importar el front desde la API o inventar un módulo
+ * compartido para nueve palabras: las dos son peores que esta copia, que sólo
+ * se usa para dibujar un rótulo de una imagen de muestra. Si alguna vez se
+ * agrega un tipo, lo peor que pasa acá es que la foto diga el valor crudo.
+ */
+const TIPO_EN_PALABRAS: Record<string, string> = {
+  departamento: 'Departamento',
+  casa: 'Casa',
+  ph: 'PH',
+  local: 'Local',
+  oficina: 'Oficina',
+  galpon: 'Galpón',
+  terreno: 'Terreno',
+  cochera: 'Cochera',
+  campo: 'Campo',
+};
+
+/**
+ * Las fotos de la cartera, subidas de verdad al bucket.
+ *
+ * ── Por qué existe ──────────────────────────────────────────────────────────
+ *
+ * La cartera en tarjetas se ve con fotos o no se ve. Con la base limpia había
+ * CERO filas en `propiedad_foto` (las dos que hay son de una corrida de tests),
+ * o sea que la grilla entera mostraba el placeholder y nadie podía mirar lo que
+ * la pantalla hace: el recorte 4:3, el peso de la primera carga, el
+ * `loading="lazy"`.
+ *
+ * ── Cómo ────────────────────────────────────────────────────────────────────
+ *
+ * Por `AlmacenamientoService.subirImagen()`, igual que los documentos de los
+ * garantes y que el botón de la ficha: mismas validaciones por firma de bytes,
+ * misma clave con el tenant adelante, misma URL pública, mismo `Cache-Control`.
+ * Sembrar una URL escrita a mano habría dejado una fila apuntando a un objeto
+ * que no existe en MinIO, y la pantalla se vería igual de rota que sin fila.
+ *
+ * Las imágenes las genera `generarFotoDemo()`, que es determinista: la misma
+ * propiedad da siempre los mismos bytes. Y llevan IMAGEN DE MUESTRA impreso
+ * adentro, como el documento de ejemplo de los garantes.
+ *
+ * ── Dos decisiones, con su motivo ───────────────────────────────────────────
+ *
+ * 1. **Sólo Andes.** Las dos propiedades de La Plata existen para probar el
+ *    aislamiento entre inmobiliarias; dejarlas sin foto además hace que su
+ *    cartera muestre el placeholder de verdad, en una pantalla real.
+ * 2. **Cuatro de Andes quedan sin foto a propósito** (ver
+ *    `SIN_FOTO_A_PROPOSITO`).
+ *
+ * ⚠️ Corre como OWNER y **saltea RLS**: cada consulta filtra por `tenant_id` a
+ * mano. Sin ese filtro, el `SELECT` de propiedades traería las 55 de la base
+ * —incluidas las de los tests— y les subiría fotos a inmobiliarias ajenas.
+ */
+async function sembrarFotosPropiedades(
+  client: Client,
+  log: (msg: string) => void,
+): Promise<number> {
+  const almacen = new AlmacenamientoService();
+  if (!almacen.configurado) {
+    log('Seed: sin S3 configurado, las propiedades quedan sin foto.');
+    return 0;
+  }
+
+  const { rows: propiedades } = await client.query<{
+    id: string; codigo: number; tipo: string;
+  }>(
+    `SELECT id, codigo, tipo FROM propiedad
+      WHERE tenant_id = $1 AND NOT (codigo = ANY($2::int[]))
+      ORDER BY codigo`,
+    [ANDES, SIN_FOTO_A_PROPOSITO],
+  );
+
+  let creadas = 0;
+  for (const p of propiedades) {
+    // Idempotente por propiedad y no por foto: si ya tiene alguna, no se le
+    // agrega nada. Contar filas y completar hasta dos haría que borrar una foto
+    // a mano en la app se deshaga sola en el próximo arranque con
+    // `SEED_ON_BOOT`, que es lo contrario de lo que espera quien la borró.
+    const { rows: ya } = await client.query(
+      'SELECT 1 FROM propiedad_foto WHERE propiedad_id = $1 AND tenant_id = $2 LIMIT 1',
+      [p.id, ANDES],
+    );
+    if (ya.length) continue;
+
+    const etiqueta = `PROP-${String(p.codigo).padStart(4, '0')}`;
+    for (let vista = 0; vista < FOTOS_POR_PROPIEDAD; vista++) {
+      const png = generarFotoDemo({
+        codigo: etiqueta,
+        tipo: TIPO_EN_PALABRAS[p.tipo] ?? p.tipo,
+        vista,
+      });
+
+      const subido = await almacen.subirImagen(
+        ANDES, `propiedades/${p.id}`, png, `${etiqueta.toLowerCase()}-muestra-${vista + 1}.png`,
+      );
+
+      const { rowCount } = await client.query(
+        `INSERT INTO propiedad_foto (tenant_id, propiedad_id, url, orden, es_portada)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [ANDES, p.id, subido.url, vista, vista === 0],
+      );
+      creadas += rowCount ?? 0;
+    }
+  }
+
+  return creadas;
 }
 
 /**

@@ -3,22 +3,72 @@ import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { renderizar, variablesDe, type Contexto } from './plantillas.motor';
 import { PLANTILLAS_POR_DEFECTO } from './plantillas.defecto';
+import {
+  aplanarDocumento, textoAHtml, tokensRotos, type TokenRoto,
+} from './plantillas.html';
+import { sanitizarPlantilla } from './plantillas.sanitizar';
+
+export type FormatoContenido = 'texto' | 'html';
 
 export interface Plantilla {
   id: string;
   tipo: string;
   nombre: string;
   contenido: string;
+  /** `html` = editor con formato. `texto` = el textarea de siempre. */
+  formato: FormatoContenido;
   activa: boolean;
   variables: string[];
+  /**
+   * Los `{{ }}` y `{% %}` que el motor NO entiende y que por lo tanto se
+   * imprimen literales adentro del contrato. La pantalla los muestra: es la
+   * única red contra el peor error de esta feature.
+   */
+  tokensRotos: TokenRoto[];
+  /** Sólo en las convertidas: el texto plano de antes, para poder auditarlo. */
+  textoOriginal: string | null;
+  convertidaEl: string | null;
 }
 
 export interface Documento {
   texto: string;
+  /** Igual que en la plantilla: decide `v-html` o `<pre>` en la vista imprimible. */
+  formato: FormatoContenido;
   faltantes: string[];
   plantilla: { id: string; nombre: string; tipo: string };
   /** Un problema de la PLANTILLA, no del documento. La UI lo muestra aparte. */
   advertencia?: string;
+}
+
+const SELECT_PLANTILLA =
+  `SELECT id, tipo, nombre, contenido, contenido_formato, activa,
+          contenido_texto_original, convertida_el
+     FROM plantilla_doc`;
+
+interface FilaPlantilla {
+  id: string;
+  tipo: string;
+  nombre: string;
+  contenido: string;
+  contenido_formato: FormatoContenido;
+  activa: boolean;
+  contenido_texto_original: string | null;
+  convertida_el: Date | null;
+}
+
+function aPlantilla(r: FilaPlantilla): Plantilla {
+  return {
+    id: r.id,
+    tipo: r.tipo,
+    nombre: r.nombre,
+    contenido: r.contenido,
+    formato: r.contenido_formato,
+    activa: r.activa,
+    variables: variablesDe(r.contenido),
+    tokensRotos: tokensRotos(r.contenido),
+    textoOriginal: r.contenido_texto_original,
+    convertidaEl: r.convertida_el ? r.convertida_el.toISOString() : null,
+  };
 }
 
 /**
@@ -71,11 +121,10 @@ export class PlantillasService {
    */
   async listar(tenantId: string): Promise<Plantilla[]> {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows } = await ej.query<{
-        id: string; tipo: string; nombre: string; contenido: string; activa: boolean;
-      }>('SELECT id, tipo, nombre, contenido, activa FROM plantilla_doc ORDER BY tipo, nombre');
-
-      return rows.map((r) => ({ ...r, variables: variablesDe(r.contenido) }));
+      const { rows } = await ej.query<FilaPlantilla>(
+        `${SELECT_PLANTILLA} ORDER BY tipo, nombre`,
+      );
+      return rows.map(aPlantilla);
     });
   }
 
@@ -93,8 +142,8 @@ export class PlantillasService {
       // una. Acá el filtro va adentro del INSERT: se insertan de una las que no
       // existen, y las creadas se cuentan por lo que devuelve el RETURNING.
       const { rows: creadas } = await ej.query<{ id: string }>(
-        `INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido)
-         SELECT $1, x.tipo, x.nombre, x.contenido
+        `INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido, contenido_formato)
+         SELECT $1, x.tipo, x.nombre, x.contenido, 'html'
            FROM unnest($2::text[], $3::text[], $4::text[])
                 AS x(tipo, nombre, contenido)
           WHERE NOT EXISTS (
@@ -106,7 +155,10 @@ export class PlantillasService {
           tenantId,
           PLANTILLAS_POR_DEFECTO.map((p) => p.tipo),
           PLANTILLAS_POR_DEFECTO.map((p) => p.nombre),
-          PLANTILLAS_POR_DEFECTO.map((p) => p.contenido),
+          // `plantillas.defecto.ts` sigue en TEXTO PLANO y se convierte acá.
+          // Una sola fuente del texto legal, y el conversor queda probado
+          // contra las cuatro plantillas reales cada vez que alguien siembra.
+          PLANTILLAS_POR_DEFECTO.map((p) => textoAHtml(p.contenido)),
         ],
       );
 
@@ -117,34 +169,93 @@ export class PlantillasService {
     });
   }
 
+  /**
+   * Guarda una plantilla. **Es el único punto de escritura**, y por eso es acá
+   * donde se sanitiza.
+   *
+   * No se sanitiza en el editor: `PUT /v1/plantillas` acepta un body y nada
+   * obliga a que ese body haya pasado por TipTap. Un `curl` con la sesión de un
+   * titular escribe lo que quiera, y lo escrito termina en un `v-html` de la
+   * vista imprimible. El editor es comodidad; la frontera es esto.
+   *
+   * Los avisos del sanitizado se devuelven: si un chip se partió y volvió a ser
+   * texto, la persona tiene que enterarse. Arreglarlo en silencio deja una
+   * plantilla distinta de la que escribió.
+   */
   async guardar(
     tenantId: string,
-    dto: { id?: string; tipo: string; nombre: string; contenido: string },
-  ): Promise<Plantilla> {
+    dto: {
+      id?: string; tipo: string; nombre: string; contenido: string;
+      formato?: FormatoContenido;
+    },
+  ): Promise<Plantilla & { avisos: string[] }> {
+    const formato: FormatoContenido = dto.formato ?? 'html';
+    const limpio = formato === 'html'
+      ? sanitizarPlantilla(dto.contenido)
+      // Una plantilla que se guarda como texto plano no lleva HTML: dejarla
+      // pasar por el sanitizador le escaparía o le comería etiquetas que en
+      // texto plano son texto.
+      : { html: dto.contenido, avisos: [] as string[] };
+
     return this.db.withTenant(tenantId, async (ej) => {
       const id = dto.id
         ? (
             await ej.query<{ id: string }>(
-              `UPDATE plantilla_doc SET tipo = $2, nombre = $3, contenido = $4
+              `UPDATE plantilla_doc
+                  SET tipo = $2, nombre = $3, contenido = $4, contenido_formato = $5
                 WHERE id = $1 RETURNING id`,
-              [dto.id, dto.tipo, dto.nombre, dto.contenido],
+              [dto.id, dto.tipo, dto.nombre, limpio.html, formato],
             )
           ).rows[0]?.id
         : (
             await ej.query<{ id: string }>(
-              `INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido)
-               VALUES ($1,$2,$3,$4) RETURNING id`,
-              [tenantId, dto.tipo, dto.nombre, dto.contenido],
+              `INSERT INTO plantilla_doc (tenant_id, tipo, nombre, contenido, contenido_formato)
+               VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+              [tenantId, dto.tipo, dto.nombre, limpio.html, formato],
             )
           ).rows[0].id;
 
       if (!id) throw AppError.notFound('No se encontró esa plantilla.');
 
-      const { rows } = await ej.query<{
-        id: string; tipo: string; nombre: string; contenido: string; activa: boolean;
-      }>('SELECT id, tipo, nombre, contenido, activa FROM plantilla_doc WHERE id = $1', [id]);
+      const { rows } = await ej.query<FilaPlantilla>(
+        `${SELECT_PLANTILLA} WHERE id = $1`, [id],
+      );
+      return { ...aPlantilla(rows[0]), avisos: limpio.avisos };
+    });
+  }
 
-      return { ...rows[0], variables: variablesDe(rows[0].contenido) };
+  /**
+   * Convierte una plantilla de texto plano al editor con formato.
+   *
+   * Idempotente: una que ya está en HTML se devuelve tal cual, sin tocarla y
+   * sin error. Correrla dos veces escaparía las etiquetas de la primera pasada
+   * y el contrato saldría con `&lt;p&gt;` impreso adentro.
+   *
+   * El original se guarda y **la pantalla lo muestra**. Convertir es reescribir
+   * un texto legal: si el conversor se comiera un salto de línea del bloque de
+   * firmas, la única forma de darse cuenta es poder mirar lo que había antes.
+   */
+  async convertir(tenantId: string, id: string): Promise<Plantilla> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<FilaPlantilla>(
+        `${SELECT_PLANTILLA} WHERE id = $1`, [id],
+      );
+      if (!rows.length) throw AppError.notFound('No se encontró esa plantilla.');
+      if (rows[0].contenido_formato === 'html') return aPlantilla(rows[0]);
+
+      const html = sanitizarPlantilla(textoAHtml(rows[0].contenido)).html;
+      const { rows: nuevas } = await ej.query<FilaPlantilla>(
+        `UPDATE plantilla_doc
+            SET contenido = $2,
+                contenido_texto_original = contenido,
+                contenido_formato = 'html',
+                convertida_el = now()
+          WHERE id = $1
+        RETURNING id, tipo, nombre, contenido, contenido_formato, activa,
+                  contenido_texto_original, convertida_el`,
+        [id, html],
+      );
+      return aPlantilla(nuevas[0]);
     });
   }
 
@@ -179,17 +290,25 @@ export class PlantillasService {
    * motor. `generar()` queda como la puerta pública y llama acá.
    */
   async generarCon(ej: Ejecutor, plantillaId: string, contratoId: string): Promise<Documento> {
-    const { rows: p } = await ej.query<{ id: string; tipo: string; nombre: string; contenido: string }>(
-      'SELECT id, tipo, nombre, contenido FROM plantilla_doc WHERE id = $1',
+    const { rows: p } = await ej.query<{
+      id: string; tipo: string; nombre: string; contenido: string;
+      contenido_formato: FormatoContenido;
+    }>(
+      'SELECT id, tipo, nombre, contenido, contenido_formato FROM plantilla_doc WHERE id = $1',
       [plantillaId],
     );
     if (!p.length) throw AppError.notFound('No se encontró esa plantilla.');
 
     const ctx = await this.contextoDeContrato(ej, contratoId);
-    const r = renderizar(p[0].contenido, ctx);
+    const formato = p[0].contenido_formato;
+    const r = renderizar(p[0].contenido, ctx, { escaparHtml: formato === 'html' });
 
     return {
-      texto: r.texto,
+      // Un documento ya renderizado no tiene estructura que resolver: los divs
+      // de bloque y los chips son andamio del editor de PLANTILLAS y acá sólo
+      // estorban a quien edita el papel antes de mandarlo.
+      texto: formato === 'html' ? aplanarDocumento(r.texto) : r.texto,
+      formato,
       faltantes: r.faltantes,
       plantilla: { id: p[0].id, nombre: p[0].nombre, tipo: p[0].tipo },
     };
@@ -258,8 +377,10 @@ export class PlantillasService {
       if (!c.length) throw AppError.notFound('No se encontró ese cobro.');
       const co = c[0];
 
-      const { rows: p } = await ej.query<{ id: string; nombre: string; contenido: string }>(
-        `SELECT id, nombre, contenido FROM plantilla_doc
+      const { rows: p } = await ej.query<{
+        id: string; nombre: string; contenido: string; contenido_formato: FormatoContenido;
+      }>(
+        `SELECT id, nombre, contenido, contenido_formato FROM plantilla_doc
           WHERE tipo = 'recibo' AND activa ORDER BY nombre LIMIT 1`,
       );
       if (!p.length) {
@@ -307,7 +428,8 @@ export class PlantillasService {
         },
       };
 
-      const r = renderizar(p[0].contenido, ctx);
+      const formato = p[0].contenido_formato;
+      const r = renderizar(p[0].contenido, ctx, { escaparHtml: formato === 'html' });
 
       // Si la plantilla no menciona el cobro, está imprimiendo el alquiler
       // nominal del contrato. Con un pago parcial eso es un recibo por un monto
@@ -315,7 +437,8 @@ export class PlantillasService {
       const usaElCobro = /\{\{\s*cobro\./.test(p[0].contenido);
 
       return {
-        texto: r.texto,
+        texto: formato === 'html' ? aplanarDocumento(r.texto) : r.texto,
+        formato,
         faltantes: r.faltantes,
         plantilla: { id: p[0].id, nombre: p[0].nombre, tipo: 'recibo' },
         ...(usaElCobro
@@ -330,14 +453,37 @@ export class PlantillasService {
     });
   }
 
-  /** Previsualiza una plantilla contra datos de ejemplo, sin tocar un contrato. */
-  previsualizar(contenido: string): Documento {
-    const r = renderizar(contenido, EJEMPLO);
+  /**
+   * Previsualiza una plantilla contra datos de ejemplo, sin tocar un contrato.
+   *
+   * También sanitiza, y no por prolijidad: acá entra HTML por el body y sale
+   * por la respuesta directo a un `v-html` de la pantalla. Es un vector igual
+   * de bueno que `guardar()`, con la diferencia de que no deja rastro en la
+   * base — o sea, peor.
+   */
+  previsualizar(contenido: string, formato: FormatoContenido = 'html'): Documento & {
+    avisos: string[];
+    tokensRotos: TokenRoto[];
+  } {
+    const limpio = formato === 'html'
+      ? sanitizarPlantilla(contenido)
+      : { html: contenido, avisos: [] as string[] };
+    const r = renderizar(limpio.html, EJEMPLO, { escaparHtml: formato === 'html' });
     return {
-      texto: r.texto,
+      texto: formato === 'html' ? aplanarDocumento(r.texto) : r.texto,
+      formato,
       faltantes: r.faltantes,
       plantilla: { id: '', nombre: 'Ejemplo', tipo: 'otro' },
+      avisos: limpio.avisos,
+      // Sobre el contenido SIN renderizar: lo que se busca son los tokens que
+      // el motor no va a entender, y después de renderizar ya no están.
+      tokensRotos: tokensRotos(limpio.html),
     };
+  }
+
+  /** El contexto de ejemplo, para el test que lo confronta con el catálogo. */
+  static get ejemplo(): Contexto {
+    return EJEMPLO;
   }
 
   private async contextoDeContrato(ej: Ejecutor, contratoId: string): Promise<Contexto> {

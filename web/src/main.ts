@@ -7,6 +7,11 @@ import router from './router';
 // definidos. Ver DESIGN.md §0.
 import './styles/tokens.css';
 import './styles/familia.css';
+// La tipografía del documento. Va global y no `scoped` porque el mismo `.documento`
+// lo pintan tres pantallas —el editor de plantillas, el del documento y la hoja
+// imprimible— y porque el contenido entra por `v-html`: un estilo `scoped` no
+// alcanza a los nodos que Vue no compiló.
+import './styles/documento.css';
 
 import { revelar } from './directivas/revelar';
 

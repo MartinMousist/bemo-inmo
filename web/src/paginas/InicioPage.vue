@@ -5,7 +5,14 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { useAuth } from '../stores/auth';
-import { fecha, money, moneyCorto, numero, periodo as fmtPeriodo } from '../dominio/formato';
+import {
+  ETIQUETA_ESTADO_OPORTUNIDAD,
+  fecha,
+  money,
+  moneyCorto,
+  numero,
+  periodo as fmtPeriodo,
+} from '../dominio/formato';
 
 /**
  * Qué tengo que hacer hoy.
@@ -57,10 +64,18 @@ const ETIQUETA_INDICE: Record<string, string> = {
   ipc: 'IPC', icl: 'ICL', uva: 'UVA', icp: 'Casa Propia',
   porcentaje_fijo: '% fijo', ninguno: 'sin índice',
 };
-const ETIQUETA_ESTADO_OP: Record<string, string> = {
-  nueva: 'Nueva', contactada: 'Contactada', calificada: 'Calificada',
-  visita: 'Visita', negociacion: 'Negociación',
-};
+/*
+ * ⚠️ Acá había un `ETIQUETA_ESTADO_OP` local, y NO era el de las operaciones
+ * de una propiedad: eran los estados de una OPORTUNIDAD, con el nombre
+ * equivocado y en un archivo que además importa de `formato.ts`. Un
+ * buscar-y-reemplazar por ese nombre lo habría roto en silencio —los dos maps
+ * son `Record<string, string>`, así que seguiría compilando y mostraría
+ * «Alquilada» donde dice «Contactada»—.
+ *
+ * Se reemplaza por `ETIQUETA_ESTADO_OPORTUNIDAD`, que ya existía en
+ * `formato.ts` y es superconjunto de los cinco estados que devuelve
+ * `inicio.service.ts` (le agrega `ganada` y `perdida`).
+ */
 
 const auth = useAuth();
 const d = ref<Inicio | null>(null);
@@ -332,7 +347,7 @@ onMounted(cargar);
               <RouterLink to="/leads">
                 <span class="linea1"><span class="ref">{{ o.nombre }}</span></span>
                 <span class="linea2 mono">
-                  {{ ETIQUETA_ESTADO_OP[o.estado] ?? o.estado }} · entró por {{ o.origen }}
+                  {{ ETIQUETA_ESTADO_OPORTUNIDAD[o.estado] ?? o.estado }} · entró por {{ o.origen }}
                 </span>
               </RouterLink>
               <StatusChip :texto="`${o.desdeHace} d`" tono="warn" />

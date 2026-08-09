@@ -1,0 +1,204 @@
+/**
+ * La tipografía del documento, en pantalla y en papel.
+ *
+ * Hasta la migración 023 un pre-contrato se imprimía dentro de un `<pre>`
+ * monoespaciado. Alcanzaba para ver que el motor funcionaba y no alcanza para
+ * un papel que alguien firma: un contrato en Courier, sin justificar y sin
+ * control de viudas parece un volcado de una terminal, no un instrumento legal.
+ *
+ * Todo lo de acá sale de `DESIGN.md`. La clase `.documento` la usan los tres
+ * lugares donde el mismo texto aparece —el editor de plantillas, el editor del
+ * documento y la hoja imprimible— para que lo que se ve mientras se escribe sea
+ * lo que sale por la impresora.
+ *
+ * ── Lo que NO se promete ────────────────────────────────────────────────────
+ *
+ * **No hay números de página.** Chrome no soporta contenido en los márgenes de
+ * `@page` —ni `@top-center`, ni `counter(page)`—; los números los pone el
+ * diálogo de impresión del navegador, con su propio formato. Escribir un
+ * `@page { @bottom-center { content: counter(page) } }` que Chrome ignora sería
+ * prometer algo que no pasa.
+ *
+ * **No hay numeración automática de cláusulas.** Se puede hacer con
+ * `@counter-style { system: fixed }` para que diga «PRIMERA», «SEGUNDA», pero
+ * entonces el nombre de la cláusula vive en una hoja de estilos y no en el
+ * documento firmado: quien copie el texto se lleva un contrato sin ordinales.
+ * Queda escrito como pendiente en vez de entregarse a medias.
+ */
+
+.documento {
+  /* Geist, la de UI: es la que ya carga la app y la que `DESIGN.md` fija. */
+  font-family: var(--font-ui);
+  /* 11,5pt es el cuerpo de un contrato: más chico cansa en tres carillas, más
+     grande empuja el documento a una hoja de más. */
+  font-size: 11.5pt;
+  line-height: 1.7;
+  color: var(--ink);
+  /* Justificado con partición: sin `hyphens`, justificar en castellano deja
+     ríos de espacio en blanco en el medio del párrafo. Necesita el `lang`, que
+     lo pone el elemento —`lang="es-AR"`—, o el navegador no sabe con qué
+     diccionario partir. */
+  text-align: justify;
+  hyphens: auto;
+  /* Ninguna línea suelta arriba ni abajo de un salto de página. */
+  orphans: 3;
+  widows: 3;
+}
+
+.documento > * { margin: 0 0 0.75em; }
+.documento > *:last-child { margin-bottom: 0; }
+
+.documento h1,
+.documento h2,
+.documento h3,
+.documento h4 {
+  font-family: var(--font-title);
+  text-align: left;
+  hyphens: manual;
+  margin: 1.4em 0 0.5em;
+  /* Un título no se queda solo al pie de la hoja con su texto en la siguiente. */
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.documento h1 { font-size: 15pt; }
+.documento h2 { font-size: 13pt; }
+.documento h3 { font-size: 12pt; }
+.documento h4 { font-size: 11.5pt; }
+.documento > *:first-child { margin-top: 0; }
+
+.documento ul,
+.documento ol { padding-left: 1.6em; margin-bottom: 0.75em; }
+.documento li { margin-bottom: 0.2em; text-align: left; }
+.documento ul ul,
+.documento ol ol,
+.documento ul ol,
+.documento ol ul { margin-bottom: 0; }
+
+.documento blockquote {
+  margin-left: 1.5em;
+  padding-left: 0.9em;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-2);
+}
+
+.documento hr {
+  border: none;
+  border-top: 1px solid var(--line-strong);
+  margin: 1.2em 0;
+}
+
+.documento strong { font-weight: 600; }
+
+/* ── El andamio del editor ─────────────────────────────────────────────────
+ *
+ * Un bloque cuya condición dio falso queda como un div VACÍO: el motor borra
+ * el rango entre `{% si %}` y `{% fin %}`, que es la única forma de que el
+ * borrado sea HTML balanceado. Sin esta regla, ese div vacío deja un hueco de
+ * media línea en el medio del contrato impreso.
+ */
+[data-bloque]:empty { display: none; }
+
+/* ── El chip, sólo en modo edición ────────────────────────────────────────── */
+
+.documento.editable .chip-var,
+.documento.editable [data-var] {
+  /* `inline-block` y no `inline`: el documento está justificado, y con `inline`
+     el navegador estira los espacios que hay ADENTRO del chip para cuadrar el
+     renglón. Un `{{ locatario.nombre }}` con tres centímetros entre las llaves
+     no se lee como una sola pieza, que es justo lo que el chip tiene que
+     parecer. */
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  /* ⚠️ Contraste MEDIDO calculando el ratio, no mirado.
+     `--accent` sobre `--accent-tint` daba **4,25** en tema claro (#0e7c86
+     sobre #e1f1f2): por debajo de AA, y a ojo se ve perfecto. Es exactamente
+     la trampa que ya está anotada en `docs/CONTINUAR.md` —el gris que «se veía
+     bien» daba 3,01—.
+     `--accent-ink` existe para esto: #0b656d sobre #e1f1f2 da **5,83** en
+     claro, y #7ec6cc sobre #12312f da **7,20** en oscuro. */
+  color: var(--accent-ink);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  font-size: 0.92em;
+  white-space: nowrap;
+  /* Que no se pueda hacer clic adentro: el chip es una sola pieza. */
+  cursor: default;
+}
+
+.documento.editable [data-bloque] {
+  position: relative;
+  margin: 0.6em 0;
+  padding: 0.5em 0.6em 0.5em 0.9em;
+  border-left: 3px solid var(--accent-line);
+  background: var(--surface-2);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+/* En edición un bloque vacío SÍ se ve: si no, no habría dónde hacer clic para
+   escribir adentro y el bloque recién insertado sería invisible. */
+.documento.editable [data-bloque]:empty { display: block; min-height: 2em; }
+
+.documento.editable [data-bloque]::before {
+  content: attr(data-expr);
+  display: block;
+  margin-bottom: 0.3em;
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.documento.editable [data-bloque='si']::before { content: 'Sólo si hay ' attr(data-expr); }
+.documento.editable [data-bloque='para']::before {
+  content: 'Por cada ' attr(data-lista) ' (adentro se llama ' attr(data-item) ')';
+}
+
+.documento.editable {
+  padding: var(--s-lg);
+  outline: none;
+}
+.documento.editable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* El párrafo vacío del editor: sin esto no se ve dónde está el cursor. */
+.documento.editable p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* ── Papel ─────────────────────────────────────────────────────────────────── */
+
+@media print {
+  /* 20 mm arriba y abajo, 18 mm a los costados: es el margen de una carta
+     comercial argentina y deja lugar para el sello y la firma al pie. */
+  @page { margin: 20mm 18mm; }
+
+  .documento {
+    font-size: 11pt;
+    color: #000;
+  }
+  /* En papel el chip no es un chip: es el valor, y punto. Si se imprimiera con
+     su fondo celeste, el contrato saldría con las variables resaltadas como si
+     fueran otra cosa. */
+  .documento [data-var],
+  .documento .chip-var {
+    padding: 0;
+    color: inherit;
+    background: none;
+    border: none;
+    font-size: inherit;
+  }
+  .documento [data-bloque] {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+  }
+  .documento [data-bloque]::before { content: none; }
+  /* El bloque de firmas no se parte entre dos hojas: una firma sola arriba de
+     la página siguiente no sirve como constancia de nada. */
+  .documento .firmas,
+  .documento table { break-inside: avoid; page-break-inside: avoid; }
+}

@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
+import PropiedadesGrilla from '../componentes/PropiedadesGrilla.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import SelectAgente from '../componentes/SelectAgente.vue';
 import StatusChip from '../componentes/StatusChip.vue';
@@ -10,8 +11,20 @@ import ThOrden from '../componentes/ThOrden.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
-import { fecha, money, numero, plural, ETIQUETA_TIPO } from '../dominio/formato';
+import VistaToggle from '../componentes/VistaToggle.vue';
+import {
+  ESTADOS_OPERACION,
+  ETIQUETA_TIPO,
+  etiquetaSituacion,
+  fecha,
+  money,
+  numero,
+  plural,
+  situacionesDe,
+  tonoSituacion,
+} from '../dominio/formato';
 import { filtrosRecordados } from '../dominio/filtros';
+import { guardarVista, leerVista, type Vista } from '../dominio/vista';
 import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
 import { consulta, type Pagina } from '../dominio/pagina';
 import { useAuth } from '../stores/auth';
@@ -57,22 +70,28 @@ interface Propiedad {
   direccion: string;
   tipo: string;
   supTotal: number | null;
+  supCubierta: number | null;
   ambientes: number | null;
   dormitorios: number | null;
+  banos: number | null;
   cocheras: number | null;
+  fotoPortada: string | null;
   ubicacionConocida: boolean;
   agenteCaptador: { id: string; nombre: string } | null;
   operaciones: Operacion[];
 }
 
-const ESTADO: Record<string, string> = {
-  borrador: 'Borrador', disponible: 'Disponible', reservada: 'Reservada',
-  cerrada: 'Cerrada', suspendida: 'Suspendida',
-};
-const TONO_ESTADO: Record<string, 'ok' | 'warn' | 'err' | 'neutro'> = {
-  borrador: 'neutro', disponible: 'ok', reservada: 'warn',
-  cerrada: 'neutro', suspendida: 'err',
-};
+/*
+ * Acá vivían un `ESTADO` y un `TONO_ESTADO` locales. Eran la segunda y la
+ * tercera copia de la misma tabla —la primera está en `formato.ts`— y por eso
+ * habían derivado: esta decía «Cerrada» para una unidad ALQUILADA, y el tono de
+ * `cerrada` era `neutro` acá y `err` (rojo) en las otras dos pantallas. La
+ * misma operación se pintaba de dos colores según dónde se la mirara.
+ *
+ * Ahora salen de `etiquetaSituacion()`, `tonoSituacion()` y `situacionesDe()`,
+ * que piden el tipo de operación obligatorio justamente para que el compilador
+ * encuentre lo que un `grep` no distingue.
+ */
 
 const POR_PAGINA = 25;
 
@@ -102,11 +121,48 @@ const auth = useAuth();
 const { valores: filtros, limpiar: limpiarFiltros } = filtrosRecordados(
   'cartera-propiedades',
   { tipo: '', estado: '', agente: '' },
-  { tipo: Object.keys(ETIQUETA_TIPO), estado: Object.keys(ESTADO) },
+  // Regla 2 de `filtros.ts`: se valida contra los valores CRUDOS de la base,
+  // que son los que viajan al backend. Las etiquetas cambian —«Cerrada» pasó a
+  // ser «Vendida» o «Alquilada»— y los valores no.
+  { tipo: Object.keys(ETIQUETA_TIPO), estado: [...ESTADOS_OPERACION] },
 );
 
 const orden = ref<string | null>(null);
 const dir = ref<'asc' | 'desc'>('asc');
+
+/**
+ * Tabla o tarjetas, compartido con las otras dos pantallas de propiedades.
+ * Ver `dominio/vista.ts`: es espacio de trabajo y por eso NO lo resetea
+ * «Limpiar», que sólo limpia filtros.
+ */
+const vista = ref<Vista>(leerVista());
+watch(vista, (v) => guardarVista(v));
+
+/**
+ * Ordenar en modo TARJETAS.
+ *
+ * En la tabla el orden vive en los `<th>` (`ThOrden`), y en una grilla no hay
+ * encabezado: sin esto, pasar a tarjetas silenciosamente sacaba la única forma
+ * de ordenar la cartera. Es un `<select>` + un botón de sentido, atado a los
+ * MISMOS refs `orden`/`dir` que usa la tabla, así que el orden sobrevive al
+ * cambio de vista y el backend recibe lo mismo.
+ *
+ * Los campos son los del whitelist de `ordenSeguro()` en el servicio. Uno que
+ * no esté ahí se ignora del lado del servidor —el listado saldría en el orden
+ * por defecto sin decir por qué—, así que esta lista no se amplía sola.
+ */
+const CAMPOS_ORDEN = computed(() => [
+  { valor: '', texto: 'Más recientes' },
+  { valor: 'codigo', texto: 'Código' },
+  { valor: 'direccion', texto: 'Dirección' },
+  ...(esVenta.value ? [{ valor: 'superficie', texto: 'Superficie' }] : []),
+  { valor: 'precio', texto: 'Precio' },
+  ...(esVenta.value ? [{ valor: 'publicada', texto: 'Publicación' }] : []),
+]);
+
+function cambiarOrden(campo: string) {
+  ordenarPor(campo === '' ? null : campo, dir.value);
+}
 
 function ordenarPor(campo: string | null, d: 'asc' | 'desc') {
   orden.value = campo;
@@ -241,6 +297,7 @@ async function exportar() {
             Alquiler
           </button>
         </div>
+        <VistaToggle v-model:modelo="vista" />
         <button class="btn secondary" type="button" @click="exportar">Exportar</button>
         <RouterLink class="btn" to="/propiedades/nueva">Nueva propiedad</RouterLink>
       </template>
@@ -262,15 +319,41 @@ async function exportar() {
         </select>
       </label>
 
+      <!-- «Situación» y no «Estado», y las opciones cambian con el listado:
+           en alquiler la que hay que elegir para ver las unidades ocupadas se
+           llama «Alquilada», no «Cerrada». Ofrecer la palabra equivocada en el
+           desplegable es la misma confusión que causó el 3 de 13. -->
       <label class="campo suave">
-        <span>Estado</span>
+        <span>Situación</span>
         <select v-model="filtros.estado">
-          <option value="">Todos</option>
-          <option v-for="(t, k) in ESTADO" :key="k" :value="k">{{ t }}</option>
+          <option value="">Todas</option>
+          <option v-for="s in situacionesDe(operacion)" :key="s.valor" :value="s.valor">
+            {{ s.etiqueta }}
+          </option>
         </select>
       </label>
 
       <SelectAgente v-model="filtros.agente" etiqueta="Captó" con-sin-asignar />
+
+      <!-- En tarjetas no hay `<thead>`, o sea que no hay `ThOrden`. Sin esto,
+           cambiar de vista sacaba el orden de la cartera sin avisar. Va acá y
+           no en la cabecera porque ordenar es una pregunta sobre los datos,
+           como los filtros — y por eso «Limpiar» sí lo resetea. -->
+      <label v-if="vista === 'tarjetas'" class="campo suave">
+        <span>Ordenar</span>
+        <select :value="orden ?? ''" @change="cambiarOrden(($event.target as HTMLSelectElement).value)">
+          <option v-for="c in CAMPOS_ORDEN" :key="c.valor" :value="c.valor">{{ c.texto }}</option>
+        </select>
+      </label>
+      <button
+        v-if="vista === 'tarjetas' && orden"
+        class="btn secondary sm"
+        type="button"
+        :aria-label="dir === 'asc' ? 'Orden ascendente. Cambiar a descendente' : 'Orden descendente. Cambiar a ascendente'"
+        @click="ordenarPor(orden, dir === 'asc' ? 'desc' : 'asc')"
+      >
+        {{ dir === 'asc' ? '↑ asc' : '↓ desc' }}
+      </button>
 
       <button v-if="hayFiltro" class="btn secondary sm" type="button" @click="limpiarTodo">
         Limpiar
@@ -283,12 +366,16 @@ async function exportar() {
       El botón «Exportar» baja la cartera completa, no lo que está filtrado.
     </p>
 
-    <UiSkeleton v-if="cargando" :filas="5" :alto="48" />
+    <!-- El skeleton también cambia de forma con la vista: filas para la tabla,
+         tarjetas fantasma para la grilla. Un skeleton de filas que se convierte
+         en una grilla es el salto de layout que el skeleton existe para evitar. -->
+    <PropiedadesGrilla v-if="cargando && vista === 'tarjetas'" :items="[]" cargando />
+    <UiSkeleton v-else-if="cargando" :filas="5" :alto="48" />
 
     <UiEmpty
       v-else-if="!error && !items.length && hayFiltro"
       titulo="Ninguna propiedad coincide"
-      detalle="Probá con otro texto, otro tipo u otro estado."
+      detalle="Probá con otro texto, otro tipo u otra situación."
     >
       <button class="btn secondary" type="button" @click="limpiarTodo">Quitar filtros</button>
     </UiEmpty>
@@ -302,6 +389,12 @@ async function exportar() {
     >
       <RouterLink class="btn" to="/propiedades/nueva">Cargar una propiedad</RouterLink>
     </UiEmpty>
+
+    <PropiedadesGrilla
+      v-else-if="items.length && vista === 'tarjetas'"
+      :items="items"
+      :modo="operacion"
+    />
 
     <div v-else-if="items.length" class="card sin-padding">
       <table class="table-clicable">
@@ -352,7 +445,10 @@ async function exportar() {
               <th>Situación</th>
             </template>
 
-            <th v-if="esVenta">Estado</th>
+            <!-- «Situación» y no «Estado», igual que la de alquiler: es la
+                 misma columna con la misma pregunta. Una venta `cerrada` acá
+                 dice «Vendida». -->
+            <th v-if="esVenta">Situación</th>
           </tr>
         </thead>
 
@@ -415,18 +511,21 @@ async function exportar() {
                   tono="neutro"
                 />
                 <StatusChip
-                  v-else
-                  :texto="op(p)?.estado === 'disponible' ? 'libre' : (ESTADO[op(p)?.estado ?? ''] ?? '—')"
-                  :tono="op(p)?.estado === 'disponible' ? 'ok' : (TONO_ESTADO[op(p)?.estado ?? ''] ?? 'neutro')"
+                  v-else-if="op(p)"
+                  :texto="op(p)!.estado === 'disponible' ? 'libre' : etiquetaSituacion(op(p)!.estado, op(p)!.tipo)"
+                  :tono="op(p)!.estado === 'disponible' ? 'ok' : tonoSituacion(op(p)!.estado)"
                 />
+                <span v-else class="vacio">—</span>
               </td>
             </template>
 
             <td v-if="esVenta">
               <StatusChip
-                :texto="ESTADO[op(p)?.estado ?? ''] ?? '—'"
-                :tono="TONO_ESTADO[op(p)?.estado ?? ''] ?? 'neutro'"
+                v-if="op(p)"
+                :texto="etiquetaSituacion(op(p)!.estado, op(p)!.tipo)"
+                :tono="tonoSituacion(op(p)!.estado)"
               />
+              <span v-else class="vacio">—</span>
             </td>
           </tr>
         </tbody>

@@ -2,13 +2,30 @@ import { Injectable } from '@nestjs/common';
 import { DbService } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { aCsv, numeroCsv, type ColumnaCsv } from '../common/csv';
+import {
+  CONJUNTO_ROL,
+  ROLES_DERIVADOS,
+  type RolPersona,
+} from '../personas/personas.service';
 
 type Fila = Record<string, unknown>;
 
-/** Qué se puede exportar y con qué consulta. */
+/**
+ * Qué se puede exportar y con qué consulta.
+ *
+ * `sql` puede ser una función cuando la consulta depende del filtro que está
+ * puesto en la pantalla. Hasta acá el único caso es personas por rol: un botón
+ * «Exportar» al lado de la pestaña Propietarios que baja las 5.000 personas es
+ * peor que no tener el botón, porque no falla — devuelve un archivo que parece
+ * correcto y no es el que se pidió.
+ */
 const RECURSOS: Record<
   string,
-  { sql: string; usaPeriodo?: boolean; columnas: Array<ColumnaCsv<Fila>> }
+  {
+    sql: string | ((rol?: RolPersona) => string);
+    usaPeriodo?: boolean;
+    columnas: Array<ColumnaCsv<Fila>>;
+  }
 > = {
   propiedades: {
     sql: `SELECT p.codigo, p.tipo, p.calle, p.numero, p.piso, p.depto,
@@ -48,9 +65,22 @@ const RECURSOS: Record<
   },
 
   personas: {
-    sql: `SELECT nombre, apellido, tipo, doc_tipo, doc_numero,
-                 email::text AS email, telefono, domicilio
-            FROM persona ORDER BY apellido NULLS LAST, nombre`,
+    // Los roles se derivan con `ROLES_DERIVADOS` y el filtro con
+    // `CONJUNTO_ROL`, las MISMAS constantes que usan el listado y los conteos
+    // de la pantalla. Una segunda definición acá haría que el CSV y la tabla
+    // dijeran cosas distintas sobre las mismas personas, y el CSV es lo que se
+    // abre en Excel para contar.
+    //
+    // Acá no hace falta la CTE de paginación que sí lleva `listar()`: no hay
+    // LIMIT que se pueda evaluar antes, se exporta todo y las N filas se van a
+    // proyectar igual.
+    sql: (rol) => `
+      SELECT p.nombre, p.apellido, p.tipo, p.doc_tipo, p.doc_numero,
+             p.email::text AS email, p.telefono, p.domicilio,
+             ${ROLES_DERIVADOS}
+        FROM persona p
+       ${rol && Object.hasOwn(CONJUNTO_ROL, rol) ? `WHERE p.id IN (${CONJUNTO_ROL[rol]})` : ''}
+       ORDER BY p.apellido NULLS LAST, p.nombre`,
     columnas: [
       { titulo: 'Nombre', valor: (f) => f.nombre },
       { titulo: 'Apellido', valor: (f) => f.apellido },
@@ -60,6 +90,10 @@ const RECURSOS: Record<
       { titulo: 'Correo', valor: (f) => f.email },
       { titulo: 'Teléfono', valor: (f) => f.telefono },
       { titulo: 'Domicilio', valor: (f) => f.domicilio },
+      // Separados por « | », igual que `titulares` y `operaciones` de
+      // propiedades: el CSV va separado por comas y un rol por columna serían
+      // seis columnas de sí/no que nadie filtra.
+      { titulo: 'Roles', valor: (f) => (f.roles as string[] | null)?.join(' | ') },
     ],
   },
 
@@ -180,8 +214,17 @@ export class ExportarService {
     return Object.keys(RECURSOS);
   }
 
-  async generar(tenantId: string, recurso: string, periodo?: string): Promise<string> {
-    const def = RECURSOS[recurso];
+  async generar(
+    tenantId: string,
+    recurso: string,
+    periodo?: string,
+    rol?: RolPersona,
+  ): Promise<string> {
+    // `Object.hasOwn` y no `RECURSOS[recurso]` a secas: `/exportar/constructor.csv`
+    // encontraba una FUNCIÓN en la cadena de prototipos, pasaba el `if (!def)` y
+    // reventaba con un 500 en `ej.query(undefined)` en vez del 404 redactado.
+    // Es la misma trampa de prototipos del motor de plantillas y de `ordenSeguro`.
+    const def = Object.hasOwn(RECURSOS, recurso) ? RECURSOS[recurso] : undefined;
     if (!def) {
       throw new AppError(
         404,
@@ -193,7 +236,7 @@ export class ExportarService {
 
     return this.db.withTenant(tenantId, async (ej) => {
       const { rows } = await ej.query<Fila>(
-        def.sql,
+        typeof def.sql === 'function' ? def.sql(rol) : def.sql,
         def.usaPeriodo ? [periodo ?? null] : [],
       );
       return aCsv(rows, def.columnas);

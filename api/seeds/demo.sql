@@ -69,6 +69,16 @@ ON CONFLICT (id) DO NOTHING;
 -- Los cuatro roles existen para que la matriz de permisos se pueda probar a
 -- mano: entrar como `agente` y ver que los bloques de plata vienen en `null`
 -- —no en cero— es media pantalla de inicio verificada sin escribir un test.
+--
+-- Están TODOS acá, incluidos los cinco que sólo hacen falta más abajo (Belén,
+-- Martín, Paula, Iván y el asesor de La Plata). Antes se cargaban recién en
+-- «Completar el volumen», y eso rompía el seed entero en una base limpia:
+-- `comision.beneficiario_id` referencia `usuario(id)`, y el árbol de comisiones
+-- de la venta 6 nombra a Martín Aguirre 500 líneas antes de que Martín
+-- existiera. El archivo corre en UNA transacción, así que ese error no dejaba
+-- un seed a medias: dejaba la base vacía y la API sin arrancar.
+-- Las membresías de esos cinco siguen abajo, con sus sucursales, que recién se
+-- crean ahí.
 
 INSERT INTO usuario (id, email, password_hash, nombre, estado) VALUES
   ('11000000-0000-4000-8000-000000000001','owner@andes.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Ana Torres',  'activo'),
@@ -76,7 +86,12 @@ INSERT INTO usuario (id, email, password_hash, nombre, estado) VALUES
   ('11000000-0000-4000-8000-000000000003','asesor@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Sofía Luna',  'activo'),
   ('11000000-0000-4000-8000-000000000004','contable@andes.test','$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Raúl Vega',   'activo'),
   ('11000000-0000-4000-8000-000000000005','asesor2@andes.test', '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Nicolás Paz', 'activo'),
-  ('22000000-0000-4000-8000-000000000001','owner@plata.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Laura Giménez','activo')
+  ('11000000-0000-4000-8000-000000000006','asesor3@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Belén Ortiz',   'activo'),
+  ('11000000-0000-4000-8000-000000000007','asesor4@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Martín Aguirre','activo'),
+  ('11000000-0000-4000-8000-000000000008','admin2@andes.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Paula Bravo',   'activo'),
+  ('11000000-0000-4000-8000-000000000009','suspendido@andes.test','$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Iván Sosa',    'suspendido'),
+  ('22000000-0000-4000-8000-000000000001','owner@plata.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Laura Giménez','activo'),
+  ('22000000-0000-4000-8000-000000000002','asesor@plata.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Damián Ruiz',   'activo')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO membresia (id, tenant_id, usuario_id, rol, estado, sucursal_id) VALUES
@@ -989,14 +1004,10 @@ INSERT INTO sucursal (id, tenant_id, nombre, direccion, telefono) VALUES
   ('5c000000-0000-4000-8000-000000000006','22222222-2222-4222-8222-222222222222','Sucursal Norte','Av. Maipú 2400, Vicente López',  '11 4791-3300')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO usuario (id, email, password_hash, nombre, estado) VALUES
-  ('11000000-0000-4000-8000-000000000006','asesor3@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Belén Ortiz',   'activo'),
-  ('11000000-0000-4000-8000-000000000007','asesor4@andes.test',  '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Martín Aguirre','activo'),
-  ('11000000-0000-4000-8000-000000000008','admin2@andes.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Paula Bravo',   'activo'),
-  ('11000000-0000-4000-8000-000000000009','suspendido@andes.test','$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Iván Sosa',    'suspendido'),
-  ('22000000-0000-4000-8000-000000000002','asesor@plata.test',   '$2b$12$am.JJqhntjm/jCPCFz0fo.N62ELRAH5JaGOyusALJU7ZtJOzPhDIW','Damián Ruiz',   'activo')
-ON CONFLICT (id) DO NOTHING;
-
+-- Los cinco usuarios de este tramo ya se cargaron arriba, junto a los otros
+-- seis: las comisiones de las ventas 6 y 8 los referencian antes de esta línea
+-- y la FK no perdona. Acá quedan sólo sus membresías, que sí dependen de las
+-- sucursales de Chacras y Maipú creadas dos statements más arriba.
 INSERT INTO membresia (id, tenant_id, usuario_id, rol, estado, sucursal_id) VALUES
   ('11500000-0000-4000-8000-000000000006','11111111-1111-4111-8111-111111111111','11000000-0000-4000-8000-000000000006','agente','activa',   '5c000000-0000-4000-8000-000000000004'),
   ('11500000-0000-4000-8000-000000000007','11111111-1111-4111-8111-111111111111','11000000-0000-4000-8000-000000000007','agente','activa',   '5c000000-0000-4000-8000-000000000005'),

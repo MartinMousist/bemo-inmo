@@ -1,12 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
-import { plural } from '../dominio/formato';
+import { fecha, plural } from '../dominio/formato';
+import type { Catalogo } from '../componentes/editor/catalogo';
+import { registrarEtiquetas } from '../componentes/editor/nodos';
+
+/**
+ * El editor entra perezoso a propósito.
+ *
+ * `@tiptap/starter-kit` arrastra unos veinticuatro subpaquetes de `@tiptap/*`
+ * más ProseMirror. Con un import normal, ese peso lo bajaría también quien
+ * entra a ver una liquidación y nunca abre una plantilla. Así queda en su
+ * propio chunk y sólo lo piden esta pantalla y la ficha del contrato.
+ */
+const EditorDocumento = defineAsyncComponent(
+  () => import('../componentes/EditorDocumento.vue'),
+);
 
 /**
  * Pre-contratos y plantillas.
@@ -31,20 +45,32 @@ import { plural } from '../dominio/formato';
  * leer el código.
  */
 
+interface TokenRoto { token: string; motivo: string }
+
 interface Plantilla {
   id: string;
   tipo: string;
   nombre: string;
   contenido: string;
+  /** `html` = el editor con formato. `texto` = las que todavía no se convirtieron. */
+  formato: 'texto' | 'html';
   activa: boolean;
   variables: string[];
+  /** Los `{{ }}` que el motor NO entiende: se imprimen literales en el contrato. */
+  tokensRotos: TokenRoto[];
+  /** Sólo en las convertidas. La pantalla lo muestra: convertir reescribe texto legal. */
+  textoOriginal: string | null;
+  convertidaEl: string | null;
 }
 
 interface Documento {
   texto: string;
+  formato: 'texto' | 'html';
   faltantes: string[];
   plantilla: { id: string; nombre: string };
   advertencia?: string;
+  avisos?: string[];
+  tokensRotos?: TokenRoto[];
 }
 
 const TIPO: Record<string, string> = {
@@ -67,8 +93,34 @@ const guardando = ref(false);
 
 /** La que se está editando. `null` = ninguna; `'nueva'` = alta. */
 const editando = ref<string | null>(null);
-const form = ref({ id: '', tipo: 'pre_contrato_alquiler', nombre: '', contenido: '' });
+const form = ref({
+  id: '', tipo: 'pre_contrato_alquiler', nombre: '', contenido: '',
+  formato: 'html' as 'texto' | 'html',
+});
 const vista = ref<Documento | null>(null);
+
+/** El catálogo del menú de variables. Viene del backend, no de una lista de acá. */
+const catalogo = ref<Catalogo>({ variables: [], bloques: [], formatos: [] });
+/** Lo que dejó el último pegado desde Word. Se muestra hasta que se cierra. */
+const avisosPegado = ref<string[]>([]);
+/** La plantilla convertida cuyo texto original se está mirando. */
+const viendoOriginal = ref(false);
+
+/** La que se está editando, tal como está en la lista. */
+const enLista = computed(() => items.value.find((p) => p.id === form.value.id) ?? null);
+
+/** El catálogo se acota al tipo elegido: `cobro.*` sólo existe en el recibo. */
+async function cargarCatalogo() {
+  try {
+    catalogo.value = await api<Catalogo>(
+      `/plantillas/variables?tipo=${encodeURIComponent(form.value.tipo)}`,
+    );
+  } catch {
+    // Sin catálogo el editor sigue sirviendo para escribir: lo único que se
+    // pierde es el menú. Se dice, no se finge que está vacío.
+    catalogo.value = { variables: [], bloques: [], formatos: [] };
+  }
+}
 
 const esNueva = computed(() => editando.value === 'nueva');
 
@@ -84,61 +136,124 @@ async function cargar() {
     cargando.value = false;
   }
 }
-onMounted(cargar);
+/**
+ * El diccionario ruta → etiqueta legible, para la lista.
+ *
+ * La lista mostraba `contrato.monto`, que es cómo se llama una columna. Quien
+ * redacta un contrato no tiene por qué saberlo: acá dice «Precio mensual».
+ */
+const etiquetas = ref<Record<string, string>>({});
+
+function etiquetaDe(ruta: string): string {
+  return etiquetas.value[ruta] ?? ruta;
+}
+
+onMounted(async () => {
+  await cargar();
+  try {
+    const todo = await api<Catalogo>('/plantillas/variables');
+    const m: Record<string, string> = {};
+    for (const v of todo.variables) m[v.ruta] = v.etiqueta;
+    for (const b of todo.bloques) for (const v of b.adentro ?? []) m[v.ruta] = v.etiqueta;
+    etiquetas.value = m;
+    // El mismo diccionario lo usa el chip del editor para mostrar «Precio
+    // mensual» en vez de `contrato.monto`. Ver `editor/nodos.ts`.
+    registrarEtiquetas(m);
+  } catch {
+    // Sin catálogo la lista sigue mostrando la ruta: es menos legible, pero es
+    // verdad. No se inventa una etiqueta.
+  }
+});
 
 function abrirNueva() {
   editando.value = 'nueva';
   vista.value = null;
+  avisosPegado.value = [];
+  viendoOriginal.value = false;
   form.value = {
     id: '',
     tipo: 'pre_contrato_alquiler',
     nombre: '',
-    // Un textarea en blanco no dice cómo se escribe una plantilla. El esqueleto
-    // muestra la sintaxis de las tres cosas que el motor sabe hacer.
+    formato: 'html',
+    // El esqueleto ya NO enseña sintaxis, y ése es el cambio.
     //
-    // ⚠️ Este esqueleto enseñaba `{{#if x }}…{{/if}}` y `{{#each }}`, que es la
-    // sintaxis de Handlebars y **el motor de acá no la entiende**: los
-    // condicionales son `{% si x %}…{% fin %}` y las listas
-    // `{% para x en lista %}`. Comprobado contra la API: `{{#if
-    // contrato.deposito }}` sale literal en el documento y ni siquiera figura
-    // como variable faltante. O sea que una plantilla nacida de este esqueleto
-    // imprimía `{{#if contrato.deposito }}` adentro del contrato que se firma.
+    // Antes acá había un modelo con `{{ }}` y `{% si %}` escritos a mano para
+    // que alguien los copiara. Enseñar sintaxis en un textarea es lo que hizo
+    // que este esqueleto arrastrara durante meses `{{#if}}` y `{{#each}}` de
+    // Handlebars —que el motor NO entiende— y que toda plantilla nacida de acá
+    // imprimiera esas etiquetas literales adentro del contrato que se firma
+    // (está en la tabla de trampas de `docs/CONTINUAR.md`).
+    //
+    // Ahora las variables se insertan desde el menú, que las saca del catálogo
+    // del backend: no hay sintaxis que recordar ni que escribir mal. El
+    // esqueleto es sólo el andamio de un contrato, en texto común.
     contenido:
-      'CONTRATO DE LOCACIÓN\n\n' +
-      'Entre {{ locador.nombre }}, DNI {{ locador.documento }}, en adelante EL LOCADOR,\n' +
-      'y {{ locatario.nombre }}, DNI {{ locatario.documento }}, en adelante EL LOCATARIO,\n' +
-      'se conviene la locación de {{ propiedad.direccion }}.\n\n' +
-      'PLAZO: desde {{ contrato.inicio | fecha_larga }} hasta {{ contrato.fin | fecha_larga }}.\n' +
-      'PRECIO: {{ contrato.monto | moneda }} por mes, pagadero el día {{ contrato.diaVencimiento }}.\n\n' +
-      '{% si contrato.deposito %}\n' +
-      'DEPÓSITO: {{ contrato.deposito | moneda }}, que se reintegra al finalizar.\n' +
-      '{% fin %}\n\n' +
-      '{% si garantes %}\n' +
-      'GARANTÍA. Firman como garantes solidarios:\n' +
-      '{% para g en garantes %}  · {{ g.nombre }}, DNI {{ g.documento }}\n' +
-      '{% fin %}{% fin %}\n',
+      '<h1>CONTRATO DE LOCACIÓN</h1>' +
+      '<p>Entre , en adelante EL LOCADOR, y , en adelante EL LOCATARIO, ' +
+      'se conviene la locación del inmueble de .</p>' +
+      '<h2>PRIMERA — PLAZO</h2><p></p>' +
+      '<h2>SEGUNDA — PRECIO</h2><p></p>',
   };
+  void cargarCatalogo();
 }
 
 function abrirEdicion(p: Plantilla) {
   editando.value = p.id;
   vista.value = null;
-  form.value = { id: p.id, tipo: p.tipo, nombre: p.nombre, contenido: p.contenido };
+  avisosPegado.value = [];
+  viendoOriginal.value = false;
+  form.value = {
+    id: p.id, tipo: p.tipo, nombre: p.nombre, contenido: p.contenido, formato: p.formato,
+  };
+  void cargarCatalogo();
 }
 
 function cerrar() {
   editando.value = null;
   vista.value = null;
+  avisosPegado.value = [];
+  viendoOriginal.value = false;
 }
 
 async function previsualizar() {
   try {
     vista.value = await api<Documento>('/plantillas/previsualizar', {
       method: 'POST',
-      body: JSON.stringify({ contenido: form.value.contenido }),
+      body: JSON.stringify({ contenido: form.value.contenido, formato: form.value.formato }),
     });
   } catch (e) {
     ui.error('No se pudo previsualizar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+  }
+}
+
+/**
+ * Pasa una plantilla vieja al editor con formato.
+ *
+ * El botón existe además de la conversión automática del `migrate` porque una
+ * inmobiliaria puede traer su plantilla después, o dejarla en texto a propósito.
+ * El original queda guardado y se puede mirar desde acá mismo: convertir es
+ * reescribir un texto legal.
+ */
+async function convertir(p: Plantilla) {
+  const ok = await ui.confirmar({
+    titulo: '¿Pasar al editor con formato?',
+    detalle:
+      `«${p.nombre}» está en texto plano. Al convertirla, los saltos de línea ` +
+      'pasan a párrafos, las viñetas a lista y las variables a fichas. El texto ' +
+      'original queda guardado y se puede mirar desde acá. Los documentos que ya ' +
+      'se generaron con ella no se tocan: salieron como salieron.',
+    confirmar: 'Convertir',
+  });
+  if (!ok) return;
+
+  try {
+    await api(`/plantillas/${p.id}/convertir`, { method: 'POST' });
+    ui.ok('Convertida', `«${p.nombre}» ya se edita con formato.`);
+    await cargar();
+    const nueva = items.value.find((x) => x.id === p.id);
+    if (nueva) abrirEdicion(nueva);
+  } catch (e) {
+    ui.error('No se pudo convertir', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
   }
 }
 
@@ -149,16 +264,21 @@ async function guardar() {
   }
   guardando.value = true;
   try {
-    await api('/plantillas', {
+    const r = await api<Plantilla & { avisos: string[] }>('/plantillas', {
       method: 'PUT',
       body: JSON.stringify({
         ...(form.value.id ? { id: form.value.id } : {}),
         tipo: form.value.tipo,
         nombre: form.value.nombre.trim(),
         contenido: form.value.contenido,
+        formato: form.value.formato,
       }),
     });
     ui.ok(esNueva.value ? 'Plantilla creada' : 'Plantilla guardada', form.value.nombre.trim());
+    // Lo que el sanitizador tuvo que arreglar se dice. Arreglarlo en silencio
+    // deja guardada una plantilla distinta de la que la persona escribió.
+    for (const a of r.avisos ?? []) ui.error('Se corrigió algo al guardar', a);
+    for (const t of r.tokensRotos ?? []) ui.error(`Quedó «${t.token}» sin resolver`, t.motivo);
     cerrar();
     await cargar();
   } catch (e) {
@@ -205,22 +325,18 @@ async function sembrar() {
 }
 
 /**
- * La sintaxis del motor, como texto.
+ * Un texto para la ayuda que NO se puede escribir en el template.
  *
- * Va acá y no en el template porque Vue interpola `{{ }}`: escribir la sintaxis
- * literal adentro de una interpolación hace que el compilador la lea como
- * código y falle. Es el mismo motivo por el que estas cadenas se arman a mano
- * en vez de escribirse tal cual.
+ * Vue interpola `{{ }}`: escribir esa sintaxis literal adentro de una
+ * interpolación hace que el compilador la lea como código y falle. Queda una
+ * sola constante porque la ayuda ya casi no habla de sintaxis — las variables
+ * se insertan desde el menú, no se teclean.
  */
-const SINTAXIS = {
-  variable: ['{', '{ variable }', '}'].join(''),
-  formato: ['{', '{ contrato.monto | moneda }', '}'].join(''),
-  // No es Handlebars: el motor usa `{% %}` para las estructuras y `{{ }}` sólo
-  // para las variables. Acá decía `{{#if}}` y `{{#each}}`, que el motor no
-  // entiende y deja pasar tal cual al documento impreso.
-  condicional: '{% si x %}…{% fin %}',
-  lista: '{% para x en lista %}…{% fin %}',
-};
+const ATAJO_VARIABLE = ['{', '{'].join('');
+
+// El catálogo se acota al tipo: `cobro.*` sólo existe en el recibo, y ofrecerlo
+// en un pre-contrato sería ofrecer un hueco garantizado.
+watch(() => form.value.tipo, () => { if (editando.value) void cargarCatalogo(); });
 
 /** Agrupadas por tipo: es como se buscan, no por nombre. */
 const porTipo = computed(() => {
@@ -272,9 +388,11 @@ const porTipo = computed(() => {
                 <span class="vars">
                   <template v-if="p.variables.length">
                     {{ plural(p.variables.length, 'variable', 'variables') }}:
-                    <code v-for="v in p.variables.slice(0, 6)" :key="v" class="mono">{{ v }}</code>
-                    <span v-if="p.variables.length > 6" class="mas">
-                      y {{ p.variables.length - 6 }} más
+                    <span v-for="v in p.variables.slice(0, 5)" :key="v" class="etq">
+                      {{ etiquetaDe(v) }}
+                    </span>
+                    <span v-if="p.variables.length > 5" class="mas">
+                      y {{ p.variables.length - 5 }} más
                     </span>
                   </template>
                   <!-- Una plantilla sin variables es texto fijo: sale igual para
@@ -283,10 +401,27 @@ const porTipo = computed(() => {
                     Sin variables — sale el mismo texto para todos los contratos
                   </span>
                 </span>
+
+                <!-- Un token que el motor no entiende sale IMPRESO tal cual
+                     adentro del contrato. Es el peor error posible acá, así que
+                     se dice en la lista y no sólo al abrir la plantilla. -->
+                <span v-if="p.tokensRotos.length" class="roto">
+                  ⚠ {{ plural(p.tokensRotos.length, 'variable rota', 'variables rotas') }}:
+                  se imprimen tal cual adentro del documento. Abrí la plantilla para verlas.
+                </span>
+
+                <span v-if="p.convertidaEl" class="convertida">
+                  Convertida desde texto plano el {{ fecha(p.convertidaEl.slice(0, 10)) }}
+                </span>
               </div>
 
               <div class="acciones">
                 <StatusChip v-if="!p.activa" texto="Inactiva" tono="neutro" />
+                <StatusChip v-if="p.formato === 'texto'" texto="Texto plano" tono="warn" />
+                <button
+                  v-if="p.formato === 'texto'" class="btn enlace sm" type="button"
+                  @click="convertir(p)"
+                >Pasar al editor</button>
                 <button class="btn enlace sm" type="button" @click="abrirEdicion(p)">
                   {{ editando === p.id ? 'Cerrar' : 'Editar' }}
                 </button>
@@ -318,20 +453,55 @@ const porTipo = computed(() => {
       </div>
 
       <div class="dos">
-        <label class="campo">
-          <span>Contenido</span>
-          <textarea v-model="form.contenido" rows="18" spellcheck="false" class="mono texto" />
-          <span class="ayuda">
-            <code class="mono">{{ SINTAXIS.variable }}</code> reemplaza,
-            <code class="mono">{{ SINTAXIS.condicional }}</code> muestra si hay dato,
-            <code class="mono">{{ SINTAXIS.lista }}</code> repite.
-            Con <code class="mono">{{ SINTAXIS.formato }}</code> se le da formato:
-            <code class="mono">moneda</code>, <code class="mono">numero</code>,
-            <code class="mono">fecha</code>, <code class="mono">fecha_larga</code>,
-            <code class="mono">mayusculas</code> y <code class="mono">letras</code>.
-            No hay negación ni operadores: lo que haga falta se calcula en el contexto.
-          </span>
-        </label>
+        <div class="campo">
+          <span class="rotulo">Contenido</span>
+
+          <!-- Los avisos del último pegado. No es cortesía: si alguien pega un
+               cuadro de vencimientos y nadie le dice que se aplanó, firma un
+               contrato al que le falta la grilla. -->
+          <p v-for="a in avisosPegado" :key="a" class="alert aviso chico">{{ a }}</p>
+
+          <EditorDocumento
+            v-model="form.contenido"
+            :con-variables="true"
+            :variables="catalogo.variables"
+            :bloques="catalogo.bloques"
+            etiqueta="Contenido de la plantilla"
+            :alto="440"
+            @avisos="avisosPegado = $event"
+          />
+
+          <!-- `<p>` y no `<span>`: `.campo > span` es la etiqueta del campo y
+               `familia.css` la pone en versalitas. -->
+          <p class="ayuda">
+            Se escribe como en un procesador de texto: negrita, títulos, viñetas.
+            Lo que cambia según el contrato —el nombre, el monto, las fechas— se
+            pone con <strong>«Insertar variable»</strong>, o tecleando
+            <code class="mono">{{ ATAJO_VARIABLE }}</code> donde va.
+            Cada variable es una ficha entera: se borra de una con Backspace y no
+            se puede partir al medio, que es lo que hacía que saliera impresa
+            tal cual adentro del contrato.
+          </p>
+
+          <!-- La conversión guarda el original y ACÁ se lee. Una columna que
+               nadie lee es el error #3 del playbook. -->
+          <p v-if="enLista?.convertidaEl" class="ayuda">
+            Convertida desde texto plano el {{ fecha(enLista.convertidaEl.slice(0, 10)) }}.
+            <button class="btn enlace sm" type="button" @click="viendoOriginal = !viendoOriginal">
+              {{ viendoOriginal ? 'Ocultar el original' : 'Ver el original' }}
+            </button>
+          </p>
+          <pre v-if="viendoOriginal && enLista?.textoOriginal" class="mono salida">{{ enLista.textoOriginal }}</pre>
+
+          <!-- Los tokens rotos de lo que YA está guardado. -->
+          <p v-if="enLista?.tokensRotos.length" class="alert" role="alert">
+            <strong>Hay {{ enLista.tokensRotos.length }} que el motor no entiende.</strong>
+            Se imprimen tal cual adentro del documento:
+            <template v-for="(t, i) in enLista.tokensRotos" :key="t.token">
+              <template v-if="i">· </template><code class="mono">{{ t.token }}</code> — {{ t.motivo }}
+            </template>
+          </p>
+        </div>
 
         <div class="vista">
           <div class="vista-cab">
@@ -342,20 +512,31 @@ const porTipo = computed(() => {
           </div>
 
           <!-- Con datos de ejemplo y dicho: nunca se toca un contrato real
-               desde acá. -->
+               desde acá. Se actualiza a pedido y no en cada tecla: un
+               pre-contrato son tres carillas y refrescar mientras alguien
+               escribe es un salto de scroll cada dos letras. -->
           <p v-if="!vista" class="ayuda">
-            Se arma con datos de ejemplo, sin tocar ningún contrato.
+            Se arma con datos de ejemplo, sin tocar ningún contrato. Sale con la
+            misma letra y los mismos márgenes con los que se va a imprimir.
           </p>
 
           <template v-else>
             <p v-if="vista.advertencia" class="alert aviso">{{ vista.advertencia }}</p>
+            <p v-for="a in vista.avisos ?? []" :key="a" class="alert aviso chico">{{ a }}</p>
             <p v-if="vista.faltantes.length" class="alert aviso">
               {{ plural(vista.faltantes.length, 'variable sin dato', 'variables sin dato') }}:
-              <code v-for="f in vista.faltantes" :key="f" class="mono">{{ f }}</code>.
+              <span v-for="f in vista.faltantes" :key="f" class="etq">{{ etiquetaDe(f) }}</span>.
               En un pre-contrato puede ser normal —hay huecos que se completan a mano—
               pero conviene mirarlo antes de imprimir.
             </p>
-            <pre class="mono salida">{{ vista.texto }}</pre>
+
+            <!-- `v-html` sobre contenido que YA pasó por el sanitizador del
+                 backend: `previsualizar()` sanitiza el body antes de renderizar,
+                 y el motor escapa los valores del contexto. Los dos pasos son
+                 necesarios: el segundo tapa el apellido con `<img onerror>`. -->
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div v-if="vista.formato === 'html'" class="salida documento" lang="es-AR" v-html="vista.texto" />
+            <pre v-else class="mono salida">{{ vista.texto }}</pre>
           </template>
         </div>
       </div>
@@ -383,8 +564,17 @@ const porTipo = computed(() => {
 .que { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .nombre { color: var(--ink); font-size: 14px; }
 .vars { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
-.vars code { font-size: 11px; padding: 0 4px; }
+.etq {
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
 .sin-vars { color: var(--warning-ink); }
+.roto { font-size: 11.5px; color: var(--danger-ink); line-height: 1.5; }
+.convertida { font-size: 11px; color: var(--muted); }
+.rotulo { font-size: 12px; color: var(--ink-2); }
 .mas { color: var(--muted-2); }
 .acciones { display: flex; align-items: center; gap: var(--s-sm); flex: none; }
 
@@ -399,8 +589,9 @@ const porTipo = computed(() => {
   gap: var(--s-lg);
   align-items: start;
 }
-.texto { line-height: 1.55; font-size: 12.5px; }
+.campo { display: flex; flex-direction: column; gap: var(--s-xs); min-width: 0; }
 .ayuda { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+.alert.chico { font-size: 11.5px; line-height: 1.55; }
 .ayuda code { font-size: 11px; }
 
 .vista { display: flex; flex-direction: column; gap: var(--s-sm); min-width: 0; }
@@ -408,7 +599,7 @@ const porTipo = computed(() => {
 .vista-cab h3 { margin: 0; }
 .salida {
   margin: 0;
-  padding: var(--s-md);
+  padding: var(--s-lg);
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--r-md);

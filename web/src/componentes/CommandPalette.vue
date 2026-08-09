@@ -24,6 +24,11 @@ const NAVEGACION: Item[] = [
   { id: 'n0', titulo: 'Inicio', icono: 'monitor', seccion: 'Ir a', ir: () => router.push('/inicio') },
   { id: 'n1', titulo: 'Propiedades', icono: 'edificio', seccion: 'Ir a', ir: () => router.push('/propiedades') },
   { id: 'n2', titulo: 'Personas', icono: 'personas', seccion: 'Ir a', ir: () => router.push('/personas') },
+  // Las tres pantallas por rol. Una pantalla que no está en ⌘K existe a medias:
+  // quien usa la paleta no baja a buscarla en la barra lateral.
+  { id: 'n12', titulo: 'Propietarios', icono: 'edificio', seccion: 'Ir a', ir: () => router.push('/propietarios') },
+  { id: 'n13', titulo: 'Inquilinos', icono: 'documento', seccion: 'Ir a', ir: () => router.push('/inquilinos') },
+  { id: 'n14', titulo: 'Garantes', icono: 'equipo', seccion: 'Ir a', ir: () => router.push('/garantes') },
   { id: 'n3', titulo: 'Leads', icono: 'embudo', seccion: 'Ir a', ir: () => router.push('/leads') },
   { id: 'n4', titulo: 'Reservas', icono: 'sena', seccion: 'Ir a', ir: () => router.push('/reservas') },
   { id: 'n5', titulo: 'Equipo', icono: 'equipo', seccion: 'Ir a', ir: () => router.push('/equipo') },

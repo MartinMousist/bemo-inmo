@@ -37,6 +37,35 @@ const PATHS: Record<string, string> = {
   panel: 'M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1M9.5 4v16',
   grafico: 'M3 3v18h18M7 15l3-4 3 3 5-7',
   campana: 'M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 0 1-3.4 0',
+
+  // ── Los cinco de la tarjeta de propiedad ────────────────────────────────
+  // Dibujados con las mismas reglas que los de arriba: viewBox 24, trazo 1.5,
+  // UN solo `<path>` —el componente renderiza uno— y sin relleno. Comparados a
+  // 150, 18 y 14px contra `edificio`, `personas`, `calendario`, `moneda`,
+  // `mapa` y `grafico`, que son los que ya se usan al lado.
+  //
+  // Ninguno es una casita, una llave ni un techo: la regla anti-slop de
+  // DESIGN.md §6 sigue en pie, y estos íconos van justo en la pantalla donde
+  // más tienta romperla.
+  //
+  // Sin ñ en los nombres, como el `sena` que ya estaba: el nombre viaja como
+  // string desde `atributos.ts` y una ñ en una clave es una fuente de errores
+  // de codificación que no compra nada.
+
+  // Una cama de perfil: respaldo, colchón, patas.
+  dormitorio: 'M3 8v12M3 12h15a3 3 0 0 1 3 3v2H3M21 17v3M6 12V9.5h5.5V12',
+  // Una bañera con su canilla y las dos patas.
+  bano: 'M3 12h18M5 12v3a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4v-3M8 12V6.5A2.25 2.25 0 0 1 12.5 6.3M6.5 19l-1.5 2M17.5 19l1.5 2',
+  // Un auto de frente-perfil: capó, techo y las dos ruedas.
+  cochera: 'M5 12l1.7-3.4A2 2 0 0 1 8.5 7.5h7a2 2 0 0 1 1.8 1.1L19 12M3 12h18v4.5h-2.5M9 16.5H5.5M3 16.5V12M9.5 16.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0M18.5 16.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0',
+  // Cuatro esquinas: la marca de encuadre. Es un MARCO y no un cuadrado con
+  // «m²» adentro a propósito — el número con su unidad va siempre al lado, en
+  // texto, y un ícono que repite la unidad la dice dos veces.
+  superficie: 'M3 8.5V5a2 2 0 0 1 2-2h3.5M15.5 3H19a2 2 0 0 1 2 2v3.5M21 15.5V19a2 2 0 0 1-2 2h-3.5M8.5 21H5a2 2 0 0 1-2-2v-3.5',
+  // Una planta: el contorno del ambiente con dos tabiques adentro. El trazo
+  // vertical llega a y=20 y no a y=21 porque el remate redondo del `stroke`
+  // asomaba abajo del marco y se veía como un punto suelto.
+  ambientes: 'M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1M10 4v7M3 11h7M15 20v-5M15 15h6',
 };
 </script>
 

@@ -22,12 +22,32 @@ const grupos = [
     ],
   },
   {
+    // Cartera queda con tres ítems y deja de mezclar dos tipos de entidad:
+    // «Cartera» es lo que se administra, «Personas» es con quién.
     titulo: 'Cartera',
     items: [
       { a: '/propiedades', icono: 'edificio', texto: 'Todas' },
       { a: '/propiedades/venta', icono: 'moneda', texto: 'En venta' },
       { a: '/propiedades/alquiler', icono: 'documento', texto: 'En alquiler' },
-      { a: '/personas', icono: 'personas', texto: 'Personas' },
+    ],
+  },
+  {
+    // `Personas` sale de Cartera y se vuelve grupo propio con EXACTAMENTE el
+    // patrón que Cartera ya usa —Todas / En venta / En alquiler—, así que no
+    // hay forma nueva que aprender.
+    //
+    // Garantes tiene tensión: también es papelería de alquiler, o sea grupo
+    // Alquileres. Va acá porque es una lista de personas y porque la pregunta
+    // que contesta —«¿a quién le falta el legajo?»— es de personas.
+    //
+    // Leads NO se mueve de Comercial: ya está ahí, es donde se lo busca, y
+    // mover un ítem existente rompe memoria muscular a cambio de nada.
+    titulo: 'Personas',
+    items: [
+      { a: '/personas', icono: 'personas', texto: 'Todas' },
+      { a: '/propietarios', icono: 'edificio', texto: 'Propietarios' },
+      { a: '/inquilinos', icono: 'documento', texto: 'Inquilinos' },
+      { a: '/garantes', icono: 'equipo', texto: 'Garantes' },
     ],
   },
   {

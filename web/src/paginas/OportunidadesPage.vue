@@ -21,10 +21,41 @@ interface Oportunidad {
   agenteNombre: string | null;
   visitas: Array<{ id: string; fechaHora: string; estado: string }>;
   creadaEl: string;
+  diasSinTocar: number;
 }
 
 // El embudo en columnas. Ganada y perdida quedan fuera: no son etapas, son salidas.
 const COLUMNAS = ['nueva', 'contactada', 'calificada', 'visita', 'negociacion'] as const;
+
+/**
+ * Kanban o lista.
+ *
+ * El kanban se queda: para 30 leads es la mejor vista que hay y no se toca. Lo
+ * que no puede hacer es escalar — con 300 leads no se ordena, no se busca y no
+ * se ve de un vistazo cuál se está enfriando —, así que la lista se SUMA, no
+ * reemplaza. Mismo mecanismo que ContratosPage ya resolvió: la preferencia se
+ * guarda, y abajo de 640px arranca en tarjetas porque una tabla de nueve
+ * columnas en un teléfono no se lee.
+ */
+const CLAVE_MODO = 'bemo_inmo_leads_modo';
+const guardadoModo = localStorage.getItem(CLAVE_MODO) as 'kanban' | 'lista' | null;
+const angosta = typeof window !== 'undefined' && window.innerWidth < 640;
+const modo = ref<'kanban' | 'lista'>(guardadoModo ?? (angosta ? 'lista' : 'kanban'));
+watch(modo, (m) => localStorage.setItem(CLAVE_MODO, m));
+
+/**
+ * El semáforo de «días sin tocar», con los cortes del rubro.
+ *
+ * Una consulta que entró hace más de una semana sin que nadie la mueva ya está
+ * fría; a los 15 días está perdida y todavía no lo dice. Mismos cortes de
+ * criterio que `tonoDias` en CarteraPropiedadesPage, con la escala de un lead y
+ * no la de una publicación.
+ */
+function tonoDias(d: number): 'ok' | 'warn' | 'err' {
+  if (d >= 15) return 'err';
+  if (d >= 7) return 'warn';
+  return 'ok';
+}
 
 const items = ref<Oportunidad[]>([]);
 const cargando = ref(true);
@@ -69,6 +100,11 @@ const porColumna = computed(() =>
   COLUMNAS.map((c) => ({ estado: c, items: items.value.filter((o) => o.estado === c) })),
 );
 
+/** La lista arranca por lo más frío: es la pregunta que la vista contesta. */
+const ordenados = computed(() =>
+  [...items.value].sort((a, b) => b.diasSinTocar - a.diasSinTocar),
+);
+
 const cerradas = computed(() => items.value.filter((o) => o.estado === 'ganada' || o.estado === 'perdida'));
 
 async function avanzar(o: Oportunidad) {
@@ -101,6 +137,14 @@ onMounted(cargar);
 
     <div class="filtros">
       <SelectAgente v-model="filtros.agente" :solo-propias="soloPropias" />
+      <div class="segmented" role="group" aria-label="Cómo ver los leads">
+        <button type="button" :aria-pressed="modo === 'kanban'" @click="modo = 'kanban'">
+          Embudo
+        </button>
+        <button type="button" :aria-pressed="modo === 'lista'" @click="modo = 'lista'">
+          Lista
+        </button>
+      </div>
       <p v-if="soloPropias" class="nota-rol">
         Tu rol ve solamente sus propios leads. El resto de los listados
         —propiedades, cartera, ventas y avisos— los ves enteros.
@@ -128,6 +172,74 @@ onMounted(cargar);
     >
       <RouterLink class="btn" to="/leads/nueva">Registrar el primero</RouterLink>
     </UiEmpty>
+
+    <template v-else-if="modo === 'lista'">
+      <!--
+        La fila es la OPORTUNIDAD, no la persona: alguien puede estar interesado
+        en dos propiedades, y una fila por persona esconde una de las dos.
+      -->
+      <div class="card sin-padding">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Persona</th>
+                <th>Interés</th>
+                <th class="num">Presupuesto</th>
+                <th>Origen</th>
+                <th>Etapa</th>
+                <th>Última visita</th>
+                <th class="num">Sin tocar</th>
+                <th>Agente</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="o in ordenados" :key="o.id">
+                <td class="fuerte">
+                  {{ o.persona.nombre }}
+                  <span v-if="o.persona.telefono" class="chico mono bloque">
+                    {{ o.persona.telefono }}
+                  </span>
+                </td>
+                <td class="chico">
+                  <template v-if="o.propiedad">
+                    <span class="mono">{{ o.propiedad.etiqueta }}</span>
+                    {{ o.propiedad.direccion }}
+                  </template>
+                  <span v-else-if="o.interes">{{ o.interes }}</span>
+                  <span v-else class="vacio">—</span>
+                </td>
+                <!-- Ningún monto sin su moneda, tampoco en un rango. -->
+                <td class="num mono">
+                  <span v-if="o.presupuestoMax">
+                    hasta {{ moneyCorto(o.presupuestoMax, o.moneda) }}
+                  </span>
+                  <span v-else class="vacio">—</span>
+                </td>
+                <td><StatusChip :texto="ETIQUETA_ORIGEN[o.origen] ?? o.origen" /></td>
+                <td>
+                  <StatusChip
+                    :texto="ETIQUETA_ESTADO_OPORTUNIDAD[o.estado] ?? o.estado"
+                    :tono="o.estado === 'ganada' ? 'ok' : o.estado === 'perdida' ? 'err' : 'neutro'"
+                  />
+                </td>
+                <td class="chico">
+                  <span v-if="o.visitas.length">{{ fechaHora(o.visitas[0].fechaHora) }}</span>
+                  <span v-else class="vacio">Sin visitas</span>
+                </td>
+                <td class="num">
+                  <!-- El dato que ordena la pantalla: un lead de 20 días sin
+                       movimiento ES el problema. Sale de `updated_at`, no de un
+                       campo que alguien tenga que acordarse de tocar. -->
+                  <StatusChip :texto="`${o.diasSinTocar} d`" :tono="tonoDias(o.diasSinTocar)" />
+                </td>
+                <td class="chico">{{ o.agenteNombre ?? '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
 
     <template v-else>
       <div class="tablero">
@@ -232,4 +344,9 @@ onMounted(cargar);
 .cerradas summary { cursor: pointer; }
 .cerradas ul { list-style: none; padding: var(--s-md) 0 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-sm); }
 .cerradas li { display: flex; gap: var(--s-sm); align-items: center; }
+.filtros { display: flex; gap: var(--s-md); align-items: center; flex-wrap: wrap; }
+.chico { font-size: 12px; color: var(--muted); }
+.bloque { display: block; margin-top: 2px; }
+.vacio { color: var(--muted-2); }
+.num { text-align: right; }
 </style>

@@ -31,6 +31,37 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		# Sin cámara, micrófono ni geolocalización: nada de la app los usa.
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+
+		# ── Content-Security-Policy ───────────────────────────────────────────
+		#
+		# Entra con el editor de plantillas (migración 023), y el motivo es
+		# concreto: desde ahí la app guarda HTML que después se pinta con
+		# `v-html` en la hoja imprimible. Hoy eso es seguro porque el ÚNICO
+		# camino de escritura pasa por `plantillas.sanitizar.ts`. El día que
+		# aparezca otro —un importador, un script de mantenimiento, un endpoint
+		# nuevo— deja de serlo sin que nada avise. Esta cabecera es lo que hace
+		# que ese día sea una molestia y no un incidente: un `<script>` que se
+		# filtrara igual no corre.
+		#
+		# `script-src 'self'`: sin `unsafe-inline` y sin `unsafe-eval`. Vite
+		# compila todo a archivos con hash; no hay scripts en línea en el HTML.
+		# `style-src` sí lleva `unsafe-inline`: Vue inyecta estilos en línea para
+		# las transiciones y los `:style` calculados, y sacarlo rompería la app
+		# entera para no ganar nada (un `style` no ejecuta código).
+		# `img-src` incluye `data:` por el favicon SVG inline del index, y `blob:`
+		# por las previsualizaciones de foto antes de subirlas.
+		# `frame-src` deja pasar Google Maps: el mapa de la ficha es un `<iframe>`
+		# a `www.google.com/maps?…&output=embed`, que funciona sin API key.
+		# `connect-src 'self'`: la API va por el mismo origen (ver el bloque de
+		# abajo), así que no hace falta ningún otro destino.
+		# `object-src 'none'` y `base-uri 'none'`: nada de plugins, y nadie puede
+		# reescribir a dónde resuelven las URLs relativas de la página.
+		#
+		# ⚠️ Los dos orígenes de fuentes son obligatorios y hay que comprobarlos
+		# en el navegador: una CSP que rompe la tipografía se desactiva a la
+		# semana, y entonces no protege nada.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com; font-src 'self' https://fonts.gstatic.com https://cdn.fontshare.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-src https://www.google.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
 		# Caddy y su versión, fuera de las respuestas.
 		-Server
 	}

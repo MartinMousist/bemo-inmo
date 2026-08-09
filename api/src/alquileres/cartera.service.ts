@@ -214,7 +214,16 @@ export interface ResultadoLote {
 // Duplicarlos es lo que hace que un filtro nuevo entre en uno y no en el otro, y
 // que el paginador diga 40 y muestre 12.
 
-const BASE = `
+/**
+ * Exportado porque lo reusa `personas/inquilinos.service.ts`.
+ *
+ * La pantalla Inquilinos muestra las mismas cuatro cosas —al día / parcial / en
+ * mora, cuánto debe, desde cuándo— sobre las mismas cuotas. Copiar estas CTE
+ * allá es garantizar que se desincronicen en el primer arreglo: el día que la
+ * regla de «la mora gana sobre lo parcial» cambie, cambiaría en una sola de las
+ * dos pantallas y las dos seguirían andando.
+ */
+export const BASE = `
 WITH cuotas AS (
   SELECT p.id, p.contrato_id, p.periodo, p.vence_el, p.total, p.moneda, p.estado,
          coalesce(co.pagado, 0) AS pagado,
@@ -259,7 +268,7 @@ proximo AS (
  * La mora gana sobre lo parcial: una cuota vencida a medio pagar es mora, no
  * "parcial". Mostrarla como parcial la esconde entre las que están en camino.
  */
-const COBRANZA = `
+export const COBRANZA = `
   CASE
     WHEN coalesce(r.cuotas, 0) = 0 THEN 'sin_cuotas'
     WHEN r.en_mora > 0             THEN 'en_mora'

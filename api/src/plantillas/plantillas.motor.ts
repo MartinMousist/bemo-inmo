@@ -53,15 +53,58 @@ const FORMATOS: Record<string, (v: unknown, ctx: Contexto) => string> = {
   letras: (v) => enLetras(Math.floor(Number(v) || 0)),
 };
 
-export function renderizar(plantilla: string, contexto: Contexto): ResultadoPlantilla {
+/**
+ * Opciones de render. Todas apagadas por defecto: sin pasar nada, el motor se
+ * comporta byte por byte como antes y los tests de papel no cambian una línea.
+ */
+export interface OpcionesRender {
+  /**
+   * Escapa `& < >` del VALOR ya formateado antes de sustituirlo.
+   *
+   * Sólo tiene sentido cuando la plantilla es HTML, y entonces es obligatorio.
+   * El motivo no es el `<script>` que alguien pega en la plantilla —de eso se
+   * ocupa `plantillas.sanitizar.ts`— sino el valor que viene del CONTEXTO: el
+   * apellido de una persona, cargado por el propio usuario del sistema, se
+   * inyecta acá crudo y termina en un `v-html` de la vista imprimible. Una
+   * persona apellidada `<img src=x onerror=…>` es XSS almacenado por la puerta
+   * de al lado, y el sanitizador no lo ve porque el valor entra DESPUÉS.
+   *
+   * Se escapa el valor ya formateado y no el crudo: `| moneda` mete separadores
+   * de miles y un espacio, nada que necesite escapar, pero el orden importa por
+   * si algún día un formato devuelve algo con símbolos.
+   */
+  escaparHtml?: boolean;
+}
+
+/**
+ * Los nombres de los formatos, para que el editor y el sanitizador puedan
+ * validarlos sin copiarse la lista.
+ *
+ * Un formato inventado el motor lo **ignora en silencio** e imprime el valor
+ * crudo: `{{ contrato.monto | pesos }}` sale «485000» en un contrato donde
+ * tenía que decir «ARS 485.000,00». Por eso se valida antes de guardar, y por
+ * eso la lista se lee de acá y no se escribe a mano en otro archivo.
+ */
+export const NOMBRES_DE_FORMATO = Object.keys(FORMATOS);
+
+export function renderizar(
+  plantilla: string,
+  contexto: Contexto,
+  opciones: OpcionesRender = {},
+): ResultadoPlantilla {
   const faltantes = new Set<string>();
-  const texto = bloque(plantilla, contexto, faltantes);
+  const texto = bloque(plantilla, contexto, faltantes, opciones);
   return { texto, faltantes: [...faltantes] };
 }
 
 /** Resuelve un bloque: primero las estructuras, después las variables. */
-function bloque(txt: string, ctx: Contexto, faltantes: Set<string>): string {
-  let salida = estructuras(txt, ctx, faltantes);
+function bloque(
+  txt: string,
+  ctx: Contexto,
+  faltantes: Set<string>,
+  op: OpcionesRender,
+): string {
+  let salida = estructuras(txt, ctx, faltantes, op);
 
   salida = salida.replace(
     /\{\{\s*([\w.]+)\s*(?:\|\s*(\w+)\s*)?\}\}/g,
@@ -71,20 +114,34 @@ function bloque(txt: string, ctx: Contexto, faltantes: Set<string>): string {
         faltantes.add(ruta);
         // Un hueco visible es mejor que un vacío silencioso: en un contrato,
         // que falte un dato tiene que saltar a la vista antes de firmarlo.
+        // `«ruta»` no lleva escape: `ruta` sale de `[\w.]+` y no tiene HTML.
         return `«${ruta}»`;
       }
-      return formato && FORMATOS[formato] ? FORMATOS[formato](v, ctx) : String(v);
+      const valor = formato && FORMATOS[formato]
+        ? FORMATOS[formato](v, ctx)
+        : String(v);
+      return op.escaparHtml ? escapar(valor) : valor;
     },
   );
 
   return salida;
 }
 
+/** Las tres que importan. `"` y `'` no: el valor va a texto, no a un atributo. */
+function escapar(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /**
  * Condicionales y listas. Se resuelven de adentro hacia afuera buscando el
  * `{% fin %}` que corresponde, para que anidar funcione.
  */
-function estructuras(txt: string, ctx: Contexto, faltantes: Set<string>): string {
+function estructuras(
+  txt: string,
+  ctx: Contexto,
+  faltantes: Set<string>,
+  op: OpcionesRender,
+): string {
   const apertura = /\{%\s*(si|para)\s+([\w.]+)(?:\s+en\s+([\w.]+))?\s*%\}/;
 
   let m = apertura.exec(txt);
@@ -100,13 +157,13 @@ function estructuras(txt: string, ctx: Contexto, faltantes: Set<string>): string
     if (m[1] === 'si') {
       const v = leer(ctx, m[2]);
       const verdadero = Array.isArray(v) ? v.length > 0 : Boolean(v);
-      reemplazo = verdadero ? bloque(cuerpo, ctx, faltantes) : '';
+      reemplazo = verdadero ? bloque(cuerpo, ctx, faltantes, op) : '';
     } else {
       const lista = leer(ctx, m[3] ?? '');
       if (Array.isArray(lista)) {
         reemplazo = lista
           .map((item) =>
-            bloque(cuerpo, { ...ctx, [m![2]]: item }, faltantes),
+            bloque(cuerpo, { ...ctx, [m![2]]: item }, faltantes, op),
           )
           .join('');
       }

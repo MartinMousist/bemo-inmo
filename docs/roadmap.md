@@ -160,6 +160,16 @@ reales. Lo que sí está probado, con 41 tests:
 - [x] Comisiones proyectadas / devengadas / cobradas, con vista por agente
 - [x] Pre-contratos y plantillas con motor propio de variables, condicionales y listas.
       Cuatro plantillas base: pre-contrato, aviso de aumento, aviso de vencimiento y recibo
+- [x] **Editor con formato tipo Word** (migración 023), en los dos lugares donde hay
+      texto que va a salir impreso: la plantilla y el documento generado. Negrita,
+      títulos, listas; variables como fichas indivisibles insertadas desde un menú que
+      sale del catálogo del backend; limpieza del pegado de Word con fixtures de
+      portapapeles real; sanitizado con lista blanca en el servicio —no en el editor— y
+      escape del valor del contexto en el motor; las plantillas viejas convertidas con
+      su texto original guardado y leído desde la pantalla; y la impresión con la
+      tipografía de `DESIGN.md` en vez del `<pre>` monoespaciado.
+      **Afuera de v1, con su motivo**: tablas (se aplanan y se avisa), enlaces,
+      numeración automática de cláusulas y números de página. Ver `docs/CONTINUAR.md` §5.6
 
 **Gate**: una operación real repartida y verificada por quien cobra.
 **⚠️ ABIERTO**: necesita una venta tuya real. Lo que sí está probado (12 tests de
@@ -681,21 +691,51 @@ pantalla muestra «captador 25% de lo que queda ≡ 1,5% de la venta».
 a medias y con `puntas` opcional sin fallback el reparto rompía. Media feature
 no va.
 
-### 12.2 · Personas por rol
+### 12.2 · Personas por rol ← *hecho*
 
-- [ ] Derivar los **tres roles que la base ya sabe**: inquilino
-      (`contrato_parte` rol locatario), garante (rol garante/fiador) y comprador
-      (`operacion_venta.comprador_id`). Hoy sólo salen propietario, interesado y
-      reservante.
-- [ ] Cuatro pantallas —Leads, Inquilinos, Propietarios, Garantes— más filtro
-      por rol en Personas.
-- [ ] **Estados derivados, no un campo manual.** Un inquilino está «en mora»
-      porque tiene cuotas vencidas; un lead está en «negociación» porque su
-      oportunidad lo está. Es la misma decisión que la etapa 3 tomó para los
-      roles: un dato derivado no se desincroniza.
-- [ ] **«Locador» y «vendedor» NO llevan pantalla propia**: son el propietario
+- [x] Derivar los **tres roles que la base ya sabía**: inquilino
+      (`contrato_parte` rol locatario), garante (rol garante/fiador **Y**
+      `garantia.persona_id`) y comprador (`operacion_venta.comprador_id`, con
+      `estado <> 'caida'`). Son seis roles, y salen todos de `CONJUNTO_ROL` en
+      `personas.service.ts`: **una sola definición** para el chip de la tabla,
+      el filtro de la pestaña y el conteo. Tres copias serían dos copias mal.
+- [x] Cuatro pantallas —Leads (ampliada con vista de lista y «días sin tocar»),
+      Inquilinos, Propietarios y Garantes— más el filtro por rol en Personas,
+      con los conteos en la fila de pestañas.
+- [x] **Estados derivados, no un campo manual.** La cobranza de Inquilinos
+      reutiliza el SQL de `cartera.service.ts` en vez de reimplementarlo; «sin
+      liquidar hace N meses» sale del último período; el veredicto de una
+      garantía sale de `situacion.motor.ts`.
+- [x] **«Locador» y «vendedor» NO llevan pantalla propia**: son el propietario
       visto desde un contrato o desde una venta, y serían dos pantallas con los
       mismos nombres y otro título.
+
+**Tres cosas que quedaron abiertas, con su motivo:**
+
+- [ ] ⏳ **Un `contrato_parte` con rol 'locador' que NO es titular de la
+      propiedad se queda sin ningún rol derivado.** Pasa de verdad: un
+      apoderado, una sucesión, una sociedad que firma por el dueño. NO se
+      resuelve creando un rol «locador» —sería idéntico a «propietario» el 99%
+      de las veces y mentiría justo en el 1% que importa—. Lo que falta es
+      decidir qué es esa persona, y eso es una pregunta para el dueño.
+- [ ] ⏳ **Los conteos de las pestañas no respetan el buscador, a propósito.**
+      La pestaña cuenta el alcance («1.500 inquilinos») y la bajada cuenta lo
+      filtrado («3 de 1.500»). Está escrito en `conteoPorRol()` y hay un test
+      que lo fija, porque leído rápido parece un bug.
+- [ ] ⏳ **Las pantallas nuevas no tienen `@Roles`**, igual que Cartera y
+      Liquidaciones, que muestran la misma plata. Está argumentado en
+      `roles.controller.ts`. Si el dueño lo quiere distinto, son un decorador
+      por endpoint **y** sus tests de denegación.
+
+**No hubo migración, y ese es el resultado de medir.** Los cuatro índices que el
+plan daba por necesarios —`oportunidad(persona_id)`, `reserva(persona_id)`,
+`operacion_venta(comprador_id)`, `contrato_parte(rol, persona_id)`— no mueven la
+aguja contra las consultas que el servicio escribe de verdad: con 5.000 personas
+el listado queda en 6,4 vs 6,3 ms y la ficha en 1,17 vs 1,10 ms. Sólo ayudarían a
+una forma con EXISTS correlacionado, que es la que NO se usa. Los números y el
+razonamiento están en `scripts/medir-personas-rol.sh`. Es el error #4 del
+playbook, esquivado con el mismo criterio con el que ya se decidió no indexar
+`propiedad.agente_captador_id`.
 
 ### 12.3 · El IPC, que sigue siendo manual
 
@@ -703,6 +743,102 @@ no va.
       **No** raspar INDEC: no tiene API estable y un número equivocado en un
       aviso de aumento es de lo peor que este producto puede hacer. La decisión
       de la etapa 4 no cambia; lo que falta es que la ausencia se vea.
+
+---
+
+## Etapa 15 — Lo que le falta a un sistema de este estilo ⏳ POR EMPEZAR
+
+> Seis huecos, ordenados por **lo que duele dividido por lo que cuesta**. Cada
+> uno se apoya en piezas que ya están construidas y probadas: ninguno arranca de
+> cero, y esa es la razón por la que están en este orden y no en otro.
+
+### 15.1 · Acta de entrega con fotos ← *empezar por acá*
+
+- [ ] Ambiente por ambiente, con foto y observación, al ENTREGAR y al DEVOLVER.
+- [ ] La vista comparativa lado a lado: así estaba, así volvió.
+- [ ] Firmada por las dos partes, con su fecha, e inmutable una vez firmada —
+      la misma regla del ajuste confirmado.
+
+**Por qué primero**: es la fuente número uno de conflicto de un alquiler. Al
+devolver el depósito nadie se acuerda de cómo estaba la cocina hace tres años, y
+hoy eso se resuelve con fotos en el WhatsApp de alguien que capaz ya no trabaja
+acá. La primera vez que evita una discusión por el depósito se pagó solo.
+
+**Lo caro ya está**: subida a S3 con validación por firma de bytes, el patrón de
+casilleros de `GarantesContrato.vue`, y el contrato al que colgarla.
+
+**Hecho cuando**: se devuelve una unidad y las dos fotos del mismo ambiente se
+ven una al lado de la otra sin buscar nada.
+
+### 15.2 · Conciliación bancaria
+
+- [ ] Importar el extracto del banco y proponer el match con las cuotas por
+      monto, fecha y referencia.
+- [ ] Lo que no matchea queda a la vista: un movimiento sin imputar es plata de
+      alguien que no está acreditada.
+- [ ] **Nada se imputa solo.** El sistema propone, una persona confirma. Un
+      cobro mal imputado se descubre a fin de mes, en la liquidación.
+
+**Por qué**: donde se va el tiempo no es cargando contratos, es cruzando
+transferencias con inquilinos el 1 de cada mes. Hoy cada cobro se tipea a mano.
+
+**Lo caro ya está**: el parser CSV propio y el importador con previsualización
+—construidos para propiedades—, y `cobro` con su medio y su comprobante.
+
+### 15.3 · Facturación electrónica de ARCA
+
+- [ ] WSFEv1: certificado, punto de venta y tipos de comprobante.
+- [ ] La factura de honorarios sale del mismo lugar donde se liquidó.
+- [ ] El número y el CAE se guardan con la liquidación: una factura emitida es
+      inmutable, como todo lo demás que toca plata.
+
+**Por qué**: hoy los honorarios se cobran acá y se facturan **afuera**, así que
+el ciclo se rompe justo donde importa. Es la diferencia entre «me ayuda a
+administrar» y «es donde vive mi negocio».
+
+**Riesgo**: es la integración más pesada de las seis. No empezar hasta que 15.1
+y 15.2 estén cerradas.
+
+### 15.4 · Portal del inquilino
+
+- [ ] Sus cuotas, su saldo y sus comprobantes, sin sesión y por token.
+- [ ] Un botón para reportar un desperfecto, que entra como reclamo con la
+      propiedad ya identificada.
+
+**Lo caro ya está**: el portal del propietario es exactamente este patrón —
+público, por token, resuelto con función SECURITY DEFINER.
+
+### 15.5 · La cotización del día
+
+- [ ] Tipo de cambio con su fecha y su fuente, guardado como se guarda el valor
+      de un índice.
+- [ ] Toda conversión lleva su memoria de cálculo, igual que un ajuste.
+
+**Por qué**: hay operaciones en USD y liquidaciones en ARS, y **no hay un tipo
+de cambio en ninguna parte**. Alguien lo pone a mano o hace la cuenta aparte, y
+después no se puede explicar de dónde salió ese número.
+
+**Lo caro ya está**: la ingesta del BCRA funciona, es idempotente y tiene su
+cron.
+
+### 15.6 · Cuenta corriente por persona
+
+- [ ] «¿Cuánto me debe este inquilino?» y «¿cuánto le debo a este propietario?»,
+      contestadas de un vistazo y con su detalle.
+- [ ] Derivada de cuotas, cobros, gastos y liquidaciones. **No es una tabla
+      nueva**: es la vista que suma lo que ya está.
+
+---
+
+### Lo que NO va acá, y por qué
+
+- **Firma digital con validez plena.** Necesita certificador licenciado y es
+  cara. La firma electrónica simple ya se resuelve con el pre-contrato por
+  WhatsApp de la etapa 13. Esperar a que un cliente real la pida.
+- **Un portal público de búsqueda.** Es otro producto: vive de tráfico y SEO, no
+  de gestión. El feed XML ya le entrega la cartera a los portales que *sí* tienen
+  ese tráfico, que es la jugada correcta.
+- **Gestión de consorcios.** Se parece y no lo es. Es una vertical entera.
 
 ---
 

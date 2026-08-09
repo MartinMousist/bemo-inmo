@@ -14,6 +14,9 @@ import { EquipoController } from './equipo/equipo.controller';
 import { EquipoService } from './equipo/equipo.service';
 import { PersonasController } from './personas/personas.controller';
 import { PersonasService } from './personas/personas.service';
+import { RolesPersonaController } from './personas/roles.controller';
+import { InquilinosService } from './personas/inquilinos.service';
+import { PropietariosService } from './personas/propietarios.service';
 import { PropiedadesController } from './propiedades/propiedades.controller';
 import { PropiedadesService } from './propiedades/propiedades.service';
 import { GeocodingService } from './propiedades/geocoding.service';
@@ -131,6 +134,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     CuentaController,
     EquipoController,
     PersonasController,
+    RolesPersonaController,
     PropiedadesController,
     OportunidadesController,
     ReservasController,
@@ -171,6 +175,8 @@ import { CuentaService } from './cuenta/cuenta.service';
     CuentaService,
     EquipoService,
     PersonasService,
+    InquilinosService,
+    PropietariosService,
     PropiedadesService,
     GeocodingService,
     OportunidadesService,

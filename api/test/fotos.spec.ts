@@ -49,6 +49,8 @@ describe('Fotos de propiedades', () => {
   let inmo: Inmobiliaria;
   let otra: Inmobiliaria;
   let propiedadId: string;
+  /** Una propiedad que NUNCA recibe fotos: es el caso del placeholder. */
+  let sinFotosId: string;
 
   beforeAll(async () => {
     await limpiarFixtures();
@@ -63,6 +65,13 @@ describe('Fotos de propiedades', () => {
       .send({ calle: 'Con Fotos', tipo: 'casa' })
       .expect(201);
     propiedadId = p.body.id;
+
+    const s = await request(app.getHttpServer())
+      .post('/v1/propiedades')
+      .set(...auth(inmo.tokens.owner))
+      .send({ calle: 'Sin Fotos', tipo: 'terreno' })
+      .expect(201);
+    sinFotosId = s.body.id;
   }, 60_000);
 
   afterAll(async () => {
@@ -183,5 +192,65 @@ describe('Fotos de propiedades', () => {
       .set(...como('contable'))
       .send({ datos: png().toString('base64') })
       .expect(403);
+  });
+
+  /**
+   * La portada en el LISTADO, que es de lo único que se entera la cartera en
+   * tarjetas: una columna calculada en `selectPropiedad()`. Sin estos casos, el
+   * front decidiría entre la foto y el placeholder con un campo que nadie probó.
+   */
+  describe('fotoPortada en el listado de propiedades', () => {
+    const buscar = async (texto: string, token = inmo.tokens.owner) => {
+      const r = await http()
+        .get(`/v1/propiedades?q=${encodeURIComponent(texto)}`)
+        .set(...auth(token))
+        .expect(200);
+      return r.body.items as Array<{ id: string; fotoPortada: string | null }>;
+    };
+
+    it('sin fotos devuelve null, no undefined ni cadena vacía', async () => {
+      const [p] = (await buscar('Sin Fotos')).filter((x) => x.id === sinFotosId);
+      // Los tres se ven igual en un `v-if`, y no lo son: `undefined` desaparece
+      // del JSON —o sea que la clave ni llega— y `''` es una URL vacía que el
+      // navegador pide igual, con lo que la tarjeta muestra un <img> roto en
+      // lugar del placeholder.
+      expect(p).toBeDefined();
+      expect(p.fotoPortada).toBeNull();
+      expect(Object.keys(p)).toContain('fotoPortada');
+    });
+
+    it('con fotos devuelve la URL de la que está marcada como portada', async () => {
+      const fotos = await http().get(`/v1/propiedades/${propiedadId}/fotos`)
+        .set(...como()).expect(200);
+      const portada = fotos.body.find((f: { esPortada: boolean }) => f.esPortada);
+      expect(portada).toBeDefined();
+
+      const [p] = (await buscar('Con Fotos')).filter((x) => x.id === propiedadId);
+      expect(p.fotoPortada).toBe(portada.url);
+    });
+
+    it('cambiar la portada cambia lo que devuelve el listado', async () => {
+      const fotos = await http().get(`/v1/propiedades/${propiedadId}/fotos`)
+        .set(...como()).expect(200);
+      const otraFoto = fotos.body.find((f: { esPortada: boolean }) => !f.esPortada);
+      expect(otraFoto).toBeDefined();
+
+      await http().put(`/v1/propiedades/${propiedadId}/fotos/${otraFoto.id}/portada`)
+        .set(...como()).expect(200);
+
+      const [p] = (await buscar('Con Fotos')).filter((x) => x.id === propiedadId);
+      expect(p.fotoPortada).toBe(otraFoto.url);
+    });
+
+    it('la vecina nunca ve la portada de la otra inmobiliaria', async () => {
+      // Es una SUBCONSULTA nueva sobre `propiedad_foto`, y las subconsultas
+      // también pasan por RLS. Eso se prueba, no se supone: una subconsulta
+      // correlacionada que devolviera la URL ajena filtraría la foto de la
+      // propiedad de otra inmobiliaria en el listado de ésta.
+      const items = await buscar('Fotos', otra.tokens.owner);
+      const urls = items.map((x) => x.fotoPortada).filter(Boolean);
+      expect(items.some((x) => x.id === propiedadId)).toBe(false);
+      expect(urls).toHaveLength(0);
+    });
   });
 });

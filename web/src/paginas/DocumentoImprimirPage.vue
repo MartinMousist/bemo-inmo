@@ -39,6 +39,16 @@ interface Documento {
   plantillaNombre: string;
   titulo: string | null;
   textoFinal: string;
+  /**
+   * Congelado al generar (migración 023).
+   *
+   * `html` → el texto se pinta con `v-html` y la tipografía de `DESIGN.md`.
+   * `texto` → sigue el `<pre>` monoespaciado de siempre, sin tocar: un papel
+   * que salió en Courier salió así, y esta hoja tiene que poder reproducirlo
+   * seis meses después aunque su plantilla ya se haya convertido. Es la misma
+   * regla que congela `plantillaNombre`.
+   */
+  formato: 'texto' | 'html';
   editado: boolean;
   faltantes: string[];
   generadoPor: string | null;
@@ -126,7 +136,20 @@ function imprimir(): void {
         entre comillas angulares y hay que completarlos a mano.
       </p>
 
-      <pre class="texto">{{ doc.textoFinal }}</pre>
+      <!--
+        `v-html` con el HTML que YA pasó por el sanitizador del backend.
+
+        Dos capas lo sostienen, y las dos hacen falta: `plantillas.sanitizar.ts`
+        limpia todo lo que entra por `guardar()`, `previsualizar()`, `crear()` y
+        `actualizar()` —los cuatro únicos puntos de escritura—, y el motor
+        escapa los VALORES del contexto, que entran después de sanitizar y son
+        el agujero de verdad (el apellido de una persona con `<img onerror>`).
+        La CSP del Caddyfile es la tercera: si algún día apareciera un quinto
+        camino de escritura, un `<script>` filtrado igual no correría.
+      -->
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <div v-if="doc.formato === 'html'" class="documento" lang="es-AR" v-html="doc.textoFinal" />
+      <pre v-else class="texto">{{ doc.textoFinal }}</pre>
 
       <footer class="pie">
         <span>
@@ -173,6 +196,10 @@ function imprimir(): void {
   font-size: 11px;
   color: var(--warning-ink);
 }
+
+/* El `.documento` global (styles/documento.css) trae la letra, la interlínea,
+   el justificado y el control de viudas. Acá sólo su lugar en la hoja. */
+.documento { margin: var(--s-xl) 0; }
 
 .texto {
   margin: var(--s-xl) 0;

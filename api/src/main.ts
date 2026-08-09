@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { configurarApp } from './configurar-app';
 import { migrar } from './database/migrator';
+import { convertirPlantillasAHtml } from './database/convertir-plantillas';
 import { sembrarDemo } from './database/seed';
 
 async function bootstrap(): Promise<void> {
@@ -22,6 +23,12 @@ async function bootstrap(): Promise<void> {
       (m) => logger.log(m),
     );
     logger.log(`Migraciones: ${aplicadas.length} nuevas, ${yaEstaban} ya estaban`);
+
+    // El paso de datos de la 023: las plantillas viejas, de texto plano al HTML
+    // del editor. Va con las migraciones y no con el seed porque no es un dato
+    // de demostración: es el contenido real de cada inmobiliaria. Idempotente.
+    const conv = await convertirPlantillasAHtml(env.DATABASE_OWNER_URL, (m) => logger.log(m));
+    if (conv.convertidas) logger.log(`Plantillas convertidas a HTML: ${conv.convertidas}`);
   }
 
   if (env.SEED_ON_BOOT) {

@@ -15,8 +15,13 @@ import { ActorActual, Roles, type Actor } from '../auth/decoradores';
  * `BODY_LIMIT` global de 1 MB: el límite global existe para las fotos y no es un
  * criterio para el texto de un contrato. Y no se sube el global para resolver un
  * caso puntual — está escrito en `docs/CONTINUAR.md` §8.
+ *
+ * Sube de 60.000 a 250.000 junto con el de la plantilla, y por el mismo motivo:
+ * con el editor con formato, el texto viaja marcado. Los dos números tienen que
+ * moverse juntos — un documento que no se puede guardar porque su plantilla sí
+ * entraba es un callejón sin salida a mitad de una edición.
  */
-const LARGO_TEXTO = 60_000;
+const LARGO_TEXTO = 250_000;
 
 const CANALES = ['whatsapp', 'email', 'impresion', 'descarga', 'copia'] as const;
 
@@ -90,6 +95,21 @@ export class DocumentosController {
   @Get(':id')
   obtener(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.documentos.obtener(a.tenantId, id);
+  }
+
+  /**
+   * El documento dicho en texto plano.
+   *
+   * Es lo que baja como `.txt`, lo que copia el botón «Copiar» y lo que se mide
+   * para decidir si un envío va completo o adjunto. Existe para que el front no
+   * tenga una segunda implementación de `htmlATexto()`: dos versiones de la
+   * misma proyección son dos textos distintos el día que una se toca.
+   *
+   * Mismos roles que `obtener()`: es el mismo documento, dicho de otra forma.
+   */
+  @Get(':id/texto')
+  texto(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.documentos.texto(a.tenantId, id);
   }
 
   @Put(':id')

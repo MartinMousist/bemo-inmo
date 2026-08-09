@@ -85,10 +85,19 @@ SELECT c.tenant_id, c.id,
 INSERT INTO cobro (tenant_id, periodo_id, monto, moneda, fecha, medio, imputacion)
 SELECT p.tenant_id, p.id, p.total, p.moneda, p.vence_el, 'transferencia', 'alquiler'
   FROM periodo_alquiler p WHERE p.tenant_id = '$TENANT' AND p.estado = 'pagado';
+
+-- Dos fotos por propiedad. Están para medir la SUBCONSULTA de la portada que
+-- el listado agrega desde la cartera en tarjetas: sin filas en esta tabla, la
+-- subconsulta no toca el índice y el número que sale es el de una tabla vacía,
+-- que es exactamente el tipo de medición que no sirve.
+INSERT INTO propiedad_foto (tenant_id, propiedad_id, url, orden, es_portada)
+SELECT '$TENANT', p.id, 'http://medicion/' || p.codigo || '-' || v || '.png', v, v = 0
+  FROM propiedad p, generate_series(0, 1) AS v
+ WHERE p.tenant_id = '$TENANT';
 COMMIT;
 
 ANALYZE propiedad; ANALYZE contrato_alquiler; ANALYZE contrato_parte;
-ANALYZE periodo_alquiler; ANALYZE cobro;
+ANALYZE periodo_alquiler; ANALYZE cobro; ANALYZE propiedad_foto;
 SQL
 
 psql -tAc "SELECT 'contratos: ' || (SELECT count(*) FROM contrato_alquiler WHERE tenant_id='$TENANT')
@@ -133,6 +142,23 @@ SELECT c.id, coalesce(r.adeudado,0), u.id
   LEFT JOIN resumen r ON r.contrato_id = c.id
   LEFT JOIN ultima u ON u.contrato_id = c.id
  ORDER BY (r.en_mora > 0) DESC, c.fecha_fin LIMIT 50
+Q
+)"
+
+# La cartera de PROPIEDADES, que es otra pantalla y otra consulta: la de arriba
+# es la de contratos. Se mide desde que el listado agrega la foto de portada con
+# una subconsulta correlacionada — una por fila, 25 por página. "Va a andar
+# lento" es una hipótesis, y dar por buena una consulta sin medirla es el mismo
+# error #4 con el signo cambiado.
+medir "propiedades (25, con portada)" "$(cat <<'Q'
+SELECT p.id, p.codigo, p.calle,
+  (SELECT f.url FROM propiedad_foto f
+    WHERE f.propiedad_id = p.id
+    ORDER BY f.es_portada DESC, f.orden, f.created_at LIMIT 1) AS foto_portada,
+  (SELECT json_agg(json_build_object('id', o.id, 'tipo', o.tipo, 'precio', o.precio))
+     FROM operacion o WHERE o.propiedad_id = p.id) AS operaciones
+  FROM propiedad p
+ ORDER BY p.created_at DESC LIMIT 25
 Q
 )"
 

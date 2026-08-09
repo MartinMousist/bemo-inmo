@@ -11,8 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { PersonasService } from './personas.service';
-import { CrearPersonaDto, EditarPersonaDto } from './personas.dto';
-import { PaginacionDto } from '../common/paginacion';
+import { CrearPersonaDto, EditarPersonaDto, ListarPersonasDto } from './personas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
 @Controller('personas')
@@ -20,8 +19,25 @@ export class PersonasController {
   constructor(private readonly personas: PersonasService) {}
 
   @Get()
-  listar(@ActorActual() actor: Actor, @Query() p: PaginacionDto) {
+  listar(@ActorActual() actor: Actor, @Query() p: ListarPersonasDto) {
     return this.personas.listar(actor.tenantId, p);
+  }
+
+  /**
+   * Los conteos de la fila de pestañas.
+   *
+   * Va declarado ANTES de `@Get(':id')` y no es cosmético: Nest resuelve por
+   * orden de declaración, así que abajo el literal `conteo-roles` se leería
+   * como el parámetro `:id`, el ParseUUIDPipe lo rechazaría y el endpoint
+   * devolvería 400 sin llegar nunca al servicio. Es la misma trampa de orden
+   * que el router del front ya tiene anotada para `/propiedades/venta`.
+   *
+   * Sin `@Roles`, igual que el listado: saber cuántos inquilinos hay no es un
+   * dato de plata, es la agenda de la inmobiliaria.
+   */
+  @Get('conteo-roles')
+  conteoRoles(@ActorActual() actor: Actor) {
+    return this.personas.conteoPorRol(actor.tenantId);
   }
 
   /** Búsqueda por documento para el alta inline. */

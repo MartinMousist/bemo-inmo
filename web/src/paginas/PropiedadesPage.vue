@@ -7,20 +7,24 @@ import { useUi } from '../stores/ui';
 import { pct } from '../dominio/comisiones';
 import PageHeader from '../componentes/PageHeader.vue';
 import PanelMapas from '../componentes/PanelMapas.vue';
+import PropiedadesGrilla from '../componentes/PropiedadesGrilla.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import SelectAgente from '../componentes/SelectAgente.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
+import VistaToggle from '../componentes/VistaToggle.vue';
 import {
-  ETIQUETA_ESTADO_OP,
   ETIQUETA_OPERACION,
   ETIQUETA_TIPO,
+  etiquetaSituacion,
   moneyCorto,
   numero,
+  tonoSituacion,
 } from '../dominio/formato';
 import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
 import { filtrosRecordados } from '../dominio/filtros';
+import { guardarVista, leerVista, type Vista } from '../dominio/vista';
 
 interface Operacion {
   id: string;
@@ -46,6 +50,19 @@ interface Propiedad {
   tipo: string;
   ambientes: number | null;
   supTotal: number | null;
+  /**
+   * Los cuatro que la tabla no usaba y la API YA devolvía.
+   *
+   * `aPropiedad()` los mapea desde la migración 006; esta interfaz simplemente
+   * no los declaraba, así que en el front no existían. Los necesita la tarjeta
+   * para su fila de íconos — y la regla de que un terreno no tiene dormitorios
+   * la resuelve `dominio/atributos.ts`, no un `v-if` acá.
+   */
+  supCubierta: number | null;
+  dormitorios: number | null;
+  banos: number | null;
+  cocheras: number | null;
+  fotoPortada: string | null;
   ubicacionConocida: boolean;
   agenteCaptador: { id: string; nombre: string } | null;
   operaciones: Operacion[];
@@ -195,12 +212,15 @@ watch([q, filtroOperacion, filtros], () => {
 }, { deep: true });
 watch(pagina, () => void cargar());
 
-function tono(estado: string) {
-  if (estado === 'disponible') return 'ok' as const;
-  if (estado === 'reservada') return 'warn' as const;
-  if (estado === 'cerrada' || estado === 'suspendida') return 'err' as const;
-  return 'neutro' as const;
-}
+/**
+ * Tabla o tarjetas. La preferencia se guarda y la comparten las tres pantallas
+ * de propiedades: ver `dominio/vista.ts`.
+ *
+ * No se resetea con «Quitar filtros»: la vista es espacio de trabajo, el filtro
+ * es una pregunta.
+ */
+const vista = ref<Vista>(leerVista());
+watch(vista, (v) => guardarVista(v));
 
 async function exportar() {
   error.value = '';
@@ -218,6 +238,7 @@ onMounted(cargar);
       :bajada="cargando ? '' : `${total} en cartera`"
     >
       <template #acciones>
+        <VistaToggle v-model:modelo="vista" />
         <button class="btn secondary" type="button" @click="exportar">Exportar</button>
         <RouterLink class="btn" to="/propiedades/nueva">Nueva propiedad</RouterLink>
       </template>
@@ -258,7 +279,17 @@ onMounted(cargar);
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
-    <div class="card sin-padding">
+    <!-- En tarjetas la grilla va SUELTA, sin la tarjeta contenedora: una
+         tarjeta de tarjetas es un marco alrededor de otro marco. El estado
+         vacío y el error siguen entrando por el `v-else`, con el mismo copy y
+         el mismo lugar en las dos vistas. -->
+    <PropiedadesGrilla
+      v-if="vista === 'tarjetas' && (cargando || items.length > 0)"
+      :items="items"
+      :cargando="cargando"
+    />
+
+    <div v-else class="card sin-padding">
       <UiSkeleton v-if="cargando" :filas="5" />
 
       <UiEmpty
@@ -331,7 +362,10 @@ onMounted(cargar);
                   <span v-for="o in p.operaciones" :key="o.id" class="op">
                     <StatusChip :texto="ETIQUETA_OPERACION[o.tipo] ?? o.tipo" tono="acento" />
                     <span class="mono precio">{{ moneyCorto(o.precio, o.moneda) }}</span>
-                    <StatusChip :texto="ETIQUETA_ESTADO_OP[o.estado] ?? o.estado" :tono="tono(o.estado)" />
+                    <StatusChip
+                      :texto="etiquetaSituacion(o.estado, o.tipo)"
+                      :tono="tonoSituacion(o.estado)"
+                    />
                   </span>
                   <span v-if="!p.operaciones.length" class="muted">Sin operación</span>
                 </div>

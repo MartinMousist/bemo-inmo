@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
-import { PlantillasService } from './plantillas.service';
+import { PlantillasService, type FormatoContenido } from './plantillas.service';
+import { htmlATexto } from './plantillas.html';
+import { sanitizarDocumento } from './plantillas.sanitizar';
 import {
   armarMailto, armarWhatsapp, LIMITE_MAILTO_URL, LIMITE_WA_TEXTO,
   type CanalEnvio, type Preparado,
@@ -36,6 +38,23 @@ export interface DocumentoGuardado {
   titulo: string | null;
   textoGenerado: string;
   textoFinal: string;
+  /**
+   * Congelado al generar, como `plantillaNombre`.
+   *
+   * Decide si la vista imprimible usa `v-html` o el `<pre>` monoespaciado. Un
+   * papel que salió monoespaciado salió así: convertir la plantilla después no
+   * puede cambiar cómo se ve un documento que la otra parte ya recibió.
+   */
+  formato: FormatoContenido;
+  /**
+   * El documento dicho en texto plano.
+   *
+   * Es lo que se mide, lo que baja como `.txt`, lo que se copia y lo que viaja
+   * en el cuerpo de un WhatsApp. Va en la respuesta para que el front no tenga
+   * una segunda implementación de `htmlATexto()`: la misma regla que ya está
+   * escrita en `PanelDocumentos.vue` sobre no copiar el límite del envío.
+   */
+  textoPlano: string;
   /** Derivado: `texto_final <> texto_generado`. La UI lo muestra como «editado». */
   editado: boolean;
   faltantes: string[];
@@ -69,6 +88,7 @@ interface FilaDoc {
   titulo: string | null;
   texto_generado: string;
   texto_final: string;
+  formato: FormatoContenido;
   faltantes: string[];
   generado_por_nombre: string | null;
   primer_envio_el: Date | null;
@@ -102,11 +122,18 @@ export class DocumentosService {
     return this.db.withTenant(tenantId, async (ej) => {
       const doc = await this.plantillas.generarCon(ej, dto.plantillaId, dto.contratoId);
 
+      // Lo que llega editado desde afuera pasa por el sanitizador igual que la
+      // plantilla: `POST /documentos` acepta `textoFinal` en el body y ese
+      // texto termina en un `v-html`.
+      const final = dto.textoFinal === undefined
+        ? doc.texto
+        : (doc.formato === 'html' ? sanitizarDocumento(dto.textoFinal) : dto.textoFinal);
+
       const { rows } = await ej.query<{ id: string }>(
         `INSERT INTO documento_generado (
            tenant_id, contrato_id, plantilla_id, plantilla_nombre, plantilla_tipo,
-           titulo, texto_generado, texto_final, faltantes, generado_por)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           titulo, texto_generado, texto_final, formato, faltantes, generado_por)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          RETURNING id`,
         [
           tenantId, dto.contratoId, dto.plantillaId,
@@ -114,7 +141,9 @@ export class DocumentosService {
           dto.titulo ?? doc.plantilla.nombre,
           doc.texto,
           // Sin edición, los dos son el mismo texto. La diferencia es el dato.
-          dto.textoFinal ?? doc.texto,
+          final,
+          // Congelado, como el nombre de la plantilla.
+          doc.formato,
           doc.faltantes,
           usuarioId,
         ],
@@ -216,6 +245,17 @@ export class DocumentosService {
     dto: { textoFinal?: string; titulo?: string },
   ): Promise<DocumentoGuardado> {
     return this.db.withTenant(tenantId, async (ej) => {
+      // El formato lo decide la fila, no el body: es lo que se congeló al
+      // generar. Un PUT no puede convertir un documento viejo a HTML.
+      const { rows: actual } = await ej.query<{ formato: FormatoContenido }>(
+        'SELECT formato FROM documento_generado WHERE id = $1', [id],
+      );
+      if (!actual.length) throw AppError.notFound('No se encontró ese documento.');
+
+      const texto = dto.textoFinal === undefined
+        ? null
+        : (actual[0].formato === 'html' ? sanitizarDocumento(dto.textoFinal) : dto.textoFinal);
+
       let rowCount: number | null;
       try {
         ({ rowCount } = await ej.query(
@@ -223,7 +263,7 @@ export class DocumentosService {
               SET texto_final = coalesce($2, texto_final),
                   titulo      = coalesce($3, titulo)
             WHERE id = $1`,
-          [id, dto.textoFinal ?? null, dto.titulo ?? null],
+          [id, texto, dto.titulo ?? null],
         ));
       } catch (err) {
         throw this.traducirCongelado(err);
@@ -350,6 +390,19 @@ export class DocumentosService {
     };
   }
 
+  /**
+   * El documento dicho en texto plano.
+   *
+   * Existe como endpoint —`GET /documentos/:id/texto`— para que el front no
+   * reimplemente `htmlATexto()`. Es la misma regla que ya está escrita en
+   * `PanelDocumentos.vue`: el límite del envío vive en el motor y no copiado en
+   * el front, y esta proyección es lo que ese límite mide.
+   */
+  async texto(tenantId: string, id: string): Promise<{ texto: string; caracteres: number }> {
+    const doc = await this.obtener(tenantId, id);
+    return { texto: doc.textoPlano, caracteres: doc.textoPlano.length };
+  }
+
   // ── Interno ────────────────────────────────────────────────────────────────
 
   private armar(
@@ -358,7 +411,13 @@ export class DocumentosService {
     destino?: string,
   ): Preparado {
     const entrada = {
-      texto: doc.textoFinal,
+      // ⚠️ `textoPlano` y NO `textoFinal`. `envio.motor.ts` decide `completo` vs
+      // `adjunto` midiendo `texto.length`: con las etiquetas adentro, un
+      // pre-contrato de 2.000 caracteres mide 6.000 y TODO documento pasaría a
+      // «adjunto» con un motivo que cita un número que no es. Nada falla, sólo
+      // empieza a mentir el cartel — y encima el mensaje de WhatsApp llevaría
+      // el HTML crudo, que del otro lado se lee con las etiquetas a la vista.
+      texto: doc.textoPlano,
       titulo: doc.titulo ?? doc.plantillaNombre,
       referencia: doc.contrato.direccion,
     };
@@ -370,7 +429,7 @@ export class DocumentosService {
   private async leer(ej: Ejecutor, id: string): Promise<DocumentoGuardado> {
     const { rows } = await ej.query<FilaDoc>(
       `SELECT d.id, d.contrato_id, d.plantilla_id, d.plantilla_nombre, d.plantilla_tipo,
-              d.titulo, d.texto_generado, d.texto_final, d.faltantes,
+              d.titulo, d.texto_generado, d.texto_final, d.formato, d.faltantes,
               d.primer_envio_el, d.created_at,
               u.nombre AS generado_por_nombre,
               'PROP-' || lpad(pr.codigo::text, 4, '0') AS etiqueta,
@@ -412,6 +471,8 @@ export class DocumentosService {
       titulo: r.titulo,
       textoGenerado: r.texto_generado,
       textoFinal: r.texto_final,
+      formato: r.formato,
+      textoPlano: r.formato === 'html' ? htmlATexto(r.texto_final) : r.texto_final,
       editado: r.texto_final !== r.texto_generado,
       faltantes: r.faltantes ?? [],
       generadoPor: r.generado_por_nombre,

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { armarPagina, offset, type Pagina } from '../common/paginacion';
+import { ordenSeguro } from '../common/orden';
 import { PersonasService } from '../personas/personas.service';
 import type {
   CrearOportunidadDto,
@@ -35,6 +36,8 @@ export interface Oportunidad {
   notas: string | null;
   visitas: Array<{ id: string; fechaHora: string; estado: string; feedback: string | null }>;
   creadaEl: string;
+  /** Días desde el último movimiento. Derivado de `updated_at`, no un campo. */
+  diasSinTocar: number;
 }
 
 @Injectable()
@@ -97,9 +100,27 @@ export class OportunidadesService {
         params,
       );
 
+      // El kanban no necesita ordenar —cada columna es una etapa— pero la vista
+      // de lista sí: con 300 leads la pregunta es «¿cuál se me está enfriando?»,
+      // y eso es ordenar por días sin tocar. La lista blanca es lo que hace que
+      // ordenar por una columna no sea dejar que el cliente escriba SQL.
+      const orden = ordenSeguro(
+        {
+          persona: 'persona_nombre',
+          estado: 'o.estado',
+          presupuesto: 'o.presupuesto_max',
+          origen: 'o.origen',
+          diasSinTocar: 'dias_sin_tocar',
+          creada: 'o.created_at',
+        },
+        'o.created_at DESC',
+        f.orden,
+        f.dir,
+      );
+
       const { rows } = await ej.query<FilaOportunidad>(
         `${SELECT_OPORTUNIDAD} ${donde}
-         ORDER BY o.created_at DESC
+         ORDER BY ${orden}
          LIMIT $5 OFFSET $6`,
         [...params, f.porPagina, offset(f)],
       );
@@ -370,12 +391,26 @@ interface FilaOportunidad {
   notas: string | null;
   visitas: Array<Record<string, unknown>> | null;
   created_at: Date;
+  updated_at: Date;
+  dias_sin_tocar: number;
 }
 
 const SELECT_OPORTUNIDAD = `
   SELECT o.id, o.persona_id, o.operacion_id, o.agente_id, o.origen, o.estado,
          o.motivo_perdida, o.interes, o.presupuesto_min, o.presupuesto_max,
-         o.moneda, o.notas, o.created_at,
+         o.moneda, o.notas, o.created_at, o.updated_at,
+         -- «Días sin tocar»: el derivado que ordena la pantalla de Leads. Un
+         -- lead de 20 días sin movimiento ES el problema, y hasta acá el
+         -- kanban no lo mostraba ni se podía ordenar por él.
+         --
+         -- Sale de updated_at, que el trigger app_touch_updated_at mueve en
+         -- cada cambio: no hay ni va a haber una columna «último contacto» que
+         -- alguien tenga que acordarse de tocar. current_date de la base y
+         -- ::date de los dos lados, así el resultado son días de calendario
+         -- enteros y no una fracción con husos horarios adentro.
+         -- (Sin comillas invertidas: adentro de un template literal cierran el
+         -- literal y tsc tira TS1005 en la línea de abajo.)
+         (current_date - o.updated_at::date)::int AS dias_sin_tocar,
          trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')) AS persona_nombre,
          pe.telefono AS persona_telefono,
          pe.email::text AS persona_email,
@@ -432,6 +467,7 @@ function aOportunidad(f: FilaOportunidad): Oportunidad {
       feedback: (v.feedback as string) ?? null,
     })),
     creadaEl: f.created_at.toISOString(),
+    diasSinTocar: Number(f.dias_sin_tocar),
   };
 }
 

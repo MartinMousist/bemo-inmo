@@ -29,8 +29,8 @@ docker compose up -d          # db + s3 (MinIO) + api + web
 | Consola de MinIO | http://localhost:9001 | las de `.env` (`S3_ACCESS_KEY` / `S3_SECRET_KEY`) |
 
 ```bash
-docker compose exec api npm test           # 648 tests contra Postgres real
-docker compose exec web npm test           # 57 tests de front (Vitest)
+docker compose exec api npm test           # 801 tests contra Postgres real
+docker compose exec web npm test           # 139 tests de front (Vitest)
 docker compose exec api npx tsc --noEmit   # typecheck backend
 docker compose exec web npx vue-tsc --noEmit
 
@@ -50,8 +50,8 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | | |
 |---|---|
 | Commits | 40 |
-| Migraciones | 21 |
-| Tests | **648 de API** contra Postgres real + **57 de front**. Todo en verde |
+| Migraciones | 23 |
+| Tests | **865 de API** contra Postgres real + **194 de front**. Todo en verde |
 | Pantallas | 38 |
 
 ### Etapas
@@ -153,6 +153,15 @@ Cada una costó un rato de diagnóstico:
 | Corregir la **provincia** no re-geocodificaba | El punto quedaba en la provincia vieja | El disparador miraba `calle`, `numero` y `localidad`; `direccionCompleta()` **usa la provincia**. Son cuatro campos, no tres |
 | `docker compose restart api` no relee el `.env` | La key nueva «no funciona» | `restart` reinicia el contenedor con el entorno con el que se **creó**. Va `docker compose up -d api`. Y encima `loadEnv()` cachea en el proceso |
 | Una capacidad que son dos | Una propiedad con lat/lng cargadas a mano decía «El mapa necesita la API key de Google» y **escondía un mapa que funcionaba** | `capacidades.mapas` mezclaba *geocodificar* (servidor, necesita key) con *mostrar el mapa* (iframe `output=embed`, no la necesita). Ahora son `geocodificacion` y `mapaEmbebido`, con un test de cada lado que impide volver a juntarlas |
+| **Un `&nbsp;` entre las llaves rompe la variable en silencio** | En pantalla se ve `{{ contrato.monto }}` idéntico; el motor no lo matchea, no figura como variable faltante y **sale impreso tal cual adentro del contrato que se firma** | El regex del motor es `\{\{\s*([\w.]+)…` y `\s` no incluye U+00A0. Word mete espacios duros al pegar y el conversor los usa para el indentado del bloque de firmas. Se normalizan **sólo adentro de los `{{ }}`** en `plantillas.sanitizar.ts`, y `tokensRotos()` denuncia lo que no se pudo rescatar |
+| **Word parte un `{{ }}` en cuatro `<span>`** | Lo mismo: la variable queda como texto muerto que nunca se sustituye | Word mete un `<span>` con identificador de revisión cada dos palabras. Por eso los nueve pasos de `limpiarPegado.ts` tienen un orden que **es el diseño**: los `mso-list` se leen ANTES de tirar los `style` (es el único lugar donde vive el nivel de anidado) y los `{{ }}` se buscan DESPUÉS de desenvolver los spans. Hay un fixture de portapapeles real por cada uno |
+| **El largo del envío medido sobre HTML** | Nada falla: `envio.motor.ts` empieza a decir que TODO pre-contrato va «como adjunto», con un motivo que cita un número que no es | Decide `completo` vs `adjunto` con `texto.length`. Con las etiquetas adentro, el pre-contrato del seed pasa de 1.869 a 2.035 caracteres. `DocumentosService.armar()` le pasa `htmlATexto()`, y hay un test que fija los dos números |
+| **El XSS entra por el VALOR, no por la plantilla** | Una persona apellidada `<img src=x onerror=…>` ejecuta código en la hoja imprimible de cualquiera | El sanitizador limpia la PLANTILLA; el motor inyecta el valor **después**, y el resultado va a un `v-html`. Lo tapa `renderizar(…, { escaparHtml: true })`, que es aditivo y está apagado por defecto. Si ese paso se saltea, la feature entra con un XSS del que nadie se entera hasta que alguien carga un inquilino con el apellido raro |
+| **El chip «se veía bien» y daba 4,25** | — | `--accent` sobre `--accent-tint` en tema claro: por debajo de AA. Es la misma trampa del gris que daba 3,01, con otro color. Va `--accent-ink`: **5,83** en claro y **7,20** en oscuro, medidos calculando el ratio y comprobados contra lo que el navegador computa |
+| `htmlparser2` v12 es ESM puro | `SyntaxError: Cannot use import statement outside a module` en Jest, con `sanitize-html` recién instalado | `sanitize-html` 2.17.2 en adelante depende de `htmlparser2` `^10`/`^12`, que ya no publica CJS, y ts-jest corre en CommonJS. Se pinnea **`sanitize-html` 2.17.1**, la última que depende de `htmlparser2 ^8` (dual). Está con `-E`: un `^` la volvería a subir sola |
+| **La CSP de dev bloqueaba TODAS las fotos** | La API devuelve 200, `curl` a la URL de MinIO devuelve 200, y en pantalla no carga ninguna imagen: la ficha con `<img>` rotos y la cartera en tarjetas con treinta | `img-src 'self' data: blob: https:` en `vite.config.ts`. En producción el bucket es **https** y lo cubre el `https:`; MinIO en dev habla **http** por el 9000, así que caía afuera. El síntoma no está en la pestaña de red —dice FAILED sin motivo—: está en la **consola**, que lo dice con todas las letras. Se agregó `http://localhost:9000` sólo al bloque de dev; el Caddyfile de producción no se toca |
+| **Un `<style scoped>` se come el anillo de foco** | Se tabula por la grilla de propiedades, `:focus-visible` da `true`… y la tarjeta enfocada se ve igual que las demás | `familia.css` tiene `:focus-visible { box-shadow: var(--ring) }`, que es (0,1,0). Dentro de un `<style scoped>`, Vue le agrega el `[data-v-…]` a `.tarjeta`, que pasa a (0,2,0) y su `box-shadow: var(--sh-1)` **le gana al del foco**. Cualquier componente scoped que declare su propia sombra tiene que reponer `:focus-visible` a mano. Es la misma trampa de especificidad que el `h3` scoped contra `.text-lg` |
+| **`loading="lazy"` no ahorra tanto como parece** | Se abre la cartera en tarjetas con 25 propiedades y el navegador pide **23 de 24** imágenes, con sólo 8 en pantalla | Chrome usa un margen de precarga generoso —del orden de la altura del documento— cuando la conexión es rápida. Medido: página de 3.001px, viewport de 1.000px, 23 pedidos. Con las imágenes del seed (≈10 KB) no se nota; con fotos reales de celular de 8 MB, la primera carga de la cartera son decenas de MB. Ver el pendiente de las miniaturas |
 
 ---
 
@@ -176,6 +185,32 @@ Lo que no sé y estoy interpretando:
 - ¿Los porcentajes de honorarios de venta cambian por provincia?
 
 ---
+
+### ✅ Hecho en la sesión del 2026-08-09 — la cartera en tarjetas
+
+Segunda vista de las tres pantallas de propiedades, con la tabla como default.
+**Sin migración**: `propiedad_foto` existe con su RLS desde la 006 y los cinco
+atributos también, así que la 022 sigue libre. El único cambio de API es una
+columna calculada (`fotoPortada`) en el `SELECT` del listado.
+
+| Qué | Lo que apareció en el camino |
+|---|---|
+| **El interruptor tabla ⇄ tarjetas**, con la preferencia guardada (`dominio/vista.ts`), UNA clave para las tres pantallas | En tarjetas no hay `<thead>`, o sea que no hay `ThOrden`: sin un `<select>` «Ordenar» atado a los mismos `orden`/`dir`, cambiar de vista sacaba el orden de la cartera sin avisar |
+| **La tarjeta**: foto 4:3, precio con su moneda, chip de situación, dirección, íconos y superficie | El anillo de foco no se veía: un `<style scoped>` con `box-shadow` propio le gana al `:focus-visible` de la capa familia (ver trampas) |
+| **Cinco íconos nuevos** en `UiIcon.vue` — dormitorio, baño, cochera, superficie y ambientes | Verificados a 150/18/14px contra los seis que ya se usan al lado. Ninguno es casita, llave ni techo |
+| **La regla de los faltantes** en `dominio/atributos.ts` | Un terreno no tiene dormitorios: el ícono **no existe** en esa tarjeta. Y `0` («sin cochera») no se muestra igual que `NULL` («s/d» en ámbar), porque uno es una respuesta y el otro es una tarea |
+| **Fotos de verdad en el seed**, subidas a MinIO por `AlmacenamientoService.subirImagen()` | El PNG lo genera un motor puro nuevo con `node:zlib` —sin dependencias, sin red, sin fotos de nadie— y dice IMAGEN DE MUESTRA adentro. La primera versión salía sin volúmenes en la mitad de las propiedades: `s >> n` sobre un hash de 32 bits sin signo devuelve **negativo**, y un `rect` de ancho negativo no dibuja nada. Va `>>>` |
+| **«Estado» ⇒ «Situación»**, con la etiqueta y el tono unificados | La etiqueta estaba en tres lugares y el tono en tres más, y no coincidían. Ver el Decisions Log de `DESIGN.md` |
+| **La CSP de dev bloqueaba todas las fotos** | Un defecto **preexistente** que la cartera hizo visible: la ficha también mostraba imágenes rotas en dev. Ver trampas |
+
+**Pendiente que sale de acá, con su motivo**: `fotos.service.ts` guarda el
+**original** —hasta 8 MB— y no hay pipeline de miniaturas, así que la tarjeta
+pide esa imagen para un hueco de 240px. Con las del seed (≈10 KB) no se nota, y
+por eso es peligroso. `loading="lazy"` ayuda menos de lo esperado (medido: 23 de
+24 imágenes pedidas con 8 en pantalla) y el `Cache-Control: immutable` lo arregla
+recién a partir de la segunda visita. Redimensionar en Node necesita `sharp`, que
+es un binario nativo en el contenedor: es el error #7 esperando, y por eso esto se
+escribe como decisión y no se hace a las apuradas.
 
 ### ✅ Hecho en la sesión del 2026-08-06
 
@@ -465,7 +500,93 @@ DTO del que heredan todos (`api/src/common/filtro-agente.ts`).
 | `GET /reservas` tampoco | Devuelve todas las filas **sin paginar**. Agregarle un filtro sería sumarle una feature a algo que ya viola «truncar no es paginar» por el otro lado |
 | El índice que no se agregó | `propiedad` no tiene índice por `agente_captador_id`. No se agregó: es el error #4 y la cartera se midió en 20 ms |
 
-#### 6. Lo demás, marcado con ⏳ en el roadmap
+#### 6. El editor de plantillas tipo Word ← *cerrado (migración 023)*
+
+Una plantilla era un `text` que se editaba en un textarea monoespaciado y se
+imprimía dentro de un `<pre>`. Alcanzaba para probar el motor y no alcanzaba
+para un contrato: el papel que firma una persona no sale en Courier. Y la
+inmobiliaria que redacta en Word no podía traer su modelo sin perder el formato.
+
+Ahora el editor con formato está en **los dos lugares donde hay texto que va a
+salir impreso**: la plantilla (el modelo de la inmobiliaria) y el documento
+generado antes de mandarlo.
+
+**Ocho decisiones que conviene no revisar sin motivo:**
+
+1. **TipTap/ProseMirror, no un contenteditable propio.** La razón no es que
+   pegar y deshacer sean difíciles —que lo son—: es que el chip de variable
+   tiene que ser un **átomo indivisible** y `contenteditable` no garantiza eso.
+   En un `<span>` pelado el navegador parte el nodo cuando alguien escribe en el
+   medio y el corrector inserta marcas adentro. Un `{{ contrato.monto }}`
+   partido deja de matchear el regex del motor y sale literal adentro del
+   contrato que se firma. ProseMirror valida **cada transacción contra un
+   schema**: es la misma clase de garantía que un CHECK en Postgres. Se paga con
+   389 KB (125 KB gzip) en un chunk propio, cargado con `defineAsyncComponent`:
+   el bundle principal quedó igual, en 144 KB.
+2. **El texto es la verdad en un chip; los atributos son la verdad en un
+   bloque.** El backend re-deriva `data-var`/`data-formato` leyendo el `{{ }}`
+   de adentro del span —así una plantilla vieja o un `PUT` hecho a mano se
+   convierten solos en chips—, y re-escribe los `{% si %}`/`{% fin %}` desde los
+   atributos del div. Las dos direcciones tienen su motivo escrito en el código:
+   el token de una variable se sustituye en su lugar, el de una estructura es un
+   **par** que tiene que quedar balanceado a través de varios párrafos.
+3. **Los tokens de estructura van ADENTRO de su div, pegados a los bordes.**
+   Sueltos entre párrafos, borrar un condicional en falso se lleva un `</p>` de
+   un lado y deja un `<p>` abierto del otro. Con el div afuera, el rango que el
+   motor borra es siempre HTML balanceado y queda un div vacío, que
+   `[data-bloque]:empty { display: none }` esconde.
+4. **El sanitizado va en el servicio, no en el editor.** `PUT /v1/plantillas`
+   acepta un body y nada obliga a que haya pasado por TipTap. La frontera son
+   `guardar()`, `previsualizar()`, `crear()` y `actualizar()`; el editor es
+   comodidad.
+5. **El formato es una COLUMNA, no un olfateo de `<`.** Olfatear es adivinar, y
+   de eso dependen la vista imprimible, el `.txt` y el límite del `mailto:`. Un
+   contrato que diga «menor a 30 m2» daría «html» y saldría con las etiquetas a
+   la vista.
+6. **Los documentos ya generados NO se convierten.** Un papel que salió
+   monoespaciado salió así, y el trigger `documento_congelado` además lo impide
+   para los ya enviados. `documento_generado.formato` se congela al generar,
+   igual que `plantilla_nombre`.
+7. **`plantillas.defecto.ts` sigue en texto plano** y se pasa por `textoAHtml()`
+   al sembrar: una sola fuente del texto legal, y el conversor queda probado
+   contra las cuatro plantillas reales en cada corrida del seed.
+8. **El catálogo de variables vive en la API.** En `web/` se desincroniza del
+   `SELECT` que arma el contexto y ofrece variables que no existen. Hay un test
+   que lo confronta contra `EJEMPLO` **en las dos direcciones**: sin él, el menú
+   miente a los seis meses.
+
+**Lo que apareció en el camino:**
+
+| Qué | Lo que apareció |
+|---|---|
+| El diff de render | Es el único test que puede decir que convertir no rompió nada: renderiza las cuatro plantillas reales en texto y en HTML y exige que digan **lo mismo**. Compara las líneas con contenido y no las vacías, porque un `{% si %}` inline abre su propio bloque y eso puede mover una línea en blanco. Las palabras, los números y el orden no cambian |
+| El bloque de firmas | Está alineado a mano con espacios, y en HTML una corrida de espacios colapsa a uno: las dos firmas se pegaban. Una corrida de N espacios pasa a (N−1) espacios duros más uno normal, y `htmlATexto()` los devuelve. **Nunca adentro de un `{{ }}`** |
+| El largo del envío | El pre-contrato del seed mide **1.869 caracteres de texto y 2.035 de HTML**. Es el mismo 1.869 que ya estaba escrito en `envio.motor.ts` desde la etapa 11: la proyección lo dejó igual, que es el punto |
+| `sanitize-html` moderno no entra en Jest | Ver la trampa nueva de §4: se pinnea 2.17.1 con `-E` |
+| El chip mostraba el token | «`{{ contrato.monto }}`» no es lo que tiene que leer quien redacta un contrato. Un node view de ProseMirror muestra «Precio mensual · moneda» y `renderHTML()` sigue serializando el token: el editor habla castellano, el motor no tiene por qué |
+| La CSP no existía | El `Caddyfile` tenía HSTS, nosniff, X-Frame-Options y Permissions-Policy y **ninguna CSP**. Ahora está, y la misma en `server.headers` de Vite para que se rompa en dev y no el día del deploy. Comprobado en el navegador: Geist, Geist Mono y General Sans siguen cargando, sin una sola violación en consola |
+
+**Lo que quedó afuera, con su motivo:**
+
+- **Tablas.** Una tabla pegada de Word se aplana a párrafos **y se avisa en
+  pantalla**, con el motivo. Una tabla en un contrato tiene que comportarse bien
+  al cortar de página, y a medias es peor que no tenerla. El aviso no es
+  cortesía: sin él alguien pega un cuadro de vencimientos y firma un contrato al
+  que le falta la grilla.
+- **Enlaces.** Un contrato no los usa, y `<a href>` es la superficie de
+  `javascript:`. El backend ni siquiera los permite; ofrecer el botón sería
+  ofrecer algo que el sanitizador va a tirar.
+- **Numeración automática de cláusulas.** Se puede con
+  `@counter-style { system: fixed }`, pero entonces «PRIMERA» vive en una hoja
+  de estilos y no en el documento firmado: quien copie el texto se lleva un
+  contrato sin ordinales. Materializarlo al guardar duplica la lista de
+  ordinales entre `web/` y `api/`, que no comparten código.
+- **Números de página.** Chrome no soporta contenido en los márgenes de
+  `@page`; los pone el diálogo de impresión del navegador. Prometerlos sería
+  exactamente lo que la regla de honestidad de este producto prohíbe.
+- **PDF en el servidor.** Sigue sin generarse, por lo ya escrito en esa página.
+
+#### 7. Lo demás, marcado con ⏳ en el roadmap
 
 `metrica_mes` persistida para la comparación interanual · gastos y reclamos en
 el portal del propietario · columnas configurables · lint de colores a mano ·

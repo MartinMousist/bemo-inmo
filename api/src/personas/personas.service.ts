@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { armarPagina, offset, type Pagina, type PaginacionDto } from '../common/paginacion';
-import type { CrearPersonaDto, EditarPersonaDto } from './personas.dto';
+import type {
+  CrearPersonaDto,
+  EditarPersonaDto,
+  ListarPersonasDto,
+} from './personas.dto';
 
 export interface Persona {
   id: string;
@@ -22,42 +26,202 @@ export interface Persona {
  * Los roles NO se guardan: se derivan de las relaciones reales. Una persona es
  * "propietaria" porque tiene una titularidad, no porque alguien marcó una
  * casilla. Un dato derivado no se desincroniza.
+ *
+ * Eran tres y son seis. Los tres que faltaban ya estaban en la base y no los
+ * calculaba nadie —el error #3 del playbook—: `contrato_parte` sabe quién es
+ * locatario desde la 007, `garantia` le dio legajo propio al garante en la 018
+ * y `operacion_venta.comprador_id` existe desde la 008.
+ *
+ * «Locador» y «vendedor» NO son roles de esta lista, a propósito: son el
+ * propietario visto desde un contrato o desde una venta, y tendrían los mismos
+ * nombres con otro título. Queda un caso real sin cubrir —un `contrato_parte`
+ * con rol 'locador' que NO es titular de la propiedad: un apoderado, una
+ * sucesión, una sociedad que firma por el dueño— que hoy se queda sin ningún
+ * rol derivado. Está anotado en el roadmap como pendiente: inventar un rol
+ * «locador» sería idéntico a «propietario» el 99% de las veces y mentiría
+ * justo en el 1% que importa.
  */
-export type RolPersona = 'propietario' | 'interesado' | 'reservante';
+export const ROLES_PERSONA = [
+  'propietario',
+  'inquilino',
+  'garante',
+  'comprador',
+  'interesado',
+  'reservante',
+] as const;
+
+export type RolPersona = (typeof ROLES_PERSONA)[number];
 
 export interface PersonaConRoles extends Persona {
   roles: RolPersona[];
+}
+
+/**
+ * Cuántas personas de la inmobiliaria tiene cada rol.
+ *
+ * `todas` es el total del tenant, no la suma de los otros seis: una persona con
+ * tres roles cuenta en los tres, así que la suma da más que el total y está
+ * bien que dé más.
+ */
+export interface ConteoPorRol {
+  todas: number;
+  propietario: number;
+  inquilino: number;
+  garante: number;
+  comprador: number;
+  interesado: number;
+  reservante: number;
 }
 
 @Injectable()
 export class PersonasService {
   constructor(private readonly db: DbService) {}
 
-  async listar(tenantId: string, p: PaginacionDto): Promise<Pagina<PersonaConRoles>> {
+  /**
+   * El listado, paginado, con los seis roles derivados y el filtro por rol.
+   *
+   * ── Por qué la paginación va adentro de una CTE ──
+   *
+   * La CTE `pagina` ordena y corta 25 filas ANTES de derivar los roles; sin
+   * ella, el `Result` que los proyecta queda arriba del Sort y abajo del Limit,
+   * o sea que se evalúa para todas las filas.
+   *
+   * Medido de verdad con 5.000 personas (`scripts/medir-personas-rol.sh`,
+   * mejor de tres):
+   *
+   *   sin CTE, página 1 ……… 6,4 ms · última página ……… 7,0 ms
+   *   con CTE, página 1 ……… 4,6 ms · última página ……… 5,1 ms
+   *
+   * O sea: la CTE gana ~27% y es plana contra el número de página. **La mejora
+   * es real pero MUCHO más chica de lo que se esperaba**, y conviene saber por
+   * qué antes de "optimizar" esto otra vez: los seis roles se derivan con
+   * `p.id IN (subconsulta)`, que Postgres planifica como un hash semi-join
+   * construido UNA vez, no como un EXISTS correlacionado que se evalúa por
+   * fila. La degradación catastrófica que se temía —cientos de ms en las
+   * páginas altas— no aparece con esta forma de SQL. Aparecería si alguien
+   * cambiara los `IN` por EXISTS correlacionados: ahí la misma cuenta, medida
+   * en los conteos, salta de 7,5 ms a 140 ms.
+   *
+   * Se deja la CTE porque igual es más rápida y no cuesta nada, no porque
+   * evite un desastre.
+   *
+   * El `ORDER BY` de afuera no es redundante: el orden de una CTE no está
+   * garantizado a la salida.
+   */
+  async listar(tenantId: string, p: ListarPersonasDto): Promise<Pagina<PersonaConRoles>> {
     return this.db.withTenant(tenantId, async (ej) => {
       const filtro = p.q ? `%${p.q.trim()}%` : null;
 
+      // El filtro por rol NO se hace con `'inquilino' = ANY(roles)` sobre el
+      // array derivado: un array calculado en el SELECT no se puede filtrar
+      // antes del LIMIT, así que obligaría a derivar los seis roles de todas
+      // las filas — justo lo que la CTE viene a evitar. Va como semi-join
+      // contra la tabla hija: medido con 5.000 personas, 2,4 ms (inquilino) y
+      // 2,9 ms (garante, que son dos fuentes en UNION) contra los 5,1 ms de la
+      // misma página sin filtro. Filtrar sale más barato que no filtrar.
+      //
+      // El texto se interpola y no viaja como parámetro porque es un fragmento
+      // de SQL, no un valor. Sale de `CONJUNTO_ROL`, que es una lista blanca, y
+      // se busca con `Object.hasOwn` para que un `rol` de `constructor` o
+      // `__proto__` no encuentre una función en la cadena de prototipos —la
+      // misma trampa que ya apareció en el motor de plantillas y en
+      // `ordenSeguro`—. Igual el DTO ya lo validó con @IsIn: esto es la red.
+      const porRol =
+        p.rol && Object.hasOwn(CONJUNTO_ROL, p.rol)
+          ? `AND p.id IN (${CONJUNTO_ROL[p.rol]})`
+          : '';
+
+      const donde = `
+        WHERE ($1::text IS NULL
+               OR (coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) ILIKE $1
+               OR p.doc_numero ILIKE $1
+               OR p.email::text ILIKE $1)
+          ${porRol}`;
+
+      // El conteo del paginador lleva EXACTAMENTE el mismo WHERE que la página.
+      // Es la advertencia que ya está escrita en cartera.service.ts: si un
+      // filtro entra en una consulta y no en la otra, el pager dice 40 y la
+      // tabla muestra 12.
       const { rows: conteo } = await ej.query<{ total: string }>(
-        `SELECT count(*)::text AS total FROM persona
-          WHERE ($1::text IS NULL
-                 OR (coalesce(nombre,'') || ' ' || coalesce(apellido,'')) ILIKE $1
-                 OR doc_numero ILIKE $1
-                 OR email::text ILIKE $1)`,
+        `SELECT count(*)::text AS total FROM persona p ${donde}`,
         [filtro],
       );
 
       const { rows } = await ej.query<FilaPersona>(
-        `${SELECT_PERSONA}
-          WHERE ($1::text IS NULL
-                 OR (coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) ILIKE $1
-                 OR p.doc_numero ILIKE $1
-                 OR p.email::text ILIKE $1)
-          ORDER BY p.apellido NULLS LAST, p.nombre
-          LIMIT $2 OFFSET $3`,
+        `WITH pagina AS (
+           SELECT p.id, p.tipo, p.nombre, p.apellido, p.doc_tipo, p.doc_numero,
+                  p.email::text AS email, p.telefono, p.domicilio, p.notas
+             FROM persona p
+             ${donde}
+            ORDER BY p.apellido NULLS LAST, p.nombre
+            LIMIT $2 OFFSET $3
+         )
+         SELECT p.*, ${ROLES_DERIVADOS} FROM pagina p
+          ORDER BY p.apellido NULLS LAST, p.nombre`,
         [filtro, p.porPagina, offset(p)],
       );
 
       return armarPagina(rows.map(aPersonaConRoles), Number(conteo[0].total), p);
+    });
+  }
+
+  /**
+   * Cuántas personas tiene cada rol. Una consulta, no seis.
+   *
+   * ── El conteo NO respeta el buscador, y es una decisión, no un olvido ──
+   *
+   * Las pestañas cuentan el ALCANCE —cuántos inquilinos tiene la inmobiliaria—
+   * y la bajada de la pantalla cuenta lo FILTRADO («3 de 1.500 inquilinos»).
+   * Son dos preguntas distintas y por eso son dos números distintos.
+   *
+   * Meter el `ILIKE '%…%'` acá adentro además cuesta caro y de forma
+   * impredecible: medido, 26 / 64 / 96,6 ms según qué se tipeó en esta misma
+   * forma, y 1,3 s / 6,3 s en la forma UNION ALL + GROUP BY. Postgres no puede
+   * estimar la selectividad de un `ILIKE` con comodín adelante, así que el plan
+   * se va a nested loop dependiendo del texto. Y el número saltaría en cada
+   * tecla, con la fila de pestañas parpadeando.
+   *
+   * Se pide al montar la pantalla y después de un alta o una baja. Nunca por
+   * tecla. Si la próxima sesión lee esto como un bug y «lo arregla», el
+   * síntoma va a ser una pantalla que se traba al escribir.
+   *
+   * ── Por qué LEFT JOIN de conjuntos DISTINCT y no seis EXISTS ──
+   *
+   * Acá SÍ hay una diferencia grande, y es la única que apareció en toda la
+   * medición. Con 5.000 personas: esta forma da **7,5 ms**; la misma cuenta con
+   * EXISTS correlacionado da **140 ms**, casi veinte veces más, porque el
+   * EXISTS se evalúa una vez por persona en vez de armar el conjunto una sola
+   * vez. Ese es el motivo de que los conteos se escriban así y no de la forma
+   * obvia.
+   */
+  async conteoPorRol(tenantId: string): Promise<ConteoPorRol> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const joins = ROLES_PERSONA.map(
+        (rol) =>
+          `LEFT JOIN (SELECT DISTINCT persona_id FROM (${CONJUNTO_ROL[rol]}) s_${rol})
+             c_${rol} ON c_${rol}.persona_id = p.id`,
+      ).join('\n        ');
+
+      const columnas = ROLES_PERSONA.map(
+        (rol) => `count(c_${rol}.persona_id)::text AS ${rol}`,
+      ).join(', ');
+
+      const { rows } = await ej.query<Record<string, string>>(
+        `SELECT count(*)::text AS todas, ${columnas}
+           FROM persona p
+        ${joins}`,
+      );
+
+      const f = rows[0];
+      return {
+        todas: Number(f.todas),
+        propietario: Number(f.propietario),
+        inquilino: Number(f.inquilino),
+        garante: Number(f.garante),
+        comprador: Number(f.comprador),
+        interesado: Number(f.interesado),
+        reservante: Number(f.reservante),
+      };
     });
   }
 
@@ -220,19 +384,70 @@ interface FilaPersona {
   roles: string[];
 }
 
-// Los roles salen de las relaciones, no de una columna.
+/**
+ * De dónde sale cada rol. **Una sola definición** para las tres cosas que la
+ * usan: el chip del listado, el filtro por rol y el conteo de cada pestaña.
+ *
+ * Que sean tres consultas distintas contra la misma definición es lo único que
+ * garantiza que la pestaña diga «Garantes 17» y el listado filtrado por
+ * garantes traiga 17. Tenerlo escrito tres veces es tenerlo mal escrito dos.
+ *
+ * Cada fragmento devuelve una columna `persona_id`. Las tres reglas que no son
+ * obvias:
+ *
+ * 1. **`garante` tiene DOS fuentes y hasta hoy nadie las juntaba.**
+ *    `contrato_parte` con rol garante/fiador viene de la 007, y la 018 le dio
+ *    al garante legajo propio en `garantia` —con documentos, firma y veredicto
+ *    del BCRA—. Un garante puede existir en una sola de las dos: `crear()` de
+ *    garantes.service inserta en las dos, pero un contrato viejo cargado antes
+ *    de la 018, o una garantía sin parte, quedan de un solo lado. Mirar una
+ *    fuente sola muestra MENOS garantes de los que hay, y el número se ve
+ *    razonable — es exactamente el patrón por el que el árbol de comisiones del
+ *    seed estuvo mal en diez de once ventas sin que nadie lo notara.
+ *
+ * 2. **`comprador` excluye las ventas caídas**, con el mismo criterio con el
+ *    que `reservante` exige `estado = 'activa'` desde la etapa 3: una operación
+ *    que se cayó devuelve a la persona a ser un interesado. No compró nada.
+ *
+ * 3. **`inquilino` NO mira el estado del contrato.** Haber sido locatario es un
+ *    hecho, no una situación vigente; y sumar un JOIN a `contrato_alquiler` en
+ *    la derivación la encarece para las seis pestañas. El recorte a «contratos
+ *    vigentes» es de la PANTALLA Inquilinos, que lista contratos, no de acá.
+ *    Por eso los dos números no coinciden, y por eso la pantalla dice los dos.
+ */
+export const CONJUNTO_ROL: Record<RolPersona, string> = {
+  propietario: 'SELECT persona_id FROM titularidad',
+  inquilino: "SELECT persona_id FROM contrato_parte WHERE rol = 'locatario'",
+  garante:
+    "SELECT persona_id FROM contrato_parte WHERE rol IN ('garante', 'fiador') " +
+    'UNION SELECT persona_id FROM garantia WHERE persona_id IS NOT NULL',
+  comprador:
+    'SELECT comprador_id AS persona_id FROM operacion_venta ' +
+    "WHERE comprador_id IS NOT NULL AND estado <> 'caida'",
+  interesado: 'SELECT persona_id FROM oportunidad',
+  reservante: "SELECT persona_id FROM reserva WHERE estado = 'activa'",
+};
+
+/**
+ * Los seis roles como array, para el `SELECT`. Espera un alias `p` con `id`.
+ *
+ * Va SIEMPRE sobre pocas filas: en el listado, adentro de la CTE ya paginada;
+ * en `obtener()`, sobre una. Proyectarlo sobre la tabla entera es el plan malo
+ * que documenta `listar()`.
+ */
+export const ROLES_DERIVADOS = `array_remove(ARRAY[
+  ${ROLES_PERSONA.map(
+    (rol) => `CASE WHEN p.id IN (${CONJUNTO_ROL[rol]}) THEN '${rol}' END`,
+  ).join(',\n  ')}
+], NULL) AS roles`;
+
+// Los roles salen de las relaciones, no de una columna. Esta forma es para leer
+// UNA persona (la ficha, el alta, la edición): ahí el `WHERE p.id = $1` corta
+// primero y derivar los roles cuesta lo mismo con CTE o sin ella.
 const SELECT_PERSONA = `
   SELECT p.id, p.tipo, p.nombre, p.apellido, p.doc_tipo, p.doc_numero,
          p.email::text AS email, p.telefono, p.domicilio, p.notas,
-         array_remove(ARRAY[
-           CASE WHEN EXISTS (SELECT 1 FROM titularidad t WHERE t.persona_id = p.id)
-                THEN 'propietario' END,
-           CASE WHEN EXISTS (SELECT 1 FROM oportunidad o WHERE o.persona_id = p.id)
-                THEN 'interesado' END,
-           CASE WHEN EXISTS (SELECT 1 FROM reserva r WHERE r.persona_id = p.id
-                             AND r.estado = 'activa')
-                THEN 'reservante' END
-         ], NULL) AS roles
+         ${ROLES_DERIVADOS}
     FROM persona p`;
 
 function aPersonaConRoles(f: FilaPersona): PersonaConRoles {

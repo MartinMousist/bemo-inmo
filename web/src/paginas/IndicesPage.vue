@@ -127,7 +127,7 @@ onMounted(cargar);
       </p>
     </form>
 
-    <p v-if="ok" class="ok" role="status">{{ ok }}</p>
+    <p v-if="ok" class="aviso-ok" role="status">{{ ok }}</p>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
     <div class="card sin-padding">
@@ -167,5 +167,10 @@ onMounted(cargar);
 td { padding: var(--s-sm) var(--s-lg); border-bottom: 1px solid var(--line); color: var(--ink-2); }
 .fuente { color: var(--muted-2); font-size: 12px; }
 .vacio { padding: var(--s-2xl); text-align: center; color: var(--muted); }
-.ok { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--success-tint); border: 1px solid var(--success-line); border-radius: var(--r-md); color: var(--success); font-size: 13px; }
+/* `.aviso-ok` y no `.ok`: el scoped del padre alcanza al elemento raíz del hijo,
+   y el raíz de un `StatusChip` con tono ok es un `span.chip.ok`. Hoy esta
+   pantalla sólo pinta chips `warn`, pero el día que aparezca uno verde se lleva
+   el padding de cartel y `--success` en vez de `--success-ink` —4,33:1 sobre el
+   tint, AA fallado a 13px—. Pasó de verdad en la ficha del contrato. */
+.aviso-ok { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--success-tint); border: 1px solid var(--success-line); border-radius: var(--r-md); color: var(--success-ink); font-size: 13px; }
 </style>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  etiquetaSituacion,
   fecha,
   money,
   moneyCorto,
@@ -7,6 +8,8 @@ import {
   periodo,
   proximidad,
   plural,
+  situacionesDe,
+  tonoSituacion,
 } from '../src/dominio/formato';
 
 /**
@@ -195,5 +198,93 @@ describe('plural', () => {
   it('null y undefined se tratan como cero, no revientan', () => {
     expect(plural(null, 'gasto', 'gastos')).toBe('0 gastos');
     expect(plural(undefined, 'gasto', 'gastos')).toBe('0 gastos');
+  });
+});
+
+/**
+ * La SITUACIÓN de una operación.
+ *
+ * Estos tests existen por un bug con nombre: la palabra `cerrada` se leía al
+ * revés en los alquileres y la cartera mostraba **3 de 13** propiedades. La
+ * etiqueta estaba escrita en tres lugares distintos y por eso derivó.
+ */
+describe('etiquetaSituacion', () => {
+  it('una VENTA cerrada está Vendida', () => {
+    expect(etiquetaSituacion('cerrada', 'venta')).toBe('Vendida');
+  });
+
+  it('un ALQUILER cerrado está Alquilado, NUNCA «Cerrada»', () => {
+    // Éste es el test que nombra el bug. El estado `cerrada` de un alquiler es
+    // la unidad OCUPADA —o sea, la que está generando plata—, y leerlo como
+    // «cerrada, ya no está en la cartera» fue lo que hizo que la cartera de
+    // alquiler mostrara 3 de 13: justo las tres que NO estaban alquiladas.
+    expect(etiquetaSituacion('cerrada', 'alquiler')).not.toBe('Cerrada');
+    expect(etiquetaSituacion('cerrada', 'alquiler')).toBe('Alquilada');
+  });
+
+  it('el temporario se comporta como el alquiler', () => {
+    expect(etiquetaSituacion('cerrada', 'alquiler_temporario')).toBe('Alquilada');
+  });
+
+  it('el tipo SÓLO cambia el estado cerrada', () => {
+    for (const tipo of ['venta', 'alquiler', 'alquiler_temporario']) {
+      expect(etiquetaSituacion('disponible', tipo)).toBe('Disponible');
+      expect(etiquetaSituacion('reservada', tipo)).toBe('Reservada');
+      expect(etiquetaSituacion('borrador', tipo)).toBe('Borrador');
+      expect(etiquetaSituacion('suspendida', tipo)).toBe('Suspendida');
+    }
+  });
+
+  it('un estado desconocido vuelve crudo, no «—» ni «undefined»', () => {
+    // Es lo que hacía el `?? o.estado` repetido en cada pantalla. Si mañana la
+    // base tiene un estado nuevo, se ve el valor y se sabe qué pasó.
+    expect(etiquetaSituacion('rematada', 'venta')).toBe('rematada');
+  });
+});
+
+describe('tonoSituacion', () => {
+  it('una operación cerrada NO se pinta de rojo', () => {
+    // Estaba en `err` en dos pantallas y en `neutro` en la tercera: la misma
+    // operación con dos colores. Una venta cerrada es el mejor resultado
+    // posible; pintarla de rojo es el mismo malentendido que «Cerrada»,
+    // dibujado en vez de escrito.
+    expect(tonoSituacion('cerrada')).not.toBe('err');
+    expect(tonoSituacion('cerrada')).toBe('neutro');
+  });
+
+  it('el rojo queda para lo que sí está frenado', () => {
+    expect(tonoSituacion('suspendida')).toBe('err');
+  });
+
+  it('disponible es ok y reservada es warn', () => {
+    expect(tonoSituacion('disponible')).toBe('ok');
+    expect(tonoSituacion('reservada')).toBe('warn');
+  });
+
+  it('un estado desconocido es neutro y no rompe', () => {
+    expect(tonoSituacion('rematada')).toBe('neutro');
+  });
+});
+
+describe('situacionesDe', () => {
+  it('el filtro de alquiler ofrece «Alquilada» y nunca «Vendida»', () => {
+    const etiquetas = situacionesDe('alquiler').map((s) => s.etiqueta);
+    expect(etiquetas).toContain('Alquilada');
+    expect(etiquetas).not.toContain('Vendida');
+    expect(etiquetas).not.toContain('Cerrada');
+  });
+
+  it('el de venta, al revés', () => {
+    const etiquetas = situacionesDe('venta').map((s) => s.etiqueta);
+    expect(etiquetas).toContain('Vendida');
+    expect(etiquetas).not.toContain('Alquilada');
+  });
+
+  it('los VALORES son los crudos de la base, que son los que viajan', () => {
+    // La etiqueta cambia con el listado; el valor que se le manda al backend,
+    // no. Si el filtro mandara «Alquilada», la API devolvería 400.
+    expect(situacionesDe('alquiler').map((s) => s.valor)).toEqual([
+      'borrador', 'disponible', 'reservada', 'cerrada', 'suspendida',
+    ]);
   });
 });

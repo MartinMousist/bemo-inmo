@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import { AlmacenamientoService } from '../archivos/almacenamiento.service';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
 import { DeudoresService } from './deudores.service';
 import { SITUACION, proximaRevision, type VeredictoCheques } from './situacion.motor';
 import { normalizarAr } from './telefono.motor';
 import type { CrearGaranteDto, EditarGaranteDto } from './garantes.dto';
+import type { ListarGarantesDto } from '../personas/personas.dto';
 
 /**
  * El legajo del garante.
@@ -584,6 +586,111 @@ export class GarantesService {
     return (await this.listar(tenantId, contratoId)).find((g) => g.id === garanteId)!;
   }
 
+  /**
+   * TODAS las garantías de la inmobiliaria, para la pantalla Garantes.
+   *
+   * Hasta acá este servicio sólo sabía listar POR CONTRATO
+   * (`@Controller('contratos/:contratoId/garantes')`), que contesta «¿este
+   * contrato está en regla?». La pregunta que faltaba es la de la carpeta:
+   * «¿a quién le falta algo?», y para contestarla hay que mirar las 900
+   * garantías juntas, no entrar a los 300 contratos de a uno.
+   *
+   * ── La fila es la GARANTÍA, no la persona ──
+   *
+   * Una persona puede garantizar dos contratos, y el legajo —los cinco
+   * documentos, la firma, el veredicto del BCRA— es POR CONTRATO. Una fila por
+   * persona mostraría un legajo completo tapando el que está a medias.
+   *
+   * ── ⚠️ Acá NO va ningún botón de consulta masiva al BCRA ──
+   *
+   * Es el incidente ya anotado en docs/CONTINUAR.md §4 —una consulta con un DNI
+   * del seed devolvió el nombre y la deuda bancaria de una persona real—
+   * repetido a escala y sin que nadie lo pida. Desde esta pantalla se VE qué
+   * falta; la consulta se aprieta en el contrato, de a una, y queda el nombre
+   * de quien la apretó. Además la API del BCRA limita por IP y devuelve 429.
+   */
+  async listarTodos(
+    tenantId: string,
+    f: ListarGarantesDto,
+  ): Promise<Pagina<GaranteEnListado>> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const q = f.q ? `%${f.q.trim()}%` : null;
+      const soloVigentes = f.vigencia !== 'todos';
+
+      // El filtro se aplica sobre el veredicto DERIVADO, no sobre una columna:
+      // «necesita algo» es no haber consultado el BCRA, tener la revisión
+      // vencida, no ser apto, no haber firmado o tener el legajo incompleto. Es
+      // la misma cuenta que hace `verificar()` por contrato, y por eso se
+      // resuelve en TypeScript con `aGarante()` y no en SQL: duplicar en el
+      // WHERE las cinco condiciones de `documentosQueFaltan()` y del motor de
+      // situación es garantizar que se separen.
+      //
+      // El costo de hacerlo así es real y está acotado: se lee la página
+      // completa de garantías del tenant y se filtra en memoria, o sea que el
+      // `total` del paginador se calcula sobre lo filtrado. Con 900 garantías
+      // —el volumen de una inmobiliaria grande— es una consulta de una tabla
+      // chica; si algún día no alcanza, lo que hay que mover al SQL es el
+      // conjunto entero, no la mitad.
+      const { rows } = await ej.query<FilaGarante & FilaContrato>(
+        `${SELECT_GARANTE},
+                g.created_at,
+                c.id AS contrato_id_real, c.fecha_inicio, c.fecha_fin, c.estado AS contrato_estado,
+                pr.id AS propiedad_id, pr.codigo AS propiedad_codigo,
+                trim(pr.calle || ' ' || coalesce(pr.numero, '')) AS direccion
+           FROM garantia g
+           LEFT JOIN persona p ON p.id = g.persona_id
+           JOIN contrato_alquiler c ON c.id = g.contrato_id
+           JOIN propiedad pr ON pr.id = c.propiedad_id
+          WHERE ($1::text IS NULL
+                 OR trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) ILIKE $1
+                 OR p.doc_numero ILIKE $1
+                 OR pr.calle ILIKE $1
+                 OR pr.codigo::text = trim(both '%' from $1))
+            AND (NOT $2::boolean OR c.estado IN ('vigente', 'por_iniciar'))
+          ORDER BY g.created_at, g.id`,
+        [q, soloVigentes],
+      );
+
+      const { rows: hoy } = await ej.query<{ hoy: string }>(
+        "SELECT to_char(current_date, 'YYYY-MM-DD') AS hoy",
+      );
+
+      const todos: GaranteEnListado[] = rows.map((f2) => ({
+        ...aGarante(f2, hoy[0].hoy),
+        contrato: {
+          id: f2.contrato_id_real,
+          estado: f2.contrato_estado,
+          desde: String(f2.fecha_inicio).slice(0, 10),
+          hasta: String(f2.fecha_fin).slice(0, 10),
+        },
+        propiedad: {
+          id: f2.propiedad_id,
+          etiqueta: `PROP-${String(f2.propiedad_codigo).padStart(4, '0')}`,
+          direccion: f2.direccion,
+        },
+      }));
+
+      // `pendientes` es el default, no `todos`: ver el comentario del DTO.
+      const filtrados = todos.filter((g) => {
+        switch (f.estado) {
+          case 'todos':
+            return true;
+          case 'aptos':
+            return !necesitaAlgo(g);
+          case 'observados':
+            // El BCRA lo consultó y NO dio apto. `null` —sin consultar— no
+            // entra acá: es «no lo sabemos», que es otra cosa y otro pendiente.
+            return g.bcra.apto === false;
+          default:
+            return necesitaAlgo(g);
+        }
+      });
+
+      const desde = offset(f);
+      return armarPagina(filtrados.slice(desde, desde + f.porPagina), filtrados.length, f);
+    });
+  }
+
   /** Una sola consulta con los documentos agregados: no una por garante. */
   private async leerDe(
     ej: Ejecutor,
@@ -591,32 +698,7 @@ export class GarantesService {
     soloId?: string,
   ): Promise<Garante[]> {
     const { rows } = await ej.query<FilaGarante>(
-      `SELECT g.id, g.contrato_id, g.persona_id, g.tipo, g.detalle,
-              g.vence_el, g.firmo_el,
-              g.bcra_cuit, g.bcra_denominacion, g.bcra_situacion,
-              g.bcra_periodo, g.bcra_consultado_el, g.bcra_detalle,
-              g.bcra_revisar_el, g.bcra_cheques,
-              trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) AS nombre,
-              p.doc_numero, p.telefono, p.email,
-              (SELECT json_agg(json_build_object(
-                  'id', d.id, 'tipo', d.tipo, 'url', d.url,
-                  'nombreOriginal', d.nombre_original, 'subidoEl', d.created_at)
-                 ORDER BY d.tipo)
-                 FROM garantia_documento d WHERE d.garantia_id = g.id) AS documentos,
-              -- El historial agregado y no traído entero: de las N consultas la
-              -- pantalla muestra dos —la que respaldó la firma y la de hoy— y
-              -- traer el resto sería cargar un jsonb por garante para tirarlo.
-              (SELECT json_build_object(
-                  'consultas', count(*),
-                  'primera', (array_agg(json_build_object(
-                     'el', h.consultado_el, 'situacion', h.situacion, 'apto', h.apto)
-                     ORDER BY h.consultado_el ASC))[1],
-                  'ultima', (array_agg(json_build_object(
-                     'el', h.consultado_el, 'situacion', h.situacion, 'apto', h.apto)
-                     ORDER BY h.consultado_el DESC))[1],
-                  'chequesError', (array_agg(h.cheques_error
-                     ORDER BY h.consultado_el DESC))[1])
-                 FROM garantia_bcra_consulta h WHERE h.garantia_id = g.id) AS historial
+      `${SELECT_GARANTE}
          FROM garantia g
          LEFT JOIN persona p ON p.id = g.persona_id
         WHERE g.contrato_id = $1 AND ($2::uuid IS NULL OR g.id = $2)
@@ -636,6 +718,75 @@ export class GarantesService {
 
     return rows.map((f) => aGarante(f, hoy[0].hoy));
   }
+}
+
+/**
+ * Las columnas de una garantía. Extraído para que `leerDe()` —el legajo de un
+ * contrato— y `listarTodos()` —la pantalla Garantes— lean EXACTAMENTE lo mismo
+ * y `aGarante()` derive el mismo veredicto en los dos lados. Con dos SELECT el
+ * legajo de la ficha y la fila del listado se contradicen en el primer cambio.
+ *
+ * No lleva `FROM`: cada llamador arma el suyo, que es lo único que cambia.
+ */
+const SELECT_GARANTE = `
+  SELECT g.id, g.contrato_id, g.persona_id, g.tipo, g.detalle,
+         g.vence_el, g.firmo_el,
+         g.bcra_cuit, g.bcra_denominacion, g.bcra_situacion,
+         g.bcra_periodo, g.bcra_consultado_el, g.bcra_detalle,
+         g.bcra_revisar_el, g.bcra_cheques,
+         trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) AS nombre,
+         p.doc_numero, p.telefono, p.email,
+         (SELECT json_agg(json_build_object(
+             'id', d.id, 'tipo', d.tipo, 'url', d.url,
+             'nombreOriginal', d.nombre_original, 'subidoEl', d.created_at)
+            ORDER BY d.tipo)
+            FROM garantia_documento d WHERE d.garantia_id = g.id) AS documentos,
+         -- El historial agregado y no traído entero: de las N consultas la
+         -- pantalla muestra dos —la que respaldó la firma y la de hoy— y
+         -- traer el resto sería cargar un jsonb por garante para tirarlo.
+         (SELECT json_build_object(
+             'consultas', count(*),
+             'primera', (array_agg(json_build_object(
+                'el', h.consultado_el, 'situacion', h.situacion, 'apto', h.apto)
+                ORDER BY h.consultado_el ASC))[1],
+             'ultima', (array_agg(json_build_object(
+                'el', h.consultado_el, 'situacion', h.situacion, 'apto', h.apto)
+                ORDER BY h.consultado_el DESC))[1],
+             'chequesError', (array_agg(h.cheques_error
+                ORDER BY h.consultado_el DESC))[1])
+            FROM garantia_bcra_consulta h WHERE h.garantia_id = g.id) AS historial`;
+
+interface FilaContrato {
+  contrato_id_real: string;
+  contrato_estado: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  propiedad_id: string;
+  propiedad_codigo: number;
+  direccion: string;
+}
+
+export interface GaranteEnListado extends Garante {
+  contrato: { id: string; estado: string; desde: string; hasta: string };
+  propiedad: { id: string; etiqueta: string; direccion: string };
+}
+
+/**
+ * «Le falta algo», que es la pregunta de la pantalla.
+ *
+ * Es la MISMA vara con la que `verificar()` cuenta los aptos de un contrato: una
+ * garantía con persona necesita BCRA apto, legajo completo y firma; una sin
+ * persona —un seguro de caución— necesita su comprobante y no haber vencido.
+ * Medirlas igual dejaba a la caución como pendiente eterna.
+ *
+ * La revisión vencida cuenta como «necesita algo» y no como no apto: es un dato
+ * viejo, no un rechazo, y lo que hace falta es que alguien apriete el botón.
+ */
+function necesitaAlgo(g: Garante): boolean {
+  if (g.vencida) return true;
+  if (!g.legajoCompleto) return true;
+  if (!g.personaId) return false;
+  return !g.firmoEl || g.bcra.apto !== true || g.bcra.revisionVencida;
 }
 
 interface FilaGarante {

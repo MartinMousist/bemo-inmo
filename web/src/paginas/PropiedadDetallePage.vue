@@ -12,12 +12,13 @@ import UiIcon from '../componentes/UiIcon.vue';
 import GaleriaFotos from '../componentes/GaleriaFotos.vue';
 import EnlacePropietario from '../componentes/EnlacePropietario.vue';
 import {
-  ETIQUETA_ESTADO_OP,
   ETIQUETA_OPERACION,
   ETIQUETA_TIPO,
+  etiquetaSituacion,
   fecha,
   money,
   numero,
+  tonoSituacion,
 } from '../dominio/formato';
 
 interface Operacion {
@@ -171,13 +172,6 @@ async function guardarComision(o: Operacion, heredar = false) {
   } finally { guardandoComision.value = false; }
 }
 
-function tono(estado: string) {
-  if (estado === 'disponible') return 'ok' as const;
-  if (estado === 'reservada') return 'warn' as const;
-  if (estado === 'cerrada' || estado === 'suspendida') return 'err' as const;
-  return 'neutro' as const;
-}
-
 onMounted(cargar);
 </script>
 
@@ -219,7 +213,15 @@ onMounted(cargar);
               <li v-for="o in p.operaciones" :key="o.id">
                 <div class="op-cab">
                   <StatusChip :texto="ETIQUETA_OPERACION[o.tipo] ?? o.tipo" tono="acento" />
-                  <StatusChip :texto="ETIQUETA_ESTADO_OP[o.estado] ?? o.estado" :tono="tono(o.estado)" />
+                  <!-- «Cerrada» no es lo mismo en una venta que en un
+                       alquiler: en un alquiler ese estado es la unidad
+                       ALQUILADA. La etiqueta y el tono salen de `formato.ts`
+                       —eran una copia local, la tercera— y `o.tipo` ya está
+                       acá al lado. -->
+                  <StatusChip
+                    :texto="etiquetaSituacion(o.estado, o.tipo)"
+                    :tono="tonoSituacion(o.estado)"
+                  />
                 </div>
                 <p class="precio mono">{{ money(o.precio, o.moneda) }}</p>
                 <p v-if="o.expensas" class="expensas mono">

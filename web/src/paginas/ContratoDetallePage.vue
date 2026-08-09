@@ -384,6 +384,20 @@ const plegados = computed(() =>
     .length,
 );
 
+/**
+ * La etiqueta del control, armada a mano y no con `plural()`.
+ *
+ * `plural()` antepone el número a la palabra —«4 bloques cerrados»—, así que
+ * `Abrir ${plural(...)}` salía **«Abrir 4 los bloques cerrados»**, que es lo que
+ * el botón decía de verdad. El artículo va antes del número en castellano y en
+ * singular cambia entero: son dos frases distintas, no una con una `s`.
+ */
+const etiquetaAbrir = computed(() =>
+  plegados.value === 1
+    ? 'Abrir el bloque cerrado'
+    : `Abrir los ${plegados.value} bloques cerrados`,
+);
+
 onMounted(cargar);
 </script>
 
@@ -396,7 +410,7 @@ onMounted(cargar);
         :bajada="`${c.propiedad.etiqueta} · ${fecha(c.fechaInicio)} a ${fecha(c.fechaFin)}`" />
 
       <p v-if="error" class="alert" role="alert">{{ error }}</p>
-      <p v-if="aviso" class="ok" role="status">{{ aviso }}</p>
+      <p v-if="aviso" class="aviso-ok" role="status">{{ aviso }}</p>
 
       <!-- La escapatoria de quien no encuentra un bloque, con el número a la
            vista: «Abrir los 4 cerrados» dice cuántos hay escondidos, «Abrir
@@ -405,7 +419,7 @@ onMounted(cargar);
       <div class="control">
         <button v-if="plegados > 0" class="btn secondary sm" type="button"
           @click="bloques.abrirTodos()">
-          Abrir {{ plural(plegados, 'el bloque cerrado', 'los bloques cerrados') }}
+          {{ etiquetaAbrir }}
         </button>
         <button v-else class="btn secondary sm" type="button" @click="bloques.cerrarTodos()">
           Cerrar todo
@@ -661,7 +675,17 @@ td { padding: var(--s-sm) 0; border-bottom: 1px solid var(--line); color: var(--
 .vacio { margin: 0; color: var(--muted-2); font-size: 13px; }
 .truncado { margin: 0; font-size: 12px; color: var(--warning-ink); line-height: 1.6; }
 .nota-inter { color: var(--muted); font-size: 13px; }
-.ok { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--success-tint); border: 1px solid var(--success-line); border-radius: var(--r-md); color: var(--success); font-size: 13px; }
+/* Se llamaba `.ok` a secas y le pegaba a los chips de los bloques.
+   El scoped del padre alcanza al elemento RAÍZ del hijo —la trampa ya anotada
+   con la paleta ⌘K—, y el raíz de `StatusChip` con tono ok es un
+   `span.chip.ok`: le entraba este `.ok[data-v-…]`, que empata en especificidad
+   con `.chip.ok` de familia.css y le gana por venir después. Resultado visible
+   en la ficha: los chips «Aplicado» de Aumentos salían con el padding y los
+   13px de un cartel, y con `--success` en vez de `--success-ink`, o sea
+   **4,33:1** sobre `--success-tint` en tema claro (AA pide 4,5 a ese tamaño).
+   Es exactamente el caso que `--success-ink` existe para evitar. El nombre
+   ahora no puede chocar con ningún tono de chip. */
+.aviso-ok { margin: 0; padding: var(--s-sm) var(--s-md); background: var(--success-tint); border: 1px solid var(--success-line); border-radius: var(--r-md); color: var(--success-ink); font-size: 13px; }
 
 /* La línea del pie existe SÓLO en papel. */
 .solo-papel { display: none; }

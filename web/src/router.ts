@@ -45,6 +45,12 @@ const router = createRouter({
     { path: '/propiedades/:id', component: () => import('./paginas/PropiedadDetallePage.vue') },
     { path: '/personas', component: () => import('./paginas/PersonasPage.vue') },
     { path: '/personas/nueva', component: () => import('./paginas/PersonaFormPage.vue') },
+    // Las tres pantallas de personas por rol. Son listas, no fichas: si algún
+    // día llevan `/:id`, va DECLARADO DESPUÉS del literal, que es la lección
+    // que venta y alquiler ya dejaron escrita veinte líneas más arriba.
+    { path: '/inquilinos', component: () => import('./paginas/InquilinosPage.vue') },
+    { path: '/propietarios', component: () => import('./paginas/PropietariosPage.vue') },
+    { path: '/garantes', component: () => import('./paginas/GarantesPage.vue') },
     // «Leads» es como se llama en una inmobiliaria. En la base y en la API sigue
     // siendo `oportunidad`: renombrar una tabla, su endpoint y sus tests para
     // cambiar una etiqueta de pantalla es mover cañerías por un cartel.

@@ -117,6 +117,19 @@ export interface Propiedad {
    * así que el reparto de la venta seguía pidiendo el captador a mano.
    */
   agenteCaptador: { id: string; nombre: string } | null;
+  /**
+   * La URL de la foto de portada, o `null` si la propiedad no tiene ninguna.
+   *
+   * Es lo único que la cartera en tarjetas necesita del bucket, y por eso es
+   * una sola columna calculada y no un array: la grilla muestra UNA imagen por
+   * propiedad. Devolver las treinta fotos de cada una para usar la primera
+   * sería traer treinta veces más JSON del que se mira.
+   *
+   * `null` explícito y no `undefined` ni `''`: la tarjeta decide entre la foto
+   * y el placeholder con este campo, y `''` es una URL vacía que el navegador
+   * pide igual — un `<img>` roto en vez del placeholder digno.
+   */
+  fotoPortada: string | null;
   operaciones: Operacion[];
   titulares: Array<{ personaId: string; nombre: string; porcentaje: number }>;
 }
@@ -776,6 +789,7 @@ interface FilaPropiedad {
   notas_internas: string | null;
   agente_captador_id: string | null;
   captador_nombre: string | null;
+  foto_portada: string | null;
   operaciones: Array<Record<string, unknown>> | null;
   titulares: Array<Record<string, unknown>> | null;
 }
@@ -792,6 +806,21 @@ interface FilaPropiedad {
 const selectPropiedad = (incluirCerradas = false): string => `
   SELECT p.*,
     cap.nombre AS captador_nombre,
+    -- La portada, para la cartera en tarjetas.
+    --
+    -- Es un ORDER BY y no un WHERE es_portada: el índice único parcial
+    -- garantiza que no haya DOS portadas, no que haya UNA. Una propiedad
+    -- importada, o una a la que le borraron la portada por fuera de
+    -- FotosService.borrar(), tendría fotos y ninguna marcada — y con el WHERE
+    -- se vería en la grilla como si no tuviera ninguna. Con el orden, la
+    -- primera por orden hace de portada, que es lo que la ficha ya muestra
+    -- arriba de todo.
+    -- (Sin comillas invertidas en los nombres: un backtick adentro de un
+    --  template literal lo cierra y tsc tira TS1005 en la línea de abajo.)
+    (SELECT f.url FROM propiedad_foto f
+      WHERE f.propiedad_id = p.id
+      ORDER BY f.es_portada DESC, f.orden, f.created_at
+      LIMIT 1) AS foto_portada,
     (SELECT json_agg(json_build_object(
         'id', o.id, 'tipo', o.tipo, 'precio', o.precio, 'moneda', o.moneda,
         'expensas', o.expensas, 'expensasMoneda', o.expensas_moneda,
@@ -858,6 +887,11 @@ function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
     agenteCaptador: f.agente_captador_id
       ? { id: f.agente_captador_id, nombre: f.captador_nombre ?? '' }
       : null,
+    // `?? null` y no el valor crudo: sin fotos la subconsulta devuelve NULL, que
+    // node-pg trae como `null`, pero una fila armada a mano en un test podría no
+    // traer la clave y ahí sería `undefined` — y `undefined` desaparece del JSON,
+    // así que el front recibiría la clave ausente en vez de `null`.
+    fotoPortada: f.foto_portada ?? null,
     operaciones: (f.operaciones ?? []).map((o) => ({
       id: String(o.id),
       tipo: String(o.tipo),
