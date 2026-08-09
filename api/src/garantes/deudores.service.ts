@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { candidatos, evaluar, type Veredicto } from './situacion.motor';
+import {
+  candidatos, evaluar, evaluarCheques,
+  type CausalCruda, type Veredicto, type VeredictoCheques,
+} from './situacion.motor';
 
 /**
  * Central de Deudores del BCRA.
@@ -15,9 +18,26 @@ import { candidatos, evaluar, type Veredicto } from './situacion.motor';
  *     404 → { status: 404, errorMessages: ["No se encontró datos para la
  *             identificación ingresada."] }
  *
+ *   GET /CentralDeDeudores/v1.0/Deudas/ChequesRechazados/{cuit}
+ *     200 → { status, results: { identificacion, denominacion,
+ *                                causales: [{ causal, entidades: [
+ *                                  { entidad, detalle: [
+ *                                    { nroCheque, fechaRechazo, monto,
+ *                                      fechaPago, fechaPagoMulta, estadoMulta,
+ *                                      ctaPersonal, denomJuridica,
+ *                                      enRevision, procesoJud } ] }] }] } }
+ *     404 → mismo cuerpo que arriba = NO tiene cheques rechazados
+ *     400 → "Parámetro erróneo: Ingresar 11 dígitos para realizar la consulta."
+ *     429 → "Rate limit exceeded. Try again later." (control de tráfico por IP)
+ *
  * **El 404 no es un error: es una respuesta.** Significa que ninguna entidad
  * informó a esa persona, o sea que no tiene deuda bancaria registrada. Tratarlo
  * como falla dejaría sin consultar justo al garante que está limpio.
+ *
+ * El 429 sí es un error y existe: el control de tráfico es POR IP, así que
+ * cuenta la oficina entera y no cada usuario. Es la razón técnica —además de la
+ * de fondo, que es el consentimiento— por la que la re-consulta periódica la
+ * aprieta una persona y no un cron.
  *
  * Esto es lo contrario del IPC. Ahí la decisión fue NO integrar porque INDEC no
  * tiene API estable y raspar un HTML pondría un número equivocado en un aviso de
@@ -39,11 +59,25 @@ export interface ConsultaBcra extends Veredicto {
   probados: string[];
 }
 
+export interface ConsultaCheques extends VeredictoCheques {
+  cuit: string;
+  denominacion: string | null;
+  consultadoEl: string;
+}
+
 interface RespuestaBcra {
   results?: {
     identificacion?: number;
     denominacion?: string;
     periodos?: Array<{ periodo?: string; entidades?: unknown[] }>;
+  };
+}
+
+interface RespuestaCheques {
+  results?: {
+    identificacion?: number;
+    denominacion?: string;
+    causales?: CausalCruda[];
   };
 }
 
@@ -92,16 +126,44 @@ export class DeudoresService {
     };
   }
 
-  private async pedir(cuit: string): Promise<RespuestaBcra | 'sin-datos' | 'error'> {
+  /**
+   * Los cheques rechazados de un CUIT que **ya se resolvió** en `consultar()`.
+   *
+   * Toma el CUIT y no el documento a propósito: la búsqueda del CUIL correcto
+   * ya la hizo la consulta de deudas, y repetirla acá sería pegarle hasta
+   * cuatro veces más a una API con control de tráfico por IP para llegar al
+   * mismo número.
+   *
+   * Devuelve `null` **sólo** cuando no se pudo consultar. Que no tenga cheques
+   * devuelve un veredicto vacío, que es un dato: «no tiene cheques rechazados»
+   * y «no sabemos» no se pueden ver igual, igual que apto y sin verificar.
+   */
+  async consultarCheques(cuit: string): Promise<ConsultaCheques | null> {
+    const limpio = (cuit ?? '').replace(/\D/g, '');
+    if (limpio.length !== 11) return null;
+
+    const r = await this.pedir(`ChequesRechazados/${limpio}`);
+    if (r === 'error') return null;
+
+    const cuerpo = r === 'sin-datos' ? null : (r as RespuestaCheques);
+    return {
+      cuit: limpio,
+      denominacion: cuerpo?.results?.denominacion?.trim() ?? null,
+      consultadoEl: new Date().toISOString(),
+      ...evaluarCheques(cuerpo?.results?.causales ?? []),
+    };
+  }
+
+  private async pedir(ruta: string): Promise<RespuestaBcra | 'sin-datos' | 'error'> {
     try {
-      const res = await fetch(`${BASE}/${cuit}`, {
+      const res = await fetch(`${BASE}/${ruta}`, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
 
       if (res.status === 404) return 'sin-datos';
       if (!res.ok) {
-        this.logger.error(`La Central de Deudores devolvió ${res.status}`);
+        this.logger.error(`La Central de Deudores devolvió ${res.status} en ${ruta}`);
         return 'error';
       }
 

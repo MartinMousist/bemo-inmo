@@ -67,11 +67,17 @@ export class GaranteController {
    * Es un POST y no un GET porque escribe: el veredicto queda guardado con su
    * fecha, y esa foto es la que explica seis meses después por qué se aceptó a
    * este garante.
+   *
+   * El mismo endpoint sirve para la primera consulta y para la revisión: no hay
+   * un «re-consultar» aparte porque es el mismo acto —preguntarle al BCRA— y la
+   * diferencia entre una y otra la marca el historial, no la ruta. Quién apretó
+   * queda guardado en `garantia_bcra_consulta.consultado_por`: acá se está
+   * mirando el dato bancario de un tercero y eso tiene que tener nombre.
    */
   @Post(':id/bcra')
   @Roles('owner', 'admin', 'agente')
   consultarBcra(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.garantes.consultarBcra(a.tenantId, id);
+    return this.garantes.consultarBcra(a.tenantId, id, a.usuarioId);
   }
 
   @Post(':id/documentos')

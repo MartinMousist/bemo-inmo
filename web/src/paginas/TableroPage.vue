@@ -536,7 +536,7 @@ const conversiones = computed(() => {
           <div class="card pad-sm">
             <h3>Por qué se pierden</h3>
             <p v-if="!d.embudo.motivosPerdida.length" class="ayuda">
-              Ninguna oportunidad perdida tiene motivo cargado.
+              Ningún lead perdido tiene motivo cargado.
             </p>
             <ul v-else class="motivos">
               <li v-for="m in d.embudo.motivosPerdida" :key="m.motivo">

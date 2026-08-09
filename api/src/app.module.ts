@@ -39,9 +39,15 @@ import { IndicesService } from './alquileres/indices.service';
 import { IndicesCron } from './alquileres/indices.cron';
 import { BcraService } from './alquileres/bcra.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
-import { ComisionesController, VentasController } from './ventas/ventas.controller';
+import {
+  ComisionesController,
+  ComisionesDeContratoController,
+  VentasController,
+} from './ventas/ventas.controller';
 import { VentasService } from './ventas/ventas.service';
 import { ComisionesConfigService } from './ventas/comisiones.config.service';
+import { ExternasService } from './ventas/externas.service';
+import { ComisionesContratoService } from './ventas/comisiones.contrato.service';
 import { GaranteController, GarantesController } from './garantes/garantes.controller';
 import { GarantesService } from './garantes/garantes.service';
 import { DeudoresService } from './garantes/deudores.service';
@@ -67,6 +73,11 @@ import { FotosService } from './archivos/fotos.service';
 import { AlmacenamientoService } from './archivos/almacenamiento.service';
 import { PlantillasController } from './plantillas/plantillas.controller';
 import { PlantillasService } from './plantillas/plantillas.service';
+import {
+  DocumentosController,
+  DocumentosDeContratoController,
+} from './plantillas/documentos.controller';
+import { DocumentosService } from './plantillas/documentos.service';
 import { CajaController, InicioController } from './inicio/inicio.controller';
 import { CajaService } from './inicio/caja.service';
 import {
@@ -84,6 +95,8 @@ import {
 } from './portal/portal.controller';
 import { PortalService } from './portal/portal.service';
 import { InicioService } from './inicio/inicio.service';
+import { CuentaController } from './cuenta/cuenta.controller';
+import { CuentaService } from './cuenta/cuenta.service';
 
 @Module({
   // El límite de intentos NO va como guard global: sólo lo aplica AuthController
@@ -115,6 +128,7 @@ import { InicioService } from './inicio/inicio.service';
     NotasController,
     AccesosPropietarioController,
     PortalController,
+    CuentaController,
     EquipoController,
     PersonasController,
     PropiedadesController,
@@ -128,6 +142,7 @@ import { InicioService } from './inicio/inicio.service';
     LiquidacionesController,
     VentasController,
     ComisionesController,
+    ComisionesDeContratoController,
     GarantesController,
     GaranteController,
     PublicacionesController,
@@ -140,6 +155,8 @@ import { InicioService } from './inicio/inicio.service';
     ImportarController,
     FotosController,
     PlantillasController,
+    DocumentosDeContratoController,
+    DocumentosController,
   ],
   providers: [
     AuthService,
@@ -151,6 +168,7 @@ import { InicioService } from './inicio/inicio.service';
     ReclamosService,
     NotasService,
     PortalService,
+    CuentaService,
     EquipoService,
     PersonasService,
     PropiedadesService,
@@ -166,6 +184,8 @@ import { InicioService } from './inicio/inicio.service';
     LiquidacionesService,
     VentasService,
     ComisionesConfigService,
+    ExternasService,
+    ComisionesContratoService,
     GarantesService,
     DeudoresService,
     PublicacionesService,
@@ -176,6 +196,7 @@ import { InicioService } from './inicio/inicio.service';
     FotosService,
     AlmacenamientoService,
     PlantillasService,
+    DocumentosService,
     // Guard GLOBAL: todo exige token salvo lo marcado con @Publico().
     // Si fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
     { provide: APP_GUARD, useClass: AuthGuard },

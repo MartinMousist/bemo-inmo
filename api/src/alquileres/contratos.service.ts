@@ -4,11 +4,13 @@ import { AppError, ErrorCode } from '../common/app-error';
 import { armarPagina, offset, PaginacionDto, type Pagina } from '../common/paginacion';
 import { IndicesService } from './indices.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
+import { GarantesService } from '../garantes/garantes.service';
+import { DocumentosService } from '../plantillas/documentos.service';
 import { calcularPunitorio } from './punitorios.motor';
 import {
   AjusteImposible,
   calcularAjuste,
-  fechasDeAjuste,
+  periodosDeAjuste,
   round2,
   sumarMeses,
   type TipoIndice,
@@ -51,6 +53,14 @@ export class ContratosService {
     private readonly db: DbService,
     private readonly indices: IndicesService,
     private readonly auditoria: AuditoriaService,
+    // Sólo para `resumenFicha()`: el veredicto de «garantía apta» vive en
+    // `verificar()` y no se copia acá. No hay ciclo — `GarantesService` no sabe
+    // de contratos — pero si algún día lo supiera, esto es lo primero a mirar.
+    private readonly garantes: GarantesService,
+    // Para que el contrato nuevo nazca con su pre-contrato escrito. Tampoco hay
+    // ciclo: `DocumentosService` habla con `PlantillasService` y con la base, y
+    // no sabe que existe este servicio.
+    private readonly documentos: DocumentosService,
   ) {}
 
   // ── Contratos ──────────────────────────────────────────────────────────────
@@ -58,11 +68,18 @@ export class ContratosService {
   async listar(tenantId: string, f: FiltroContratosDto): Promise<Pagina<Contrato>> {
     return this.db.withTenant(tenantId, async (ej) => {
       const q = f.q ? `%${f.q.trim()}%` : null;
-      const params = [q, f.estado ?? null];
+      const params = [q, f.estado ?? null, f.agenteId ?? null];
 
+      // `agenteId` acá es el CAPTADOR de la propiedad, no «el agente del
+      // contrato»: `contrato_alquiler` no tiene columna de agente propia, así
+      // que lo único que la base sabe es quién captó el inmueble. Quien colocó
+      // el inquilino no siempre es esa persona, y por eso la pantalla rotula la
+      // columna «Captador». Decirle «Agente» sería afirmar algo que el dato no
+      // dice.
       const donde = `
         WHERE ($1::text IS NULL OR pr.calle ILIKE $1 OR pr.localidad ILIKE $1)
-          AND ($2::text IS NULL OR c.estado = $2)`;
+          AND ($2::text IS NULL OR c.estado = $2)
+          AND ($3::uuid IS NULL OR pr.agente_captador_id = $3)`;
 
       const { rows: conteo } = await ej.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM contrato_alquiler c
@@ -73,7 +90,7 @@ export class ContratosService {
       const { rows } = await ej.query<FilaContrato>(
         `${SELECT_CONTRATO} ${donde}
          ORDER BY c.fecha_fin
-         LIMIT $3 OFFSET $4`,
+         LIMIT $4 OFFSET $5`,
         [...params, f.porPagina, offset(f)],
       );
 
@@ -85,7 +102,44 @@ export class ContratosService {
     return this.db.withTenant(tenantId, (ej) => this.leer(ej, id));
   }
 
-  async crear(tenantId: string, dto: CrearContratoDto): Promise<Contrato> {
+  /**
+   * Un contrato nuevo, con su pre-contrato ya escrito.
+   *
+   * El documento se genera DESPUÉS y FUERA de la transacción, a propósito y por
+   * dos razones distintas:
+   *
+   * · **Fuera**, porque `DocumentosService.crear()` abre su propio `withTenant`.
+   *   Anidarlos tomaría dos conexiones del pool para el mismo request y, con
+   *   varios contratos cargándose a la vez, es la clase de cosa que agota el
+   *   pool un martes a las seis de la tarde.
+   * · **Después y sin poder fallar**, porque el contrato es el hecho legal y el
+   *   documento es una comodidad. Si no hay plantilla o el motor se queja, el
+   *   contrato igual quedó guardado: se registra el motivo y la ficha lo dice.
+   *   Al revés —perder un contrato porque no se pudo armar un papel— sería
+   *   absurdo.
+   */
+  async crear(
+    tenantId: string,
+    dto: CrearContratoDto,
+    usuarioId?: string,
+  ): Promise<Contrato> {
+    const contrato = await this.crearContrato(tenantId, dto);
+
+    if (usuarioId) {
+      try {
+        await this.documentos.generarPreContrato(tenantId, usuarioId, contrato.id);
+      } catch (err) {
+        this.logger.warn(
+          `El contrato ${contrato.id} se creó pero su pre-contrato no: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return contrato;
+  }
+
+  private async crearContrato(tenantId: string, dto: CrearContratoDto): Promise<Contrato> {
     return this.db.withTenant(tenantId, async (ej) => {
       // Serializa la creación de contratos sobre la misma propiedad ANTES de
       // tocar el constraint EXCLUDE. Sin esto, dos transacciones esperándose
@@ -221,7 +275,6 @@ export class ContratosService {
         );
       }
 
-      const fechas = fechasDeAjuste(c.fecha_inicio, c.fecha_fin, c.periodicidad_meses);
       const { rows: existentes } = await ej.query<{ vigente_desde: Date }>(
         'SELECT vigente_desde FROM contrato_ajuste WHERE contrato_id = $1',
         [contratoId],
@@ -232,12 +285,30 @@ export class ContratosService {
       // ni siquiera existen todavía.
       const limite = sumarMeses(hoyPrimerDia(), c.periodicidad_meses);
 
+      // Qué meses se ajustan, contra qué índice y dónde se corta: eso es cálculo
+      // puro y vive en el motor, que es donde se testea con casos de papel y de
+      // donde lo toma también el seed. Acá abajo queda sólo lo que necesita la
+      // base.
+      const cadena = periodosDeAjuste(
+        c.fecha_inicio, c.fecha_fin, c.periodicidad_meses, iso(c.mes_base), limite,
+      );
+
       let creados = 0;
       const sinIndice: string[] = [];
       let montoVigente = Number(c.monto_inicial);
-      let periodoBase = iso(c.mes_base);
+      /**
+       * Re-ancla de la cadena. `null` = la cadena del motor sirve tal cual.
+       *
+       * Es el pedazo que NO se puede extraer al motor puro: un ajuste que ya
+       * está en la base —cargado a mano, o migrado— puede tener otro período
+       * base, y a partir de ahí toda la cadena se corre. Esto es estado, no
+       * cuenta. Está comentado igual del otro lado, en `periodosDeAjuste()`.
+       */
+      let anclado: string | null = null;
 
-      for (const fecha of fechas) {
+      for (const p of cadena) {
+        const fecha = p.vigenteDesde;
+
         if (yaHay.has(fecha)) {
           // Ya existe: se toma su monto como base para el siguiente.
           const { rows } = await ej.query<{ monto_nuevo: string; periodo_actual: string | null }>(
@@ -245,14 +316,12 @@ export class ContratosService {
             [contratoId, fecha],
           );
           montoVigente = Number(rows[0].monto_nuevo);
-          if (rows[0].periodo_actual) periodoBase = iso(rows[0].periodo_actual);
+          if (rows[0].periodo_actual) anclado = iso(rows[0].periodo_actual);
           continue;
         }
-        if (fecha > limite) break;
 
-        // El índice del mes anterior al ajuste: el IPC de un mes se publica a
-        // mediados del siguiente, así que el de "este mes" nunca está a tiempo.
-        const periodoActual = sumarMeses(fecha, -1);
+        const periodoBase = anclado ?? p.periodoBase;
+        const periodoActual = p.periodoActual;
 
         let valorBase: number | null = null;
         let valorActual: number | null = null;
@@ -303,7 +372,9 @@ export class ContratosService {
 
         creados++;
         montoVigente = r.montoNuevo;
-        periodoBase = periodoActual;
+        // El ancla acompaña: si venía re-anclada por un ajuste existente, el
+        // siguiente tiene que seguir esa cadena y no la del motor.
+        anclado = periodoActual;
       }
 
       return { creados, sinIndice };
@@ -673,6 +744,117 @@ export class ContratosService {
     });
   }
 
+  // ── El resumen de la ficha ─────────────────────────────────────────────────
+
+  /**
+   * Lo que dice cada cabecera de la ficha del contrato cuando su bloque está
+   * cerrado.
+   *
+   * Existe por una razón concreta: los bloques de la ficha se pueden plegar, y
+   * un bloque cerrado que para decir su número tiene que montar su contenido no
+   * ahorró nada — se habrían pedido igual los once endpoints de siempre. Acá
+   * salen los seis números en **una consulta**, y el bloque cerrado no pide nada.
+   *
+   * ── Tres reglas que este método se impone ──
+   *
+   * 1. **Los conteos salen de `count()`, no de contar un array.** La ficha pide
+   *    ajustes y cuotas con `?porPagina=100` y `PaginacionDto` topea en 100: un
+   *    contrato de diez años son 120 cuotas y veinte se caen del listado. Que se
+   *    caigan del listado es una omisión; que la cabecera diga «3 impagas»
+   *    cuando hay 23 es una **afirmación falsa**, que es peor. Por eso los
+   *    números de arriba nunca se derivan de la página de abajo.
+   *
+   * 2. **La cabecera no dice nada que el bloque abierto no diga.** Un resumen
+   *    calculado sin las reglas de rol de cada endpoint sería el mismo dato por
+   *    otra puerta, y un permiso que se esquiva leyendo una cabecera no es un
+   *    permiso. Hoy ninguno de los seis bloques de la ficha enmascara —
+   *    `/contratos/:id/comisiones` la lee todo el equipo a propósito («el asesor
+   *    necesita saber cómo quedó»), y lo mismo cuotas, ajustes, garantes,
+   *    documentos y notas—, así que el resumen tampoco enmascara. **El día que
+   *    alguno enmascare** —el precedente es `equipo.service.ts`, donde
+   *    `veMontos` deja los importes de un compañero en `null` con el motivo
+   *    escrito— este método tiene que enmascarar igual, con `null` y no con
+   *    cero: un cero es un número falso.
+   *
+   * 3. **Ningún monto sin su moneda y ninguna fecha por `new Date()`.** Las
+   *    columnas `date` salen ya recortadas con `to_char(…, 'YYYY-MM-DD')`
+   *    desde SQL, que es el mismo `String(x).slice(0,10)` del front pero del
+   *    lado donde no hay zona horaria que aplicar.
+   *
+   * Los garantes son la excepción al «un solo viaje», y a propósito: el
+   * veredicto de si una garantía es apta lo decide `garantes.verificar()` —una
+   * póliza de caución se mide distinto que una persona, y la regla ya se pagó
+   * dos veces—. Escribir una segunda versión en SQL sería tener dos definiciones
+   * de «en regla» que se separan en el primer cambio, y ahí la cabecera y el
+   * bloque abierto empiezan a decir cosas distintas, que es exactamente lo que
+   * esta feature no puede hacer.
+   */
+  async resumenFicha(tenantId: string, contratoId: string): Promise<ResumenFicha> {
+    const [fila, garantes] = await Promise.all([
+      this.db.withTenant(tenantId, async (ej) => {
+        const { rows } = await ej.query<FilaResumen>(SQL_RESUMEN_FICHA, [contratoId]);
+        if (!rows.length) throw AppError.notFound('No se encontró ese contrato.');
+        return rows[0];
+      }),
+      this.garantes.verificar(tenantId, contratoId),
+    ]);
+
+    const moneda = fila.moneda;
+
+    return {
+      contratoId,
+      garantes: {
+        total: garantes.garantes,
+        aptos: garantes.aptos,
+        minimo: garantes.minimo,
+        enRegla: garantes.enRegla,
+        pendientes: garantes.pendientes.length,
+        // El primero textual y no un conteo: «falta consultar el BCRA» dice qué
+        // hacer, «3 pendientes» manda a abrir el bloque para averiguarlo.
+        primerPendiente: garantes.pendientes[0] ?? null,
+      },
+      // `null` y no un objeto en cero: un contrato de intermediación no tiene
+      // cuotas, no tiene cero cuotas. La ficha directamente no dibuja el bloque.
+      cuotas: fila.administrado
+        ? {
+            generadas: Number(fila.cuotas_generadas),
+            impagas: Number(fila.cuotas_impagas),
+            vencidas: Number(fila.cuotas_vencidas),
+            deuda: { monto: Number(fila.cuotas_deuda), moneda: fila.cuotas_moneda ?? moneda },
+            proximaVence: fila.cuotas_proxima,
+          }
+        : null,
+      aumentos: {
+        total: Number(fila.ajustes_total),
+        proyectados: Number(fila.ajustes_proyectados),
+        proximo: aAjusteResumen(fila.ajuste_proximo),
+        // Un ajuste proyectado cuya vigencia YA empezó es plata que se está
+        // dejando de cobrar todos los meses, y es justo el que no se ve: el
+        // listado lo muestra igual que a los demás. En la cabecera va aparte.
+        atrasado: aAjusteResumen(fila.ajuste_atrasado),
+      },
+      comision: {
+        armada: Number(fila.comision_lineas) > 0,
+        repartida: Number(fila.comision_reparto) > 0,
+        sinCobrar: Number(fila.comision_sin_cobrar),
+        total:
+          Number(fila.comision_lineas) > 0
+            ? { monto: Number(fila.comision_total), moneda: fila.comision_moneda ?? moneda }
+            : null,
+      },
+      documentos: {
+        total: Number(fila.docs_total),
+        sinMandar: Number(fila.docs_sin_mandar),
+        ultimoEl: fila.docs_ultimo === null ? null : new Date(fila.docs_ultimo).toISOString(),
+      },
+      notas: {
+        total: Number(fila.notas_total),
+        pendientes: Number(fila.notas_pendientes),
+        ultimaEl: fila.notas_ultima === null ? null : new Date(fila.notas_ultima).toISOString(),
+      },
+    };
+  }
+
   // ── Vencimientos ───────────────────────────────────────────────────────────
 
   /**
@@ -849,6 +1031,183 @@ export interface Vencimiento {
   moneda: string;
   detalle: string | null;
   etiquetaPropiedad: string;
+}
+
+// ── El resumen de la ficha ───────────────────────────────────────────────────
+
+/** Un importe SIEMPRE viaja con su moneda. Ver DESIGN.md §5. */
+interface Importe {
+  monto: number;
+  moneda: string;
+}
+
+interface AjusteResumen {
+  vigenteDesde: string;
+  montoAnterior: number;
+  montoNuevo: number;
+  moneda: string;
+  estado: string;
+}
+
+export interface ResumenFicha {
+  contratoId: string;
+  garantes: {
+    total: number;
+    aptos: number;
+    minimo: number;
+    enRegla: boolean;
+    pendientes: number;
+    primerPendiente: string | null;
+  };
+  /** `null` en un contrato de intermediación: no tiene cuotas, no tiene cero. */
+  cuotas: {
+    generadas: number;
+    impagas: number;
+    vencidas: number;
+    deuda: Importe;
+    proximaVence: string | null;
+  } | null;
+  aumentos: {
+    total: number;
+    proyectados: number;
+    /** El siguiente que todavía no rige. */
+    proximo: AjusteResumen | null;
+    /** Proyectado y con la vigencia ya empezada: plata que no se está cobrando. */
+    atrasado: AjusteResumen | null;
+  };
+  comision: {
+    armada: boolean;
+    repartida: boolean;
+    sinCobrar: number;
+    total: Importe | null;
+  };
+  documentos: { total: number; sinMandar: number; ultimoEl: string | null };
+  notas: { total: number; pendientes: number; ultimaEl: string | null };
+}
+
+interface FilaResumen {
+  moneda: string;
+  administrado: boolean;
+  cuotas_generadas: string;
+  cuotas_impagas: string;
+  cuotas_vencidas: string;
+  cuotas_deuda: string;
+  cuotas_moneda: string | null;
+  cuotas_proxima: string | null;
+  ajustes_total: string;
+  ajustes_proyectados: string;
+  ajuste_proximo: Record<string, unknown> | null;
+  ajuste_atrasado: Record<string, unknown> | null;
+  comision_lineas: string;
+  comision_reparto: string;
+  comision_sin_cobrar: string;
+  comision_total: string;
+  comision_moneda: string | null;
+  docs_total: string;
+  docs_sin_mandar: string;
+  docs_ultimo: Date | string | null;
+  notas_total: string;
+  notas_pendientes: string;
+  notas_ultima: Date | string | null;
+}
+
+/**
+ * Los seis números de las cabeceras, en un viaje.
+ *
+ * Todo `count()`: ver la regla 1 de `resumenFicha()`. Y todas las columnas
+ * `date` salen por `to_char(…, 'YYYY-MM-DD')` — una `date` de Postgres no tiene
+ * zona, y convertirla a `Date` le inventa medianoche UTC: un vencimiento del 01
+ * se muestra el 31 del mes anterior. Es la trampa que este repo ya pagó.
+ *
+ * «Impaga» usa el MISMO predicado que el tablero de vencimientos
+ * (`estado IN ('pendiente','parcial','vencido')`) y no un `saldo > 0` suelto: una
+ * cuota condonada tiene saldo y no se debe, y con dos definiciones la cabecera
+ * de la ficha y el tablero del inicio contarían distinto sobre la misma cartera.
+ */
+const SQL_RESUMEN_FICHA = `
+  WITH ct AS (
+    SELECT id, moneda, administrado FROM contrato_alquiler WHERE id = $1
+  ),
+  cuota AS (
+    SELECT p.vence_el, p.moneda,
+           p.total - coalesce((SELECT sum(co.monto) FROM cobro co
+                                WHERE co.periodo_id = p.id
+                                  AND co.imputacion = 'alquiler'), 0) AS saldo
+      FROM periodo_alquiler p
+     WHERE p.contrato_id = $1
+       AND p.estado IN ('pendiente', 'parcial', 'vencido')
+  ),
+  ajuste AS (
+    SELECT to_char(a.vigente_desde, 'YYYY-MM-DD') AS "vigenteDesde",
+           a.monto_anterior AS "montoAnterior", a.monto_nuevo AS "montoNuevo",
+           a.moneda, a.estado, a.vigente_desde
+      FROM contrato_ajuste a
+     WHERE a.contrato_id = $1
+  )
+  SELECT
+    ct.moneda,
+    ct.administrado,
+
+    (SELECT count(*) FROM periodo_alquiler p WHERE p.contrato_id = $1) AS cuotas_generadas,
+    (SELECT count(*) FROM cuota) AS cuotas_impagas,
+    (SELECT count(*) FROM cuota WHERE vence_el < current_date) AS cuotas_vencidas,
+    (SELECT coalesce(sum(saldo), 0) FROM cuota) AS cuotas_deuda,
+    (SELECT max(moneda) FROM cuota) AS cuotas_moneda,
+    (SELECT to_char(min(vence_el), 'YYYY-MM-DD') FROM cuota
+      WHERE vence_el >= current_date) AS cuotas_proxima,
+
+    (SELECT count(*) FROM ajuste) AS ajustes_total,
+    (SELECT count(*) FROM ajuste WHERE estado = 'proyectado') AS ajustes_proyectados,
+    (SELECT to_json(x) FROM (
+       SELECT "vigenteDesde", "montoAnterior", "montoNuevo", moneda, estado
+         FROM ajuste WHERE vigente_desde > current_date
+        ORDER BY vigente_desde LIMIT 1) x) AS ajuste_proximo,
+    (SELECT to_json(x) FROM (
+       SELECT "vigenteDesde", "montoAnterior", "montoNuevo", moneda, estado
+         FROM ajuste
+        WHERE estado = 'proyectado' AND vigente_desde <= current_date
+        ORDER BY vigente_desde LIMIT 1) x) AS ajuste_atrasado,
+
+    (SELECT count(*) FROM comision m
+      WHERE m.contrato_id = $1 AND m.estado <> 'anulada') AS comision_lineas,
+    (SELECT count(*) FROM comision m
+      WHERE m.contrato_id = $1 AND m.estado <> 'anulada' AND m.nivel > 1) AS comision_reparto,
+    (SELECT count(*) FROM comision m
+      WHERE m.contrato_id = $1 AND m.nivel > 1
+        AND m.estado NOT IN ('anulada', 'cobrada')) AS comision_sin_cobrar,
+    (SELECT coalesce(sum(m.monto), 0) FROM comision m
+      WHERE m.contrato_id = $1 AND m.estado <> 'anulada'
+        AND m.beneficiario_tipo = 'operacion') AS comision_total,
+    (SELECT max(m.moneda) FROM comision m
+      WHERE m.contrato_id = $1 AND m.estado <> 'anulada'
+        AND m.beneficiario_tipo = 'operacion') AS comision_moneda,
+
+    (SELECT count(*) FROM documento_generado d
+      WHERE d.contrato_id = $1) AS docs_total,
+    (SELECT count(*) FROM documento_generado d
+      WHERE d.contrato_id = $1 AND d.primer_envio_el IS NULL) AS docs_sin_mandar,
+    (SELECT max(d.created_at) FROM documento_generado d
+      WHERE d.contrato_id = $1) AS docs_ultimo,
+
+    (SELECT count(*) FROM nota n
+      WHERE n.entidad_tipo = 'contrato_alquiler' AND n.entidad_id = $1) AS notas_total,
+    (SELECT count(*) FROM nota n
+      WHERE n.entidad_tipo = 'contrato_alquiler' AND n.entidad_id = $1
+        AND n.recordar_el IS NOT NULL AND n.resuelta_el IS NULL) AS notas_pendientes,
+    (SELECT max(n.created_at) FROM nota n
+      WHERE n.entidad_tipo = 'contrato_alquiler' AND n.entidad_id = $1) AS notas_ultima
+  FROM ct`;
+
+function aAjusteResumen(crudo: Record<string, unknown> | null): AjusteResumen | null {
+  if (!crudo) return null;
+  return {
+    // Ya viene recortada desde SQL: no pasa por `new Date()` en ningún momento.
+    vigenteDesde: String(crudo.vigenteDesde).slice(0, 10),
+    montoAnterior: Number(crudo.montoAnterior),
+    montoNuevo: Number(crudo.montoNuevo),
+    moneda: String(crudo.moneda),
+    estado: String(crudo.estado),
+  };
 }
 
 const SELECT_CONTRATO = `

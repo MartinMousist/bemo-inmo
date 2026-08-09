@@ -26,6 +26,20 @@ import { ref, watch, type Ref } from 'vue';
 export interface FiltroRecordado<T> {
   valores: Ref<T>;
   limpiar: () => void;
+  /**
+   * La regla 2, aplicada a una lista que **todavía no existía** cuando se leyó
+   * el `localStorage`.
+   *
+   * El constructor valida contra listas estáticas —los estados de cobranza, los
+   * índices— porque están en el bundle. El filtro por agente no: el equipo llega
+   * por `GET /v1/equipo`, después del primer render. Sin esto, un uuid guardado
+   * de alguien que ya no está en la inmobiliaria deja la pantalla mostrando cero
+   * filas para siempre, y el usuario no eligió nada — es exactamente el caso que
+   * la regla 2 existe para evitar.
+   *
+   * La pantalla la llama cuando llegó el equipo, y sólo entonces.
+   */
+  revalidar: (clave: keyof T, permitidos: readonly string[]) => void;
 }
 
 export function filtrosRecordados<T extends Record<string, string | boolean>>(
@@ -72,5 +86,12 @@ export function filtrosRecordados<T extends Record<string, string | boolean>>(
     valores.value = { ...porDefecto };
   }
 
-  return { valores, limpiar };
+  function revalidar(clave: keyof T, permitidos: readonly string[]) {
+    const v = valores.value[clave];
+    if (typeof v !== 'string' || v === '') return;
+    if (permitidos.includes(v)) return;
+    valores.value = { ...valores.value, [clave]: porDefecto[clave] };
+  }
+
+  return { valores, limpiar, revalidar };
 }

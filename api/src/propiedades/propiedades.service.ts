@@ -4,6 +4,7 @@ import { AppError, ErrorCode } from '../common/app-error';
 import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import { ordenSeguro } from '../common/orden';
 import { GeocodingService } from './geocoding.service';
+import { leerConfig, type ConfigComisiones } from '../ventas/comisiones.config.service';
 import type {
   CrearOperacionDto,
   CrearPropiedadDto,
@@ -12,6 +13,23 @@ import type {
   FiltroPropiedadesDto,
   TitularDto,
 } from './propiedades.dto';
+
+/**
+ * Lo que se escribe en las cuatro columnas de ubicación de una propiedad.
+ *
+ * `null` en la ubicación entera —el valor de retorno, no los campos— significa
+ * «no toques ninguna de las cuatro». Es distinto de `SIN_UBICACION`, que
+ * significa «dejalas vacías»: la primera es la regla del PATCH parcial y la
+ * segunda es una decisión.
+ */
+interface Ubicacion {
+  lat: number | null;
+  lng: number | null;
+  fuente: string | null;
+  fecha: Date | null;
+}
+
+const SIN_UBICACION: Ubicacion = { lat: null, lng: null, fuente: null, fecha: null };
 
 export interface Operacion {
   id: string;
@@ -35,6 +53,20 @@ export interface Operacion {
    * ofrecer hoy.
    */
   contratoHasta: string | null;
+  /**
+   * Los honorarios que va a cobrar ESTA operación, ya resueltos: el override de
+   * la propiedad sobre la política de la casa.
+   *
+   * `operacion.comision_config` existía desde la migración 006 y no la leía ni
+   * la escribía una sola línea de código —el error #3 del playbook—. Sale con
+   * `propio: false` cuando el número es el de la inmobiliaria, para que la
+   * pantalla pueda decir de dónde viene en vez de mostrar un número suelto.
+   */
+  comision: {
+    puntas: Record<string, number>;
+    total: number;
+    propio: boolean;
+  } | null;
 }
 
 export interface Propiedad {
@@ -52,6 +84,18 @@ export interface Propiedad {
   lat: number | null;
   lng: number | null;
   ubicacionConocida: boolean;
+  /**
+   * De dónde salió la coordenada: `'manual'`, `'google'` o `null`.
+   *
+   * La columna existe desde la 006 y no la devolvía nadie, así que la ficha
+   * mostraba un punto en el mapa sin poder decir si lo puso una persona o el
+   * geocodificador. Importa por dos cosas concretas: el backfill nunca pisa una
+   * manual, y al cambiar la dirección la manual se respeta y la de Google se
+   * limpia. Sin este dato en pantalla, las dos reglas son invisibles.
+   */
+  geocodeFuente: string | null;
+  /** Cuándo se resolvió. Es la memoria de cálculo de la coordenada. */
+  geocodeEl: string | null;
   tipo: string;
   supTotal: number | null;
   supCubierta: number | null;
@@ -65,6 +109,14 @@ export interface Propiedad {
   amenities: string[];
   descripcion: string | null;
   notasInternas: string | null;
+  /**
+   * Quién captó la propiedad.
+   *
+   * Se escribe desde la ficha desde la migración 006 y `selectPropiedad()`
+   * nunca lo devolvió: el dato estaba cargado y ninguna pantalla lo mostraba,
+   * así que el reparto de la venta seguía pidiendo el captador a mano.
+   */
+  agenteCaptador: { id: string; nombre: string } | null;
   operaciones: Operacion[];
   titulares: Array<{ personaId: string; nombre: string; porcentaje: number }>;
 }
@@ -80,8 +132,12 @@ export class PropiedadesService {
     return this.db.withTenant(tenantId, async (ej) => {
       const q = f.q ? `%${f.q.trim()}%` : null;
       const params = [q, f.tipo ?? null, f.operacion ?? null, f.estado ?? null,
-                      f.incluirCerradas ?? false];
+                      f.incluirCerradas ?? false,
+                      f.agenteId ?? null, f.sinCaptador ?? false];
 
+      // El MISMO `donde` para el conteo y para la página. Si el filtro entrara
+      // en uno solo, el pager diría «57» y la tabla mostraría 9, que es peor
+      // que no filtrar: el usuario no sabe cuál de los dos números es el suyo.
       const donde = `
         WHERE ($1::text IS NULL
                OR p.calle ILIKE $1 OR p.localidad ILIKE $1
@@ -92,7 +148,9 @@ export class PropiedadesService {
                   AND o.tipo = $3
                   AND ($5::boolean OR o.estado <> 'cerrada')))
           AND ($4::text IS NULL OR EXISTS (
-                SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id AND o.estado = $4))`;
+                SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id AND o.estado = $4))
+          AND ($6::uuid IS NULL OR p.agente_captador_id = $6)
+          AND (NOT $7::boolean OR p.agente_captador_id IS NULL)`;
 
       const { rows: conteo } = await ej.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM propiedad p ${donde}`,
@@ -121,11 +179,18 @@ export class PropiedadesService {
            f.orden,
            f.dir,
          )}
-         LIMIT $6 OFFSET $7`,
+         LIMIT $8 OFFSET $9`,
         [...params, f.porPagina, offset(f)],
       );
 
-      return armarPagina(rows.map(aPropiedad), Number(conteo[0].total), f);
+      // La política de la casa se lee UNA vez por request y no una por fila:
+      // es el mismo dato para las 25 propiedades de la página.
+      const config = await leerConfig(ej, tenantId);
+      return armarPagina(
+        rows.map((r) => aPropiedad(r, config)),
+        Number(conteo[0].total),
+        f,
+      );
     });
   }
 
@@ -181,12 +246,7 @@ export class PropiedadesService {
     id: string,
     dto: EditarPropiedadDto,
   ): Promise<Propiedad> {
-    const cambiaDireccion =
-      dto.calle !== undefined || dto.numero !== undefined || dto.localidad !== undefined;
-    const ubicacion =
-      dto.lat !== undefined || dto.lng !== undefined || cambiaDireccion
-        ? await this.resolverUbicacion(dto as CrearPropiedadDto)
-        : null;
+    const ubicacion = await this.ubicacionAlEditar(tenantId, id, dto);
 
     return this.db.withTenant(tenantId, async (ej) => {
       const { rowCount } = await ej.query(
@@ -218,7 +278,20 @@ export class PropiedadesService {
            amenities = coalesce($24, amenities),
            descripcion = coalesce($25, descripcion),
            notas_internas = coalesce($26, notas_internas),
-           agente_captador_id = coalesce($27, agente_captador_id)
+           -- El captador es la EXCEPCIÓN al coalesce, con el mismo patrón que
+           -- lat/lng: un null explícito acá significa «desasignar», no «no vino».
+           --
+           -- Con coalesce($27, agente_captador_id), una vez asignado no se podía
+           -- volver atrás nunca, y el filtro «Sin captador» del listado —que
+           -- existe porque las propiedades importadas por CSV nacen sin
+           -- captador— era un estado al que se podía llegar pero del que no se
+           -- podía salir ni entrar a mano. Quien asignó al asesor equivocado
+           -- veía que borrar el nombre no hacía nada.
+           --
+           -- Lo que distingue los dos casos es undefined (el campo no vino en el
+           -- PATCH) contra null (vino vacío), y por eso el booleano viaja aparte
+           -- en $27 en vez de deducirse del valor.
+           agente_captador_id = CASE WHEN $27::boolean THEN $28 ELSE agente_captador_id END
          WHERE id = $1`,
         [
           id, dto.calle ?? null, dto.numero ?? null, dto.piso ?? null, dto.depto ?? null,
@@ -232,7 +305,7 @@ export class PropiedadesService {
           dto.orientacion ?? null, dto.estadoConservacion ?? null,
           dto.amenities ?? null,
           dto.descripcion ?? null, dto.notasInternas ?? null,
-          dto.agenteCaptadorId ?? null,
+          dto.agenteCaptadorId !== undefined, dto.agenteCaptadorId ?? null,
         ],
       );
       if (!rowCount) throw AppError.notFound('No se encontró esa propiedad.');
@@ -310,6 +383,56 @@ export class PropiedadesService {
           dto.expensas ?? null, dto.expensasMoneda ?? null,
           dto.estado ?? null, dto.exclusividadHasta ?? null,
         ],
+      );
+      if (!rowCount) throw AppError.notFound('No se encontró esa operación.');
+      return this.leer(ej, propiedadId);
+    });
+  }
+
+  /**
+   * Los honorarios de UNA operación: el override sobre la política de la casa.
+   *
+   * Mandar `{}` limpia el override y la operación vuelve a heredar. Ése es el
+   * motivo por el que esto NO usa coalesce: acá «vacío» es una decisión —volvé
+   * a lo de la casa— y no un campo que el usuario no tocó. La regla del PATCH
+   * parcial sigue valiendo para todo lo demás de la operación, que se edita por
+   * el otro endpoint.
+   *
+   * **No recalcula un reparto ya hecho, a propósito.** Cambiar el % de una
+   * propiedad que ya tiene una venta con su reparto —y quizás con una comisión
+   * cobrada— pisaría plata que ya se pagó. Este número pre-llena las operaciones
+   * NUEVAS; para rehacer un reparto existente está el botón del detalle de la
+   * venta, que además se bloquea si hay algo cobrado.
+   */
+  async editarComisiones(
+    tenantId: string,
+    propiedadId: string,
+    operacionId: string,
+    dto: { venta?: { compradora: number; vendedora: number };
+           alquiler?: { locataria: number; locadora: number } },
+  ): Promise<Propiedad> {
+    for (const [nombre, par] of [
+      ['venta', dto.venta && [dto.venta.compradora, dto.venta.vendedora]],
+      ['alquiler', dto.alquiler && [dto.alquiler.locataria, dto.alquiler.locadora]],
+    ] as const) {
+      if (par && par[0] + par[1] > 100) {
+        throw new AppError(
+          422,
+          ErrorCode.VALIDATION_FAILED,
+          `Las dos puntas de ${nombre} no pueden sumar más del 100%.`,
+          'Unprocessable Entity',
+        );
+      }
+    }
+
+    return this.db.withTenant(tenantId, async (ej) => {
+      // El WHERE lleva `propiedad_id` además del id de la operación: sin él,
+      // conocer un uuid de operación alcanzaría para escribirle el % a otra
+      // propiedad de la misma inmobiliaria. La RLS corta entre tenants; esto
+      // corta adentro del tenant.
+      const { rowCount } = await ej.query(
+        'UPDATE operacion SET comision_config = $3 WHERE id = $1 AND propiedad_id = $2',
+        [operacionId, propiedadId, JSON.stringify(limpiarOverride(dto))],
       );
       if (!rowCount) throw AppError.notFound('No se encontró esa operación.');
       return this.leer(ej, propiedadId);
@@ -448,18 +571,116 @@ export class PropiedadesService {
     };
   }
 
-  private async resolverUbicacion(dto: CrearPropiedadDto): Promise<{
-    lat: number | null;
-    lng: number | null;
-    fuente: string | null;
-    fecha: Date | null;
-  }> {
+  /**
+   * Qué ubicación queda después de un PATCH. Es lo mismo que `resolverUbicacion`
+   * pero para un cuerpo PARCIAL, que es donde estaban las tres formas de perder
+   * una coordenada sin que nadie lo pidiera. Las tres se encontraron probando la
+   * API contra la base de desarrollo, no leyendo el código:
+   *
+   *  1. **`PATCH { localidad }` borraba lat y lng.** Se resolvía la ubicación
+   *     con el cuerpo del PATCH, que no trae `calle`; sin `calle` la función
+   *     devolvía todo en `null` y el UPDATE lo escribía. Editar la localidad de
+   *     una propiedad ubicada a mano la dejaba sin ubicación. Ahora se
+   *     geocodifica la dirección que va a **quedar** guardada —el PATCH sobre lo
+   *     que ya está en la base—, no la que vino en el cuerpo.
+   *
+   *  2. **`PATCH { lat }` sin `lng` borraba las dos.** No entraba en la rama
+   *     manual (pide las dos) pero sí marcaba «hay que tocar la ubicación», así
+   *     que caía en la misma rama de arriba. Ahora es un 422 que lo dice: media
+   *     coordenada no es una coordenada.
+   *
+   *  3. **Corregir la provincia no volvía a geocodificar.** El disparador miraba
+   *     `calle`, `numero` y `localidad`, pero `direccionCompleta()` **usa la
+   *     provincia**: arreglar una propiedad cargada en la provincia equivocada
+   *     dejaba el punto donde estaba, apuntando a la provincia vieja.
+   *
+   * Y la regla que ata todo: cuando hay que volver a geocodificar y no se puede
+   * —sin API key, o Google no encuentra la dirección—, **una coordenada cargada
+   * a mano se respeta**. Es la misma decisión que ya tomaba el backfill, que
+   * nunca pisa un `geocode_fuente = 'manual'`. Lo que sí se limpia es lo que
+   * había puesto Google, porque apuntaba a la dirección anterior. Salvo que el
+   * usuario haya vaciado los dos campos a propósito: ahí pidió borrarlas.
+   */
+  private async ubicacionAlEditar(
+    tenantId: string,
+    id: string,
+    dto: EditarPropiedadDto,
+  ): Promise<Ubicacion | null> {
+    const hayLat = dto.lat != null;
+    const hayLng = dto.lng != null;
+    if (hayLat !== hayLng) {
+      throw new AppError(
+        422,
+        ErrorCode.VALIDATION_FAILED,
+        'La latitud y la longitud van juntas: mandá las dos o ninguna.',
+        'Unprocessable Entity',
+      );
+    }
+    // Coordenadas explícitas ganan siempre, igual que al crear.
+    if (hayLat && hayLng) {
+      return { lat: dto.lat!, lng: dto.lng!, fuente: 'manual', fecha: new Date() };
+    }
+
+    // `null` explícito en los dos es «borralas». Un campo AUSENTE queda en
+    // `undefined` —class-transformer arma la instancia con todos los campos
+    // declarados— y eso es «no lo toques»: la regla del PATCH parcial.
+    const pidioBorrar = dto.lat === null && dto.lng === null;
+
+    // Los cuatro campos que arma `direccionCompleta()`. `provincia` faltaba.
+    const tocaDireccion =
+      dto.calle !== undefined || dto.numero !== undefined
+      || dto.localidad !== undefined || dto.provincia !== undefined;
+
+    if (!tocaDireccion) return pidioBorrar ? SIN_UBICACION : null;
+
+    const actual = await this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{
+        calle: string;
+        numero: string | null;
+        localidad: string | null;
+        provincia: string | null;
+        geocode_fuente: string | null;
+      }>(
+        `SELECT calle, numero, localidad, provincia, geocode_fuente
+           FROM propiedad WHERE id = $1`,
+        [id],
+      );
+      return rows[0] ?? null;
+    });
+    // No existe: el UPDATE de `editar()` es el que tira el 404, con su mensaje.
+    if (!actual) return null;
+
+    const direccion = GeocodingService.direccionCompleta({
+      calle: dto.calle ?? actual.calle,
+      numero: dto.numero ?? actual.numero,
+      localidad: dto.localidad ?? actual.localidad,
+      provincia: dto.provincia ?? actual.provincia,
+    });
+
+    // Que el PATCH MENCIONE la dirección no es que la dirección CAMBIE. El
+    // formulario manda calle, número, localidad y provincia en cada guardado,
+    // así que con «mencionar» alcanzando, tocar los ambientes disparaba una
+    // geocodificación; y sin API key eso terminaba borrando la coordenada que
+    // había puesto Google. Visto en el navegador: guardar «ambientes: 5» en
+    // PROP-0032 la dejó sin ubicación. Se compara el texto que se le manda al
+    // geocodificador, que es exactamente lo que decide si el resultado cambiaría.
+    const anterior = GeocodingService.direccionCompleta(actual);
+    if (direccion === anterior) return pidioBorrar ? SIN_UBICACION : null;
+
+    const r = await this.geo.geocodificar(direccion);
+
+    if (r.coordenadas) return { ...r.coordenadas, fecha: new Date() };
+    if (!pidioBorrar && actual.geocode_fuente === 'manual') return null;
+    return SIN_UBICACION;
+  }
+
+  private async resolverUbicacion(dto: CrearPropiedadDto): Promise<Ubicacion> {
     // Coordenadas explícitas ganan siempre: es la salida cuando Google ubica mal
     // la dirección, y el usuario sabe más que el geocodificador.
     if (dto.lat != null && dto.lng != null) {
       return { lat: dto.lat, lng: dto.lng, fuente: 'manual', fecha: new Date() };
     }
-    if (!dto.calle) return { lat: null, lng: null, fuente: null, fecha: null };
+    if (!dto.calle) return SIN_UBICACION;
 
     const r = await this.geo.geocodificar(
       GeocodingService.direccionCompleta({
@@ -472,9 +693,7 @@ export class PropiedadesService {
 
     // Si no se pudo, se guarda sin coordenadas. Nunca una ubicación inventada:
     // una propiedad mal ubicada en el mapa es peor que una sin mapa.
-    return r.coordenadas
-      ? { ...r.coordenadas, fecha: new Date() }
-      : { lat: null, lng: null, fuente: null, fecha: null };
+    return r.coordenadas ? { ...r.coordenadas, fecha: new Date() } : SIN_UBICACION;
   }
 
   private async reemplazarTitulares(
@@ -521,12 +740,13 @@ export class PropiedadesService {
       [id],
     );
     if (!rows.length) throw AppError.notFound('No se encontró esa propiedad.');
-    return aPropiedad(rows[0]);
+    return aPropiedad(rows[0], await leerConfig(ej, rows[0].tenant_id));
   }
 }
 
 interface FilaPropiedad {
   id: string;
+  tenant_id: string;
   codigo: number;
   calle: string;
   numero: string | null;
@@ -537,6 +757,10 @@ interface FilaPropiedad {
   cp: string | null;
   lat: string | null;
   lng: string | null;
+  geocode_fuente: string | null;
+  /** `timestamptz`, no `date`: node-pg lo devuelve como `Date` y acá sí se
+   *  puede convertir — la trampa del 01/01 es de las columnas `date`. */
+  geocode_el: Date | null;
   tipo: string;
   sup_total: string | null;
   sup_cubierta: string | null;
@@ -550,6 +774,8 @@ interface FilaPropiedad {
   amenities: string[];
   descripcion: string | null;
   notas_internas: string | null;
+  agente_captador_id: string | null;
+  captador_nombre: string | null;
   operaciones: Array<Record<string, unknown>> | null;
   titulares: Array<Record<string, unknown>> | null;
 }
@@ -565,11 +791,13 @@ interface FilaPropiedad {
  */
 const selectPropiedad = (incluirCerradas = false): string => `
   SELECT p.*,
+    cap.nombre AS captador_nombre,
     (SELECT json_agg(json_build_object(
         'id', o.id, 'tipo', o.tipo, 'precio', o.precio, 'moneda', o.moneda,
         'expensas', o.expensas, 'expensasMoneda', o.expensas_moneda,
         'estado', o.estado, 'exclusividadHasta', o.exclusividad_hasta,
         'fechaPublicacion', o.fecha_publicacion,
+        'comisionConfig', o.comision_config,
         'contratoHasta', (
           SELECT max(c.fecha_fin) FROM contrato_alquiler c
            WHERE c.propiedad_id = p.id AND c.estado = 'vigente'))
@@ -583,11 +811,12 @@ const selectPropiedad = (incluirCerradas = false): string => `
       ORDER BY t.porcentaje DESC)
      FROM titularidad t JOIN persona pe ON pe.id = t.persona_id
      WHERE t.propiedad_id = p.id) AS titulares
-  FROM propiedad p`;
+  FROM propiedad p
+  LEFT JOIN usuario cap ON cap.id = p.agente_captador_id`;
 
 const SELECT_PROPIEDAD = selectPropiedad();
 
-function aPropiedad(f: FilaPropiedad): Propiedad {
+function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
   const direccion = [
     [f.calle, f.numero].filter(Boolean).join(' '),
     [f.piso && `Piso ${f.piso}`, f.depto && `Depto ${f.depto}`].filter(Boolean).join(' '),
@@ -611,6 +840,8 @@ function aPropiedad(f: FilaPropiedad): Propiedad {
     lat: f.lat === null ? null : Number(f.lat),
     lng: f.lng === null ? null : Number(f.lng),
     ubicacionConocida: f.lat !== null && f.lng !== null,
+    geocodeFuente: f.geocode_fuente,
+    geocodeEl: f.geocode_el ? f.geocode_el.toISOString() : null,
     tipo: f.tipo,
     supTotal: num(f.sup_total),
     supCubierta: num(f.sup_cubierta),
@@ -624,6 +855,9 @@ function aPropiedad(f: FilaPropiedad): Propiedad {
     amenities: f.amenities ?? [],
     descripcion: f.descripcion,
     notasInternas: f.notas_internas,
+    agenteCaptador: f.agente_captador_id
+      ? { id: f.agente_captador_id, nombre: f.captador_nombre ?? '' }
+      : null,
     operaciones: (f.operaciones ?? []).map((o) => ({
       id: String(o.id),
       tipo: String(o.tipo),
@@ -635,6 +869,11 @@ function aPropiedad(f: FilaPropiedad): Propiedad {
       exclusividadHasta: (o.exclusividadHasta as string) ?? null,
       fechaPublicacion: (o.fechaPublicacion as string) ?? null,
       contratoHasta: (o.contratoHasta as string) ?? null,
+      comision: comisionDeOperacion(
+        String(o.tipo),
+        (o.comisionConfig as Partial<ConfigComisiones>) ?? {},
+        config,
+      ),
     })),
     titulares: (f.titulares ?? []).map((t) => ({
       personaId: String(t.personaId),
@@ -642,6 +881,54 @@ function aPropiedad(f: FilaPropiedad): Propiedad {
       porcentaje: Number(t.porcentaje),
     })),
   };
+}
+
+/**
+ * Los honorarios de una operación: su override sobre la política de la casa.
+ *
+ * El merge es **campo por campo**, la misma regla que `configEfectiva` y que
+ * `leerConfig`: con `{"venta":{"compradora":4}}` guardado, un spread de primer
+ * nivel dejaría `vendedora` en `undefined` y el listado mostraría 4 % de total
+ * cuando la operación cobra 4 % + 3 %.
+ *
+ * Un alquiler temporario todavía no tiene puntas propias en la política de la
+ * casa: usa las de alquiler, que es lo que hace la inmobiliaria hoy. Cuando
+ * tenga las suyas se agregan al jsonb del tenant, no acá.
+ */
+function comisionDeOperacion(
+  tipo: string,
+  propio: Partial<ConfigComisiones>,
+  casa: ConfigComisiones,
+): Operacion['comision'] {
+  if (tipo === 'venta') {
+    const p = { ...casa.venta, ...(propio.venta ?? {}) };
+    return {
+      puntas: { compradora: p.compradora, vendedora: p.vendedora },
+      total: round2(p.compradora + p.vendedora),
+      propio: Boolean(propio.venta),
+    };
+  }
+  const p = { ...casa.alquiler, ...(propio.alquiler ?? {}) };
+  return {
+    puntas: { locataria: p.locataria, locadora: p.locadora },
+    total: round2(p.locataria + p.locadora),
+    propio: Boolean(propio.alquiler),
+  };
+}
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/** Sólo las secciones que vinieron. Lo que no vino, se hereda. */
+function limpiarOverride(dto: {
+  venta?: { compradora: number; vendedora: number };
+  alquiler?: { locataria: number; locadora: number };
+}): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (dto.venta) out.venta = dto.venta;
+  if (dto.alquiler) out.alquiler = dto.alquiler;
+  return out;
 }
 
 /** pg devuelve numeric como string para no perder precisión. */

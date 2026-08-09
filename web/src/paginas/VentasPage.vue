@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
+import SelectAgente from '../componentes/SelectAgente.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { fecha, money } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
+import { filtrosRecordados } from '../dominio/filtros';
+import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
+import { useAuth } from '../stores/auth';
 
 interface Venta {
   id: string;
@@ -17,6 +21,7 @@ interface Venta {
   comprador: { nombre: string } | null;
   precioCierre: number; moneda: string; estado: string;
   fechaBoleto: string | null; fechaEscritura: string | null;
+  agenteCaptador: { id: string; nombre: string } | null;
   totales: { operacion: number; externas: number; agentes: number; casa: number };
 }
 
@@ -30,6 +35,7 @@ const TONO: Record<string, 'neutro' | 'warn' | 'ok' | 'err'> = {
 const POR_PAGINA = 25;
 
 const router = useRouter();
+const auth = useAuth();
 const items = ref<Venta[]>([]);
 const total = ref(0);
 const paginas = ref(1);
@@ -39,13 +45,21 @@ const filtroEstado = ref('');
 const cargando = ref(true);
 const error = ref('');
 
+const { valores: filtros } = filtrosRecordados('ventas', { agente: '' });
+
+const hayFiltroAgente = computed(() => hayFiltroDeAgente(filtros.value.agente));
+
 async function cargar() {
   cargando.value = true; error.value = '';
   try {
     const r = await api<Pagina<Venta>>(
       `/ventas?${consulta(
         { pagina: pagina.value, porPagina: POR_PAGINA },
-        { q: q.value.trim(), estado: filtroEstado.value },
+        {
+          q: q.value.trim(),
+          estado: filtroEstado.value,
+          ...paramsDeAgente(filtros.value.agente, auth.usuario?.id ?? null),
+        },
       )}`,
     );
     items.value = r.items;
@@ -57,11 +71,11 @@ async function cargar() {
 }
 
 let debounce: ReturnType<typeof setTimeout> | undefined;
-watch([q, filtroEstado], () => {
+watch([q, filtroEstado, filtros], () => {
   clearTimeout(debounce);
   pagina.value = 1;
   debounce = setTimeout(cargar, 220);
-});
+}, { deep: true });
 watch(pagina, () => void cargar());
 
 onMounted(cargar);
@@ -88,14 +102,26 @@ onMounted(cargar);
           {{ etiqueta }}
         </button>
       </div>
+
+      <SelectAgente v-model="filtros.agente" />
     </div>
+
+    <!-- El criterio del filtro se dice, porque no es obvio y el número
+         sorprende: la suma de «las de Sofía» + «las de Nicolás» puede dar más
+         que el total, porque una venta que uno captó y otro cerró cuenta para
+         los dos. Sin este renglón parece un error de cuentas. -->
+    <p v-if="hayFiltroAgente" class="criterio">
+      Se muestran las ventas donde esa persona <strong>cobra comisión</strong> o
+      <strong>captó la propiedad</strong>. Una venta con las dos cosas repartidas entre
+      dos personas aparece en las listas de las dos.
+    </p>
 
     <div class="card sin-padding">
       <UiSkeleton v-if="cargando" :filas="4" />
       <UiEmpty
-        v-else-if="!items.length && (q || filtroEstado)"
+        v-else-if="!items.length && (q || filtroEstado || hayFiltroAgente)"
         titulo="Ninguna venta coincide"
-        detalle="Probá con otro texto o sacá el filtro de estado."
+        detalle="Probá con otro texto, sacá el filtro de estado o mirá toda la inmobiliaria."
       />
       <UiEmpty v-else-if="!items.length" titulo="Todavía no hay ventas"
         detalle="Una venta se abre desde la operación de la propiedad, con el precio de cierre. Después se reparte la comisión en sus tres niveles." />
@@ -112,6 +138,9 @@ onMounted(cargar);
               <td>
                 <span class="mono cod">{{ v.propiedad.etiqueta }}</span>
                 <span class="dir">{{ v.propiedad.direccion }}</span>
+                <span v-if="v.agenteCaptador" class="captador">
+                  captó {{ v.agenteCaptador.nombre }}
+                </span>
               </td>
               <td>{{ v.comprador?.nombre ?? '—' }}</td>
               <td class="der mono fuerte">{{ money(v.precioCierre, v.moneda) }}</td>
@@ -142,4 +171,7 @@ onMounted(cargar);
 
 .dir { color: var(--ink); }
 .cuando { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-2); }
+.captador { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-2); }
+.criterio { margin: 0; font-size: 12px; color: var(--muted); max-width: 76ch; line-height: 1.5; }
+.criterio strong { color: var(--ink-2); font-weight: 500; }
 </style>

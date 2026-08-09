@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
+import SelectAgente from '../componentes/SelectAgente.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { ETIQUETA_ESTADO_OPORTUNIDAD, ETIQUETA_ORIGEN, fechaHora, moneyCorto } from '../dominio/formato';
+import { filtrosRecordados } from '../dominio/filtros';
+import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
+import { consulta } from '../dominio/pagina';
+import { useAuth } from '../stores/auth';
 
 interface Oportunidad {
   id: string;
@@ -26,13 +31,37 @@ const cargando = ref(true);
 const error = ref('');
 const moviendo = ref<string | null>(null);
 
+const auth = useAuth();
+
+/**
+ * Los leads son la EXCEPCIÓN declarada al filtro por agente.
+ *
+ * En el resto de los listados el filtro es una herramienta y cualquiera ve toda
+ * la inmobiliaria. Acá el rol `agente` ve sólo los suyos, por una regla de
+ * negocio escrita en `oportunidades.service.ts`: «es la diferencia entre el
+ * equipo colabora y cualquiera se lleva la cartera de leads». Abrirla no se
+ * revierte con un deploy, así que no se abrió sin que lo pida el dueño.
+ *
+ * Consecuencia de interfaz: a un asesor NO se le ofrecen los compañeros. Antes,
+ * el back le contestaba con una lista vacía —indistinguible de «ese agente no
+ * tiene leads»—; hoy es un 403, y el desplegable directamente no está.
+ */
+const soloPropias = computed(() => auth.rol === 'agente');
+const { valores: filtros } = filtrosRecordados('leads', { agente: '' });
+const hayFiltro = computed(() => hayFiltroDeAgente(filtros.value.agente));
+
 async function cargar() {
   cargando.value = true; error.value = '';
   try {
-    const r = await api<{ items: Oportunidad[] }>('/oportunidades?porPagina=100');
+    const r = await api<{ items: Oportunidad[] }>(
+      `/oportunidades?${consulta(
+        { pagina: 1, porPagina: 100 },
+        paramsDeAgente(filtros.value.agente, auth.usuario?.id ?? null),
+      )}`,
+    );
     items.value = r.items;
   } catch (e) {
-    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar las oportunidades.';
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron cargar los leads.';
   } finally { cargando.value = false; }
 }
 
@@ -57,27 +86,47 @@ async function avanzar(o: Oportunidad) {
   } finally { moviendo.value = null; }
 }
 
+watch(filtros, () => void cargar(), { deep: true });
+
 onMounted(cargar);
 </script>
 
 <template>
   <div class="stack">
-    <PageHeader titulo="Oportunidades" :bajada="cargando ? '' : `${items.length} en seguimiento`">
+    <PageHeader titulo="Leads" :bajada="cargando ? '' : `${items.length} en seguimiento`">
       <template #acciones>
-        <RouterLink class="btn" to="/oportunidades/nueva">Nueva oportunidad</RouterLink>
+        <RouterLink class="btn" to="/leads/nueva">Nuevo lead</RouterLink>
       </template>
     </PageHeader>
+
+    <div class="filtros">
+      <SelectAgente v-model="filtros.agente" :solo-propias="soloPropias" />
+      <p v-if="soloPropias" class="nota-rol">
+        Tu rol ve solamente sus propios leads. El resto de los listados
+        —propiedades, cartera, ventas y avisos— los ves enteros.
+      </p>
+    </div>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
     <UiSkeleton v-if="cargando" :filas="3" :alto="120" />
 
     <UiEmpty
+      v-else-if="!items.length && hayFiltro"
+      titulo="Ningún lead de esa persona"
+      detalle="Sacá el filtro para ver los de toda la inmobiliaria."
+    >
+      <button class="btn secondary" type="button" @click="filtros.agente = ''">
+        Quitar el filtro
+      </button>
+    </UiEmpty>
+
+    <UiEmpty
       v-else-if="!items.length"
-      titulo="Todavía no hay oportunidades"
+      titulo="Todavía no hay leads"
       detalle="Cada consulta que entra por portal, WhatsApp o teléfono se registra acá y no se pierde."
     >
-      <RouterLink class="btn" to="/oportunidades/nueva">Registrar la primera</RouterLink>
+      <RouterLink class="btn" to="/leads/nueva">Registrar el primero</RouterLink>
     </UiEmpty>
 
     <template v-else>
@@ -94,6 +143,10 @@ onMounted(cargar);
               <p v-else-if="o.presupuestoMax" class="prop mono">
                 hasta {{ moneyCorto(o.presupuestoMax, o.moneda) }}
               </p>
+              <!-- `agenteNombre` venía en la respuesta desde el primer día y no
+                   se mostraba: la misma trampa que `tipoOperacion` en avisos. Sin
+                   él, filtrar por una persona era confiar a ciegas. -->
+              <p v-if="o.agenteNombre" class="agente">{{ o.agenteNombre }}</p>
               <div class="meta">
                 <StatusChip :texto="ETIQUETA_ORIGEN[o.origen] ?? o.origen" />
                 <span v-if="o.visitas.length" class="visita">
@@ -162,6 +215,8 @@ onMounted(cargar);
 }
 .nombre { margin: 0; color: var(--ink); font-weight: 500; font-size: 13px; }
 .prop { margin: 0; font-size: 11px; color: var(--muted); }
+.agente { margin: 0; font-size: 11px; color: var(--muted-2); }
+.nota-rol { margin: 0; font-size: 12px; color: var(--muted); max-width: 60ch; }
 .meta { display: flex; gap: var(--s-xs); align-items: center; flex-wrap: wrap; }
 .visita { font-size: 11px; color: var(--accent); }
 .avanzar {

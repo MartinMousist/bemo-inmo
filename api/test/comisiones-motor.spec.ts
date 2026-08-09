@@ -174,4 +174,127 @@ describe('Motor de comisiones', () => {
     expect(r.totalAgentes).toBe(121250);
     expect(cuadra(r)).toBe(true);
   });
+
+  // ── Compartir con otra inmobiliaria ────────────────────────────────────────
+
+  describe('compartir la comisión', () => {
+    it.each([
+      [50, 3000, 750, 2250],
+      [60, 3600, 600, 1800],
+      [40, 2400, 900, 2700],
+    ])(
+      'con el %i%% para la otra agencia: externa %i, agente %i, casa %i',
+      (fraccion, aExterna, aAgente, aLaCasa) => {
+        const r = calcularComisiones({
+          base: 200000,
+          moneda: 'USD',
+          puntas: { vendedora: 3 },
+          externas: { vendedora: { nombre: 'Colega SRL', porcentaje: fraccion } },
+          repartoInterno: { captador: casa },
+        });
+
+        expect(r.totalOperacion).toBe(6000);
+        expect(r.totalExternas).toBe(aExterna);
+        // Lo que se lleva el agente BAJA cuando se comparte, porque el nivel 3
+        // se aplica sobre lo que queda de la punta y no sobre el bruto. No es
+        // obvio, y es lo que la pantalla tiene que mostrar antes de tildar la
+        // casilla: alguien puede firmar un 50/50 creyendo que su comisión no se
+        // toca.
+        expect(r.totalAgentes).toBe(aAgente);
+        expect(r.totalCasa).toBe(aLaCasa);
+        expect(cuadra(r)).toBe(true);
+      },
+    );
+
+    it('compartir una punta que NO cobra no emite ninguna línea', () => {
+      // Es el caso que el servicio corta con un 422 antes de llegar acá: el
+      // motor calcula `0 × 50% = 0`, no emite fila, y el reparto sale prolijo
+      // con la agencia con la que se acordó 50/50 ausente. Nadie lo ve hasta
+      // que la otra inmobiliaria reclama.
+      const r = calcularComisiones({
+        base: 200000,
+        moneda: 'USD',
+        puntas: { compradora: 3, vendedora: 0 },
+        externas: { vendedora: { nombre: 'Fantasma SRL', porcentaje: 50 } },
+      });
+
+      expect(r.totalExternas).toBe(0);
+      expect(r.lineas.filter((l) => l.beneficiarioTipo === 'inmobiliaria_externa'))
+        .toHaveLength(0);
+    });
+
+    it('la ficha del catálogo viaja en la línea, y el nombre también', () => {
+      // Las dos cosas y no una: el `externaId` sirve para sumar después cuánto
+      // se le pagó a cada agencia, y el nombre queda CONGELADO porque una
+      // comisión ya cobrada no cambia de acreedor si alguien renombra la ficha.
+      const r = calcularComisiones({
+        base: 100000,
+        moneda: 'USD',
+        puntas: { vendedora: 3 },
+        externas: {
+          vendedora: { nombre: 'Del Oeste', porcentaje: 50, externaId: 'ext-1' },
+        },
+      });
+
+      const linea = r.lineas.find((l) => l.beneficiarioTipo === 'inmobiliaria_externa');
+      expect(linea?.externaId).toBe('ext-1');
+      expect(linea?.beneficiarioNombre).toBe('Del Oeste');
+    });
+
+    it('dos puntas compartidas con agencias distintas', () => {
+      const r = calcularComisiones({
+        base: 300000,
+        moneda: 'USD',
+        puntas: { compradora: 3, vendedora: 3 },
+        externas: {
+          compradora: { nombre: 'Una', porcentaje: 50 },
+          vendedora: { nombre: 'Otra', porcentaje: 25 },
+        },
+        repartoInterno: { captador: casa },
+      });
+
+      expect(r.totalOperacion).toBe(18000);
+      expect(r.totalExternas).toBe(4500 + 2250);
+      const nombres = r.lineas
+        .filter((l) => l.beneficiarioTipo === 'inmobiliaria_externa')
+        .map((l) => l.beneficiarioNombre);
+      expect(nombres.sort()).toEqual(['Otra', 'Una']);
+      expect(cuadra(r)).toBe(true);
+    });
+  });
+
+  // ── La memoria de cálculo ──────────────────────────────────────────────────
+
+  describe('la memoria de cálculo', () => {
+    it('cada línea explica de dónde sale su número', () => {
+      const r = calcularComisiones({
+        base: 162000,
+        moneda: 'USD',
+        puntas: { vendedora: 3 },
+        repartoInterno: { captador: casa },
+      });
+
+      const nivel1 = r.lineas.find((l) => l.nivel === 1);
+      expect(nivel1?.memoria).toBe('USD 162.000 × 3 % = USD 4.860');
+
+      const agente = r.lineas.find((l) => l.beneficiarioTipo === 'agente');
+      expect(agente?.memoria).toBe('USD 4.860 × 25 % = USD 1.215');
+    });
+
+    it('la línea de la casa se explica como un RESTO, no como un porcentaje', () => {
+      // Escribirla «× 50 % =» sería mentir sobre cómo se calculó, aunque el
+      // número dé: el resto sale por diferencia justamente para que no se
+      // pierda ni se invente un centavo con el redondeo.
+      const r = calcularComisiones({
+        base: 100000,
+        moneda: 'ARS',
+        puntas: { vendedora: 3 },
+        repartoInterno: { captador: casa },
+      });
+
+      const laCasa = r.lineas.find((l) => l.beneficiarioTipo === 'casa');
+      expect(laCasa?.memoria).toContain('−');
+      expect(laCasa?.memoria).toContain('ARS 2.250');
+    });
+  });
 });

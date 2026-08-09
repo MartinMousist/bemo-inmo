@@ -6,8 +6,19 @@ import {
   calcularComisiones,
   cuadra,
   type EntradaComision,
+  type LineaComision as LineaMotor,
   type Punta,
 } from './comisiones.motor';
+import {
+  aLineas,
+  cuadraGuardado,
+  hayReparto,
+  SELECT_COMISIONES,
+  totalesDe,
+  type LineaGuardada,
+  type TotalesComision,
+} from './comisiones.lectura';
+import { configEfectiva } from './comisiones.config.service';
 import type {
   CerrarVentaDto,
   CrearVentaDto,
@@ -26,23 +37,15 @@ export interface Venta {
   fechaEscritura: string | null;
   escribania: string | null;
   estado: string;
-  comisiones: Array<{
-    id: string;
-    nivel: number;
-    punta: string | null;
-    concepto: string;
-    monto: number;
-    moneda: string;
-    beneficiarioTipo: string;
-    beneficiarioNombre: string | null;
-    estado: string;
-  }>;
-  totales: {
-    operacion: number;
-    externas: number;
-    agentes: number;
-    casa: number;
-  };
+  /** Quién captó la propiedad. Es lo que pre-llena el captador del reparto. */
+  agenteCaptador: { id: string; nombre: string } | null;
+  operacionId: string;
+  comisiones: LineaGuardada[];
+  totales: TotalesComision;
+  /** ¿Lo que se repartió suma exactamente lo que factura la operación? */
+  cuadra: boolean;
+  /** ¿Ya se repartió, o sólo están los honorarios de la operación? */
+  repartida: boolean;
 }
 
 /** Los estados por los que pasa una venta, en orden. */
@@ -55,14 +58,34 @@ export class VentasService {
   async listar(tenantId: string, f: FiltroVentasDto): Promise<Pagina<Venta>> {
     return this.db.withTenant(tenantId, async (ej) => {
       const q = f.q ? `%${f.q.trim()}%` : null;
-      const params = [q, f.estado ?? null];
+      const params = [q, f.estado ?? null, f.agenteId ?? null];
 
+      // «Mis ventas» son DOS cosas y las dos cuentan: donde el agente cobra
+      // comisión, y donde captó la propiedad.
+      //
+      // Sólo por comisión sería el criterio estricto —la relación fuerte es
+      // `comision.beneficiario_id`, con su índice parcial `ix_comision_agente`—
+      // pero una venta recién cargada TODAVÍA NO tiene reparto, así que no
+      // tiene ni una fila de comisión: «mis ventas» aparecería vacío justo en
+      // el momento en que más se mira, que es cuando la operación se acaba de
+      // cerrar. Sólo por captador sería peor todavía: quien vendió la propiedad
+      // de un compañero no la vería nunca.
+      //
+      // La pantalla lo dice con todas las letras («ventas donde cobrás comisión
+      // o captaste la propiedad») para que el número no sorprenda.
       const donde = `
         WHERE ($1::text IS NULL
                OR pr.calle ILIKE $1 OR pr.localidad ILIKE $1
                OR pr.codigo::text = trim(both '%' from $1)
                OR trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')) ILIKE $1)
-          AND ($2::text IS NULL OR v.estado = $2)`;
+          AND ($2::text IS NULL OR v.estado = $2)
+          AND ($3::uuid IS NULL
+               OR pr.agente_captador_id = $3
+               OR EXISTS (SELECT 1 FROM comision cm
+                           WHERE cm.venta_id = v.id
+                             AND cm.beneficiario_tipo = 'agente'
+                             AND cm.beneficiario_id = $3
+                             AND cm.estado <> 'anulada'))`;
 
       // El conteo NO usa SELECT_VENTA: ese trae el json_agg de comisiones por
       // fila, y contar no necesita las comisiones de nadie.
@@ -77,7 +100,7 @@ export class VentasService {
       );
 
       const { rows } = await ej.query<FilaVenta>(
-        `${SELECT_VENTA} ${donde} ORDER BY v.created_at DESC LIMIT $3 OFFSET $4`,
+        `${SELECT_VENTA} ${donde} ORDER BY v.created_at DESC LIMIT $4 OFFSET $5`,
         [...params, f.porPagina, offset(f)],
       );
 
@@ -168,6 +191,8 @@ export class VentasService {
         repartoInterno: dto.repartoInterno,
       };
 
+      validarReparto(entrada);
+
       const r = calcularComisiones(entrada);
 
       // Invariante dura: lo que factura la operación es exactamente lo que se
@@ -194,76 +219,73 @@ export class VentasService {
       // (uno por punta), y NO por el orden en que vuelve el RETURNING: el orden
       // de las filas devueltas por un INSERT no es algo que el motor garantice,
       // y acá una fila mal encadenada es plata asignada a quien no corresponde.
-      const nivel1 = r.lineas.filter((l) => l.nivel === 1);
-      const resto = r.lineas.filter((l) => l.nivel !== 1);
-
-      const idPorPunta = new Map<string, string>();
-
-      if (nivel1.length) {
-        const { rows: creadas } = await ej.query<{ id: string; punta: string }>(
-          `INSERT INTO comision
-             (tenant_id, venta_id, padre_id, nivel, punta, base_monto, moneda,
-              porcentaje, monto, beneficiario_tipo, beneficiario_id,
-              beneficiario_nombre, concepto)
-           SELECT $1, $2, NULL, 1, x.punta, x.base, x.moneda, x.porcentaje,
-                  x.monto, x.beneficiario_tipo, NULL, NULL, x.concepto
-             FROM unnest($3::text[], $4::numeric[], $5::text[], $6::numeric[],
-                         $7::numeric[], $8::text[], $9::text[])
-                  AS x(punta, base, moneda, porcentaje, monto,
-                       beneficiario_tipo, concepto)
-           RETURNING id, punta`,
-          [
-            tenantId, ventaId,
-            nivel1.map((l) => l.punta),
-            nivel1.map((l) => l.base),
-            nivel1.map((l) => l.moneda),
-            nivel1.map((l) => l.porcentaje),
-            nivel1.map((l) => l.monto),
-            nivel1.map((l) => l.beneficiarioTipo),
-            nivel1.map((l) => l.concepto),
-          ],
-        );
-        for (const c of creadas) idPorPunta.set(c.punta, c.id);
-      }
-
-      if (resto.length) {
-        const padres = resto.map((l) => {
-          const dePunta = l.padre === undefined ? null : r.lineas[l.padre].punta;
-          return dePunta === null ? null : (idPorPunta.get(dePunta) ?? null);
-        });
-
-        await ej.query(
-          `INSERT INTO comision
-             (tenant_id, venta_id, padre_id, nivel, punta, base_monto, moneda,
-              porcentaje, monto, beneficiario_tipo, beneficiario_id,
-              beneficiario_nombre, concepto)
-           SELECT $1, $2, x.padre_id, x.nivel, x.punta, x.base, x.moneda,
-                  x.porcentaje, x.monto, x.beneficiario_tipo, x.beneficiario_id,
-                  x.beneficiario_nombre, x.concepto
-             FROM unnest($3::uuid[], $4::smallint[], $5::text[], $6::numeric[],
-                         $7::text[], $8::numeric[], $9::numeric[], $10::text[],
-                         $11::uuid[], $12::text[], $13::text[])
-                  AS x(padre_id, nivel, punta, base, moneda, porcentaje, monto,
-                       beneficiario_tipo, beneficiario_id, beneficiario_nombre,
-                       concepto)`,
-          [
-            tenantId, ventaId,
-            padres,
-            resto.map((l) => l.nivel),
-            resto.map((l) => l.punta),
-            resto.map((l) => l.base),
-            resto.map((l) => l.moneda),
-            resto.map((l) => l.porcentaje),
-            resto.map((l) => l.monto),
-            resto.map((l) => l.beneficiarioTipo),
-            resto.map((l) => l.beneficiarioId ?? null),
-            resto.map((l) => l.beneficiarioNombre ?? null),
-            resto.map((l) => l.concepto),
-          ],
-        );
-      }
+      await insertarLineas(ej, tenantId, { ventaId }, r.lineas);
 
       return this.leer(ej, ventaId);
+    });
+  }
+
+  /**
+   * El reparto que el sistema propone, para que la pantalla lo muestre ya
+   * cargado.
+   *
+   * **El servidor sugiere; el usuario confirma.** Todo lo que devuelve es
+   * editable, y por una razón concreta escrita en el traspaso: el captador no
+   * siempre es quien cargó la propiedad. Lo automático tiene que ser un valor
+   * por defecto, no un hecho.
+   *
+   * De dónde sale cada cosa:
+   *   · puntas    → `configEfectiva`: el override de la operación sobre la
+   *                 política de la casa.
+   *   · captador  → `propiedad.agente_captador_id`, con el % de SU membresía y
+   *                 fallback al de la inmobiliaria.
+   *   · cerrador  → quien está cargando el reparto, con el mismo criterio.
+   *   · externa   → la de la operación, si ya se compartió alguna vez.
+   */
+  async sugerirReparto(
+    tenantId: string,
+    ventaId: string,
+    actor: { usuarioId: string },
+  ): Promise<SugerenciaReparto> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{
+        operacion_id: string;
+        precio_cierre: string;
+        moneda: string;
+        captador_id: string | null;
+        captador_nombre: string | null;
+      }>(
+        `SELECT v.operacion_id, v.precio_cierre, v.moneda,
+                pr.agente_captador_id AS captador_id, cap.nombre AS captador_nombre
+           FROM operacion_venta v
+           JOIN operacion o ON o.id = v.operacion_id
+           JOIN propiedad pr ON pr.id = o.propiedad_id
+           LEFT JOIN usuario cap ON cap.id = pr.agente_captador_id
+          WHERE v.id = $1`,
+        [ventaId],
+      );
+      if (!rows.length) throw AppError.notFound('No se encontró esa venta.');
+      const v = rows[0];
+
+      const { config, heredada } = await configEfectiva(ej, tenantId, v.operacion_id);
+      const captador = await pctDeAgente(
+        ej, v.captador_id, config.repartoInterno.captador, 'captador',
+      );
+      const cerrador = await pctDeAgente(
+        ej, actor.usuarioId, config.repartoInterno.cerrador, 'cerrador',
+      );
+
+      return {
+        base: Number(v.precio_cierre),
+        moneda: v.moneda,
+        puntas: { compradora: config.venta.compradora, vendedora: config.venta.vendedora },
+        puntasHeredadas: heredada,
+        captador: v.captador_id
+          ? { ...captador, usuarioId: v.captador_id, nombre: v.captador_nombre ?? '' }
+          : null,
+        cerrador: { ...cerrador, usuarioId: actor.usuarioId },
+        repartoInternoCasa: config.repartoInterno,
+      };
     });
   }
 
@@ -389,6 +411,7 @@ export class VentasService {
 
 interface FilaVenta {
   id: string;
+  operacion_id: string;
   propiedad_id: string;
   propiedad_codigo: number;
   propiedad_calle: string;
@@ -396,6 +419,8 @@ interface FilaVenta {
   propiedad_localidad: string | null;
   comprador_id: string | null;
   comprador_nombre: string | null;
+  captador_id: string | null;
+  captador_nombre: string | null;
   precio_cierre: string;
   moneda: string;
   fecha_reserva: string | null;
@@ -411,36 +436,16 @@ const SELECT_VENTA = `
     pr.id AS propiedad_id, pr.codigo AS propiedad_codigo, pr.calle AS propiedad_calle,
     pr.numero AS propiedad_numero, pr.localidad AS propiedad_localidad,
     trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')) AS comprador_nombre,
-    (SELECT json_agg(json_build_object(
-        'id', c.id, 'nivel', c.nivel, 'punta', c.punta, 'concepto', c.concepto,
-        'monto', c.monto, 'moneda', c.moneda,
-        'beneficiarioTipo', c.beneficiario_tipo,
-        'beneficiarioNombre', coalesce(u.nombre, c.beneficiario_nombre),
-        'estado', c.estado) ORDER BY c.nivel, c.created_at)
-       FROM comision c LEFT JOIN usuario u ON u.id = c.beneficiario_id
-      WHERE c.venta_id = v.id) AS comisiones
+    pr.agente_captador_id AS captador_id, cap.nombre AS captador_nombre,
+    ${SELECT_COMISIONES('c.venta_id = v.id')} AS comisiones
   FROM operacion_venta v
   JOIN operacion o ON o.id = v.operacion_id
   JOIN propiedad pr ON pr.id = o.propiedad_id
-  LEFT JOIN persona pe ON pe.id = v.comprador_id`;
+  LEFT JOIN persona pe ON pe.id = v.comprador_id
+  LEFT JOIN usuario cap ON cap.id = pr.agente_captador_id`;
 
 function aVenta(f: FilaVenta): Venta {
-  const comisiones = (f.comisiones ?? []).map((c) => ({
-    id: String(c.id),
-    nivel: Number(c.nivel),
-    punta: (c.punta as string) ?? null,
-    concepto: String(c.concepto),
-    monto: Number(c.monto),
-    moneda: String(c.moneda),
-    beneficiarioTipo: String(c.beneficiarioTipo),
-    beneficiarioNombre: (c.beneficiarioNombre as string) ?? null,
-    estado: String(c.estado),
-  }));
-
-  const suma = (tipo: string) =>
-    comisiones
-      .filter((c) => c.beneficiarioTipo === tipo && c.estado !== 'anulada')
-      .reduce((a, c) => a + c.monto, 0);
+  const comisiones = aLineas(f.comisiones);
 
   return {
     id: f.id,
@@ -457,6 +462,10 @@ function aVenta(f: FilaVenta): Venta {
     comprador: f.comprador_id
       ? { id: f.comprador_id, nombre: f.comprador_nombre ?? '' }
       : null,
+    agenteCaptador: f.captador_id
+      ? { id: f.captador_id, nombre: f.captador_nombre ?? '' }
+      : null,
+    operacionId: f.operacion_id,
     precioCierre: Number(f.precio_cierre),
     moneda: f.moneda,
     fechaReserva: f.fecha_reserva,
@@ -465,21 +474,200 @@ function aVenta(f: FilaVenta): Venta {
     escribania: f.escribania,
     estado: f.estado,
     comisiones,
-    totales: {
-      operacion: redondear(suma('operacion')),
-      externas: redondear(suma('inmobiliaria_externa')),
-      agentes: redondear(suma('agente')),
-      casa: redondear(suma('casa')),
-    },
+    totales: totalesDe(comisiones),
+    cuadra: cuadraGuardado(comisiones),
+    repartida: hayReparto(comisiones),
   };
-}
-
-function redondear(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 function codigoPg(err: unknown): string | undefined {
   return typeof err === 'object' && err !== null && 'code' in err
     ? String((err as { code: unknown }).code)
     : undefined;
+}
+
+/** El % de un agente para un rol, con su origen. */
+export interface PctAgente {
+  nombre: string;
+  porcentaje: number;
+  /** `true` si es el de SU membresía; `false` si heredó el de la casa. */
+  propio: boolean;
+}
+
+export interface SugerenciaReparto {
+  base: number;
+  moneda: string;
+  puntas: Record<string, number>;
+  /** `false` cuando la operación tiene su propio % y no el de la casa. */
+  puntasHeredadas: boolean;
+  captador: (PctAgente & { usuarioId: string }) | null;
+  cerrador: PctAgente & { usuarioId: string };
+  /** El reparto interno de la casa, para poder mostrar de dónde salió cada %. */
+  repartoInternoCasa: { captador: number; cerrador: number };
+}
+
+/**
+ * El % que le toca a un agente, con fallback a la política de la casa.
+ *
+ * `membresia.comision_captador_pct` en NULL **no es cero**: es «heredá el de la
+ * inmobiliaria». Está escrito así en el COMMENT de la 017 y es la razón por la
+ * que este fallback existe en vez de un `coalesce` en el SQL — el llamador
+ * necesita saber si el número es propio o heredado para poder decirlo en
+ * pantalla.
+ */
+export async function pctDeAgente(
+  ej: Ejecutor,
+  usuarioId: string | null,
+  porDefecto: number,
+  rol: 'captador' | 'cerrador' = 'captador',
+): Promise<PctAgente> {
+  if (!usuarioId) return { nombre: '', porcentaje: porDefecto, propio: false };
+
+  const columna = rol === 'captador' ? 'comision_captador_pct' : 'comision_cerrador_pct';
+  const { rows } = await ej.query<{ nombre: string; pct: string | null }>(
+    `SELECT u.nombre, m.${columna} AS pct
+       FROM membresia m JOIN usuario u ON u.id = m.usuario_id
+      WHERE m.usuario_id = $1`,
+    [usuarioId],
+  );
+  if (!rows.length) return { nombre: '', porcentaje: porDefecto, propio: false };
+
+  const pct = rows[0].pct;
+  return {
+    nombre: rows[0].nombre,
+    porcentaje: pct === null ? porDefecto : Number(pct),
+    propio: pct !== null,
+  };
+}
+
+/**
+ * Las reglas que el motor no puede chequear porque no sabe de dónde vino la
+ * entrada.
+ *
+ * Compartir una punta que no cobra nada es la más traicionera: el motor calcula
+ * `0 × 50% = 0`, no emite ninguna línea, y la pantalla muestra un reparto
+ * prolijo donde la agencia con la que se acordó 50/50 no figura. Nadie ve el
+ * error hasta que la otra inmobiliaria reclama.
+ */
+function validarReparto(e: EntradaComision): void {
+  const conMonto = Object.entries(e.puntas).filter(([, p]) => Number(p) > 0);
+  if (!conMonto.length) {
+    throw new AppError(
+      422, ErrorCode.VALIDATION_FAILED,
+      'El reparto no tiene ninguna punta con honorarios: no habría comisión que repartir.',
+      'Unprocessable Entity',
+    );
+  }
+
+  for (const [punta, externa] of Object.entries(e.externas ?? {})) {
+    if (!externa || !externa.porcentaje) continue;
+    const pct = Number(e.puntas[punta as Punta] ?? 0);
+    if (pct <= 0) {
+      throw new AppError(
+        422, ErrorCode.VALIDATION_FAILED,
+        `Estás compartiendo la punta ${punta} con «${externa.nombre}», pero esa punta ` +
+          'no cobra honorarios: no hay nada que repartir. Cargá el % de la punta primero.',
+        'Unprocessable Entity',
+      );
+    }
+    if (!externa.nombre?.trim()) {
+      throw new AppError(
+        422, ErrorCode.VALIDATION_FAILED,
+        `Falta el nombre de la inmobiliaria con la que se comparte la punta ${punta}.`,
+        'Unprocessable Entity',
+      );
+    }
+  }
+}
+
+/**
+ * Guarda las líneas del motor, sea de una venta o de un contrato de alquiler.
+ *
+ * Dos INSERT en lote, no uno por línea. Todo `padre` del motor apunta a una
+ * línea de NIVEL 1, así que alcanza con dos pasadas: primero los nivel 1,
+ * después el resto ya con el id del padre resuelto. Una venta con dos puntas,
+ * una externa y dos agentes eran nueve viajes a la base.
+ *
+ * El mapeo padre→id se hace por `punta`, que es única entre los nivel 1 (uno
+ * por punta), y NO por el orden en que vuelve el RETURNING: el orden de las
+ * filas devueltas por un INSERT no es algo que el motor garantice, y acá una
+ * fila mal encadenada es plata asignada a quien no corresponde.
+ */
+export async function insertarLineas(
+  ej: Ejecutor,
+  tenantId: string,
+  duenio: { ventaId?: string; contratoId?: string },
+  lineas: LineaMotor[],
+): Promise<void> {
+  const ventaId = duenio.ventaId ?? null;
+  const contratoId = duenio.contratoId ?? null;
+
+  const nivel1 = lineas.filter((l) => l.nivel === 1);
+  const resto = lineas.filter((l) => l.nivel !== 1);
+  const idPorPunta = new Map<string, string>();
+
+  if (nivel1.length) {
+    const { rows: creadas } = await ej.query<{ id: string; punta: string }>(
+      `INSERT INTO comision
+         (tenant_id, venta_id, contrato_id, padre_id, nivel, punta, base_monto,
+          moneda, porcentaje, monto, beneficiario_tipo, beneficiario_id,
+          beneficiario_nombre, externa_id, concepto)
+       SELECT $1, $2, $3, NULL, 1, x.punta, x.base, x.moneda, x.porcentaje,
+              x.monto, x.beneficiario_tipo, NULL, NULL, NULL, x.concepto
+         FROM unnest($4::text[], $5::numeric[], $6::text[], $7::numeric[],
+                     $8::numeric[], $9::text[], $10::text[])
+              AS x(punta, base, moneda, porcentaje, monto,
+                   beneficiario_tipo, concepto)
+       RETURNING id, punta`,
+      [
+        tenantId, ventaId, contratoId,
+        nivel1.map((l) => l.punta),
+        nivel1.map((l) => l.base),
+        nivel1.map((l) => l.moneda),
+        nivel1.map((l) => l.porcentaje),
+        nivel1.map((l) => l.monto),
+        nivel1.map((l) => l.beneficiarioTipo),
+        nivel1.map((l) => l.concepto),
+      ],
+    );
+    for (const c of creadas) idPorPunta.set(c.punta, c.id);
+  }
+
+  if (resto.length) {
+    const padres = resto.map((l) => {
+      const dePunta = l.padre === undefined ? null : lineas[l.padre].punta;
+      return dePunta === null ? null : (idPorPunta.get(dePunta) ?? null);
+    });
+
+    await ej.query(
+      `INSERT INTO comision
+         (tenant_id, venta_id, contrato_id, padre_id, nivel, punta, base_monto,
+          moneda, porcentaje, monto, beneficiario_tipo, beneficiario_id,
+          beneficiario_nombre, externa_id, concepto)
+       SELECT $1, $2, $3, x.padre_id, x.nivel, x.punta, x.base, x.moneda,
+              x.porcentaje, x.monto, x.beneficiario_tipo, x.beneficiario_id,
+              x.beneficiario_nombre, x.externa_id, x.concepto
+         FROM unnest($4::uuid[], $5::smallint[], $6::text[], $7::numeric[],
+                     $8::text[], $9::numeric[], $10::numeric[], $11::text[],
+                     $12::uuid[], $13::text[], $14::uuid[], $15::text[])
+              AS x(padre_id, nivel, punta, base, moneda, porcentaje, monto,
+                   beneficiario_tipo, beneficiario_id, beneficiario_nombre,
+                   externa_id, concepto)`,
+      [
+        tenantId, ventaId, contratoId,
+        padres,
+        resto.map((l) => l.nivel),
+        resto.map((l) => l.punta),
+        resto.map((l) => l.base),
+        resto.map((l) => l.moneda),
+        resto.map((l) => l.porcentaje),
+        resto.map((l) => l.monto),
+        resto.map((l) => l.beneficiarioTipo),
+        resto.map((l) => l.beneficiarioId ?? null),
+        resto.map((l) => l.beneficiarioNombre ?? null),
+        resto.map((l) => l.externaId ?? null),
+        resto.map((l) => l.concepto),
+      ],
+    );
+  }
 }

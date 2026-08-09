@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { AlmacenamientoService } from '../archivos/almacenamiento.service';
+import { RecordatoriosService } from '../recordatorios/recordatorios.service';
 import { DeudoresService } from './deudores.service';
-import { SITUACION } from './situacion.motor';
+import { SITUACION, proximaRevision, type VeredictoCheques } from './situacion.motor';
+import { normalizarAr } from './telefono.motor';
 import type { CrearGaranteDto, EditarGaranteDto } from './garantes.dto';
 
 /**
@@ -28,6 +30,19 @@ import type { CrearGaranteDto, EditarGaranteDto } from './garantes.dto';
  *
  * 3. **Nada se da por bueno sin consultar.** Un garante sin consulta no es apto
  *    ni deja de serlo: está sin verificar, y la pantalla lo dice distinto.
+ *
+ * 4. **Congelar no es no volver a mirar.** El veredicto que respaldó la firma no
+ *    se pisa nunca, y aun así hay que volver a preguntar: un contrato dura tres
+ *    años y quien estaba en situación 1 en enero puede estar en 3 en junio. Por
+ *    eso cada consulta escribe una fila en `garantia_bcra_consulta` y
+ *    `garantia.bcra_*` queda como cache de la última. La primera del historial
+ *    es la que respaldó la firma, y sigue ahí.
+ *
+ * 5. **La re-consulta la aprieta una persona.** El sistema calcula la fecha y
+ *    avisa; salir a buscar el dato bancario de un tercero sin que nadie lo pida
+ *    es lo que NO se hace. Un cron que consultara solo repetiría a escala el
+ *    incidente que ya está anotado en docs/CONTINUAR.md —una consulta con un
+ *    DNI demo trajo la deuda de una persona real— y encima cada seis meses.
  */
 
 /**
@@ -38,10 +53,20 @@ import type { CrearGaranteDto, EditarGaranteDto } from './garantes.dto';
  */
 export const MINIMO_GARANTES = 2;
 
-/** Lo que tiene que presentar cada garante para que el legajo esté completo. */
+/** Lo que tiene que presentar un garante PERSONA para que el legajo esté completo. */
 export const DOCUMENTOS_REQUERIDOS = [
   'dni_frente', 'dni_dorso', 'recibo_1', 'recibo_2', 'recibo_3',
 ] as const;
+
+/**
+ * Lo que se le pide a una garantía SIN persona: el comprobante.
+ *
+ * Un seguro de caución no tiene las dos caras del DNI ni tres recibos de
+ * sueldo, y pedírselos no es sólo raro: es una lista de pendientes que **nunca
+ * se va a poder completar**, mostrada al lado de las que sí. Lo que tiene que
+ * estar adjunto es la póliza.
+ */
+export const DOCUMENTO_COMPROBANTE = 'otro';
 
 export const ETIQUETA_DOCUMENTO: Record<string, string> = {
   dni_frente: 'DNI · frente',
@@ -52,6 +77,30 @@ export const ETIQUETA_DOCUMENTO: Record<string, string> = {
   otro: 'Otro documento',
 };
 
+/** Los seis tipos de la 007, en castellano. Una póliza no se llama «Sin nombre». */
+export const ETIQUETA_TIPO_GARANTIA: Record<string, string> = {
+  propietaria: 'Garantía propietaria',
+  recibo_sueldo: 'Recibo de sueldo',
+  seguro_caucion: 'Seguro de caución',
+  garante_solidario: 'Garante solidario',
+  deposito_ampliado: 'Depósito ampliado',
+  otra: 'Otra garantía',
+};
+
+/** Igual que la de arriba, pero redactada para la frase «falta …». */
+const ETIQUETA_FALTANTE: Record<string, string> = {
+  ...ETIQUETA_DOCUMENTO,
+  otro: 'el comprobante de la garantía (la póliza o el contrato)',
+};
+
+/** Qué documentos le faltan a esta garantía, según tenga persona o no. */
+export function documentosQueFaltan(tienePersona: boolean, presentes: Set<string>): string[] {
+  if (!tienePersona) {
+    return presentes.has(DOCUMENTO_COMPROBANTE) ? [] : [DOCUMENTO_COMPROBANTE];
+  }
+  return DOCUMENTOS_REQUERIDOS.filter((t) => !presentes.has(t));
+}
+
 export interface DocumentoGarante {
   id: string;
   tipo: string;
@@ -61,15 +110,38 @@ export interface DocumentoGarante {
   subidoEl: string;
 }
 
+/** Lo que hace falta para abrir un WhatsApp — o para no ofrecerlo. */
+export interface WhatsappGarante {
+  /** 13 dígitos listos para `wa.me/{numero}`. `null` = no se puede armar. */
+  numero: string | null;
+  /** Por qué no se puede. La pantalla lo muestra en vez del botón. */
+  motivo: string | null;
+}
+
+/** Las consultas al BCRA de este garante, sin traerlas todas. */
+export interface HistorialBcra {
+  consultas: number;
+  /** La que respaldó la firma. Es la más vieja: dato derivado, no una marca. */
+  primera: { el: string; situacion: number | null; apto: boolean | null } | null;
+  ultima: { el: string; situacion: number | null; apto: boolean | null } | null;
+}
+
 export interface Garante {
   id: string;
   contratoId: string;
   personaId: string | null;
   nombre: string;
   documento: string | null;
+  /** Tal como está cargado en la ficha, para poder corregirlo si está mal. */
+  telefono: string | null;
+  email: string | null;
+  whatsapp: WhatsappGarante;
   tipo: string;
+  tipoTexto: string;
   detalle: string | null;
   venceEl: string | null;
+  /** La garantía ya venció. Sólo puede pasar con las que tienen `venceEl`. */
+  vencida: boolean;
   firmoEl: string | null;
 
   bcra: {
@@ -79,11 +151,28 @@ export interface Garante {
     situacion: number | null;
     situacionTexto: string | null;
     periodo: string | null;
+    /** La ÚLTIMA consulta. La que respaldó la firma está en `historial.primera`. */
     consultadoEl: string | null;
     apto: boolean | null;
     motivo: string | null;
     entidades: unknown[];
     advertencias: string[];
+
+    /** Cuándo corresponde volver a consultar. `null` = no corresponde. */
+    revisarEl: string | null;
+    /** Por qué esa fecha (o por qué ninguna). Todo cálculo lleva su memoria. */
+    revisionMemoria: string | null;
+    revisionVencida: boolean;
+
+    /**
+     * Cheques rechazados. `null` con `consultado: true` significa que las
+     * deudas se consultaron y los cheques no — que no es lo mismo que «no
+     * tiene». `chequesError` dice por qué.
+     */
+    cheques: VeredictoCheques | null;
+    chequesError: string | null;
+
+    historial: HistorialBcra;
   };
 
   documentos: DocumentoGarante[];
@@ -102,10 +191,13 @@ export interface VerificacionContrato {
 
 @Injectable()
 export class GarantesService {
+  private readonly logger = new Logger('Garantes');
+
   constructor(
     private readonly db: DbService,
     private readonly almacen: AlmacenamientoService,
     private readonly deudores: DeudoresService,
+    private readonly recordatorios: RecordatoriosService,
   ) {}
 
   async listar(tenantId: string, contratoId: string): Promise<Garante[]> {
@@ -122,7 +214,16 @@ export class GarantesService {
    */
   async verificar(tenantId: string, contratoId: string): Promise<VerificacionContrato> {
     const garantes = await this.listar(tenantId, contratoId);
-    const aptos = garantes.filter((g) => g.bcra.apto === true && g.legajoCompleto && g.firmoEl);
+
+    // Una garantía CON persona se acepta cuando el BCRA la aprobó, presentó
+    // todo y firmó. Una SIN persona —una póliza de caución— no tiene BCRA que
+    // consultar ni firma que dar: vale mientras esté adjunta y no haya vencido.
+    // Medirlas con la misma vara dejaba a la caución afuera para siempre.
+    const aptos = garantes.filter((g) =>
+      g.personaId
+        ? g.bcra.apto === true && g.legajoCompleto && g.firmoEl
+        : g.legajoCompleto && !g.vencida,
+    );
 
     const pendientes: string[] = [];
     if (garantes.length < MINIMO_GARANTES) {
@@ -131,17 +232,39 @@ export class GarantesService {
       );
     }
     for (const g of garantes) {
-      if (g.bcra.consultado === false) {
+      if (g.vencida) {
+        pendientes.push(
+          `${g.nombre}: la garantía venció el ${ddmmaaaa(g.venceEl!)}. Pedí la renovación.`,
+        );
+      }
+      if (!g.personaId) {
+        // Sin persona no hay documento con el que consultar la Central de
+        // Deudores. «Falta consultar el BCRA» sobre una póliza es un pendiente
+        // que nadie puede resolver.
+      } else if (g.bcra.consultado === false) {
         pendientes.push(`${g.nombre}: falta consultar el BCRA.`);
       } else if (g.bcra.apto === false) {
         pendientes.push(`${g.nombre}: ${g.bcra.motivo}`);
+      } else if (g.bcra.revisionVencida) {
+        // Informa, no bloquea: el contrato sigue y el garante sigue contando
+        // como apto con el veredicto que tiene. Lo que hay es un dato viejo, y
+        // un dato viejo no es un rechazo — es un botón que alguien tiene que
+        // apretar.
+        pendientes.push(
+          `${g.nombre}: la revisión del BCRA venció el ${ddmmaaaa(g.bcra.revisarEl!)}. ` +
+            'Volvé a consultarlo.',
+        );
       }
       if (g.faltan.length) {
         pendientes.push(
-          `${g.nombre}: falta ${g.faltan.map((t) => ETIQUETA_DOCUMENTO[t] ?? t).join(', ')}.`,
+          `${g.nombre}: falta ${g.faltan.map((t) => ETIQUETA_FALTANTE[t] ?? t).join(', ')}.`,
         );
       }
-      if (!g.firmoEl) pendientes.push(`${g.nombre}: todavía no firmó el contrato.`);
+      // Una póliza no firma el contrato: la firmó el tomador cuando la contrató.
+      // Pedirle la firma a un seguro de caución es un pendiente imposible.
+      if (!g.firmoEl && g.personaId) {
+        pendientes.push(`${g.nombre}: todavía no firmó el contrato.`);
+      }
     }
 
     return {
@@ -203,15 +326,21 @@ export class GarantesService {
 
   async editar(tenantId: string, garanteId: string, dto: EditarGaranteDto): Promise<Garante> {
     return this.db.withTenant(tenantId, async (ej) => {
+      // `coalesce` en todo salvo `vence_el`: lo que no viene en el PATCH no se
+      // pisa con NULL —la trampa que ya borró número, ambientes y metros de una
+      // propiedad— pero sobre `vence_el` hay un recordatorio, así que mandar
+      // `null` explícito tiene que poder borrarla. `$6` distingue «no vino» de
+      // «vino en null», que es lo único que `coalesce` no sabe hacer.
       const { rows } = await ej.query<{ contrato_id: string }>(
         `UPDATE garantia SET
            tipo     = coalesce($2, tipo),
            detalle  = coalesce($3, detalle),
-           vence_el = coalesce($4, vence_el),
+           vence_el = CASE WHEN $6::boolean THEN $4::date ELSE vence_el END,
            firmo_el = coalesce($5, firmo_el)
          WHERE id = $1 RETURNING contrato_id`,
         [garanteId, dto.tipo ?? null, dto.detalle ?? null,
-          dto.venceEl ?? null, dto.firmoEl ?? null],
+          dto.venceEl ?? null, dto.firmoEl ?? null,
+          dto.venceEl !== undefined],
       );
       if (!rows.length) throw AppError.notFound('No se encontró ese garante.');
       return (await this.leerDe(ej, rows[0].contrato_id, garanteId))[0];
@@ -229,6 +358,14 @@ export class GarantesService {
       return docs.map((d) => d.url);
     });
 
+    // Los avisos de una garantía que ya no existe no los cancela el CASCADE:
+    // `evento_programado.entidad_id` no es una FK —apunta a cinco tablas
+    // distintas según `entidad_tipo`— así que las filas quedan vivas y la
+    // bandeja sigue pidiendo que se revise el BCRA de un garante que se quitó.
+    // `cancelarDe()` estaba escrito desde la etapa 7 y no lo llamaba nadie: el
+    // error #3 del playbook, otra vez.
+    await this.recordatorios.cancelarDe(tenantId, garanteId);
+
     // Los documentos se van con la fila por CASCADE; los archivos del bucket no
     // los borra nadie más que esto.
     for (const url of urls) {
@@ -238,20 +375,36 @@ export class GarantesService {
   }
 
   /**
-   * Consulta la Central de Deudores y congela la respuesta.
+   * Consulta la Central de Deudores —deudas y cheques rechazados— y guarda la
+   * respuesta.
    *
    * El documento sale de la persona: si no tiene uno cargado, no hay nada que
    * consultar y se dice así en vez de devolver un veredicto vacío que parezca
    * un "está todo bien".
+   *
+   * Los dos endpoints van con el mismo botón, y **no pesan lo mismo**: sin
+   * deudas no hay veredicto y la consulta entera se descarta —así funciona
+   * desde la 018 y no cambia—, pero si fallan sólo los cheques se guarda igual
+   * el veredicto bueno con la nota de que quedaron sin consultar. Tirar una
+   * consulta de deudas que salió bien porque el segundo endpoint devolvió 429
+   * sería perder el dato que importa por el que acompaña.
    */
-  async consultarBcra(tenantId: string, garanteId: string): Promise<Garante> {
+  async consultarBcra(
+    tenantId: string,
+    garanteId: string,
+    usuarioId: string,
+  ): Promise<Garante> {
     const datos = await this.db.withTenant(tenantId, async (ej) => {
       const { rows } = await ej.query<{
         contrato_id: string; doc_numero: string | null; nombre: string;
+        vence_el: string | null; fecha_inicio: string; fecha_fin: string;
       }>(
-        `SELECT g.contrato_id, p.doc_numero,
+        `SELECT g.contrato_id, p.doc_numero, g.vence_el,
+                c.fecha_inicio, c.fecha_fin,
                 trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) AS nombre
-           FROM garantia g LEFT JOIN persona p ON p.id = g.persona_id
+           FROM garantia g
+           JOIN contrato_alquiler c ON c.id = g.contrato_id
+           LEFT JOIN persona p ON p.id = g.persona_id
           WHERE g.id = $1`,
         [garanteId],
       );
@@ -278,23 +431,76 @@ export class GarantesService {
       );
     }
 
+    const cheques = await this.deudores.consultarCheques(r.cuit);
+    if (!cheques) {
+      this.logger.warn(
+        `Cheques rechazados sin consultar para la garantía ${garanteId}: se guarda ` +
+          'igual el veredicto de deudas.',
+      );
+    }
+    const chequesError = cheques
+      ? null
+      : 'No se pudieron consultar los cheques rechazados en esta consulta. El ' +
+        'veredicto de deudas sí se guardó.';
+
+    // `date` de Postgres: se recorta el texto en vez de pasarlo por `Date`, que
+    // le inventaría una medianoche UTC y correría el día.
+    const revision = proximaRevision({
+      consultadoEl: new Date().toISOString().slice(0, 10),
+      apto: r.apto,
+      contratoDesde: String(datos.fecha_inicio).slice(0, 10),
+      contratoHasta: String(datos.fecha_fin).slice(0, 10),
+      garantiaVenceEl: datos.vence_el ? String(datos.vence_el).slice(0, 10) : null,
+    });
+
+    const detalle = JSON.stringify({
+      apto: r.apto,
+      motivo: r.motivo,
+      entidades: r.entidades,
+      advertencias: r.advertencias,
+      probados: r.probados,
+      revisionMemoria: revision.memoria,
+    });
+
     return this.db.withTenant(tenantId, async (ej) => {
+      // El cache de la última consulta.
       await ej.query(
         `UPDATE garantia SET
            bcra_cuit = $2, bcra_denominacion = $3, bcra_situacion = $4,
-           bcra_periodo = $5, bcra_consultado_el = now(), bcra_detalle = $6
+           bcra_periodo = $5, bcra_consultado_el = now(), bcra_detalle = $6,
+           bcra_cheques = $7, bcra_revisar_el = $8
          WHERE id = $1`,
         [
-          garanteId, r.cuit, r.denominacion, r.peorSituacion, r.periodo,
-          JSON.stringify({
-            apto: r.apto,
-            motivo: r.motivo,
-            entidades: r.entidades,
-            advertencias: r.advertencias,
-            probados: r.probados,
-          }),
+          garanteId, r.cuit, r.denominacion, r.peorSituacion, r.periodo, detalle,
+          cheques ? JSON.stringify(cheques) : null,
+          revision.fecha,
         ],
       );
+
+      // Y el historial, que es la fuente. Sin esta fila, la revisión de junio
+      // borraría el veredicto de enero — que es exactamente el dato que explica
+      // por qué se aceptó a este garante.
+      await ej.query(
+        `INSERT INTO garantia_bcra_consulta
+           (tenant_id, garantia_id, consultado_por, cuit, denominacion, situacion,
+            periodo, apto, motivo, detalle, cheques, cheques_error)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          tenantId, garanteId, usuarioId, r.cuit, r.denominacion, r.peorSituacion,
+          r.periodo, r.apto, r.motivo, detalle,
+          cheques ? JSON.stringify(cheques) : null, chequesError,
+        ],
+      );
+
+      // Una consulta nueva reemplaza al aviso de revisión anterior: si quedara
+      // pendiente, la bandeja seguiría pidiendo lo que se acaba de hacer.
+      await ej.query(
+        `UPDATE evento_programado SET estado = 'cancelado'
+          WHERE entidad_id = $1 AND tipo = 'garantia_revision_bcra'
+            AND estado = 'pendiente'`,
+        [garanteId],
+      );
+
       return (await this.leerDe(ej, datos.contrato_id, garanteId))[0];
     });
   }
@@ -389,21 +595,46 @@ export class GarantesService {
               g.vence_el, g.firmo_el,
               g.bcra_cuit, g.bcra_denominacion, g.bcra_situacion,
               g.bcra_periodo, g.bcra_consultado_el, g.bcra_detalle,
+              g.bcra_revisar_el, g.bcra_cheques,
               trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) AS nombre,
-              p.doc_numero,
+              p.doc_numero, p.telefono, p.email,
               (SELECT json_agg(json_build_object(
                   'id', d.id, 'tipo', d.tipo, 'url', d.url,
                   'nombreOriginal', d.nombre_original, 'subidoEl', d.created_at)
                  ORDER BY d.tipo)
-                 FROM garantia_documento d WHERE d.garantia_id = g.id) AS documentos
+                 FROM garantia_documento d WHERE d.garantia_id = g.id) AS documentos,
+              -- El historial agregado y no traído entero: de las N consultas la
+              -- pantalla muestra dos —la que respaldó la firma y la de hoy— y
+              -- traer el resto sería cargar un jsonb por garante para tirarlo.
+              (SELECT json_build_object(
+                  'consultas', count(*),
+                  'primera', (array_agg(json_build_object(
+                     'el', h.consultado_el, 'situacion', h.situacion, 'apto', h.apto)
+                     ORDER BY h.consultado_el ASC))[1],
+                  'ultima', (array_agg(json_build_object(
+                     'el', h.consultado_el, 'situacion', h.situacion, 'apto', h.apto)
+                     ORDER BY h.consultado_el DESC))[1],
+                  'chequesError', (array_agg(h.cheques_error
+                     ORDER BY h.consultado_el DESC))[1])
+                 FROM garantia_bcra_consulta h WHERE h.garantia_id = g.id) AS historial
          FROM garantia g
          LEFT JOIN persona p ON p.id = g.persona_id
         WHERE g.contrato_id = $1 AND ($2::uuid IS NULL OR g.id = $2)
-        ORDER BY g.created_at`,
+        -- El id desempata: dos garantes cargados en el mismo INSERT comparten
+        -- created_at al microsegundo (el seed los carga así) y sin criterio de
+        -- desempate el motor devuelve el orden que quiere. La lista se
+        -- reordenaba sola entre dos recargas.
+        ORDER BY g.created_at, g.id`,
       [contratoId, soloId ?? null],
     );
 
-    return rows.map(aGarante);
+    // `current_date` de la base y no `new Date()` del proceso: la revisión
+    // vencida se compara contra el mismo día que usan los emisores de aviso.
+    const { rows: hoy } = await ej.query<{ hoy: string }>(
+      "SELECT to_char(current_date, 'YYYY-MM-DD') AS hoy",
+    );
+
+    return rows.map((f) => aGarante(f, hoy[0].hoy));
   }
 }
 
@@ -421,17 +652,28 @@ interface FilaGarante {
   bcra_periodo: string | null;
   bcra_consultado_el: Date | null;
   bcra_detalle: {
-    apto?: boolean; motivo?: string; entidades?: unknown[]; advertencias?: string[];
+    apto?: boolean; motivo?: string; entidades?: unknown[];
+    advertencias?: string[]; revisionMemoria?: string;
   } | null;
+  bcra_revisar_el: string | null;
+  bcra_cheques: VeredictoCheques | null;
   nombre: string | null;
   doc_numero: string | null;
+  telefono: string | null;
+  email: string | null;
   documentos: Array<{
     id: string; tipo: string; url: string;
     nombreOriginal: string | null; subidoEl: string;
   }> | null;
+  historial: {
+    consultas: number;
+    primera: { el: string; situacion: number | null; apto: boolean | null } | null;
+    ultima: { el: string; situacion: number | null; apto: boolean | null } | null;
+    chequesError: string | null;
+  } | null;
 }
 
-function aGarante(f: FilaGarante): Garante {
+function aGarante(f: FilaGarante, hoy: string): Garante {
   const documentos = (f.documentos ?? []).map((d) => ({
     ...d,
     etiqueta: ETIQUETA_DOCUMENTO[d.tipo] ?? d.tipo,
@@ -439,20 +681,31 @@ function aGarante(f: FilaGarante): Garante {
   }));
 
   const presentes = new Set(documentos.map((d) => d.tipo));
-  const faltan = DOCUMENTOS_REQUERIDOS.filter((t) => !presentes.has(t));
+  const faltan = documentosQueFaltan(f.persona_id !== null, presentes);
   const consultado = f.bcra_consultado_el !== null;
+
+  // `date` de Postgres no lleva zona: se recorta el texto en vez de pasarlo
+  // por `Date`, que le inventaría una medianoche UTC y correría el día.
+  const revisarEl = f.bcra_revisar_el ? String(f.bcra_revisar_el).slice(0, 10) : null;
+  const venceEl = f.vence_el ? String(f.vence_el).slice(0, 10) : null;
 
   return {
     id: f.id,
     contratoId: f.contrato_id,
     personaId: f.persona_id,
-    nombre: f.nombre?.trim() || 'Sin nombre',
+    nombre: f.nombre?.trim() || ETIQUETA_TIPO_GARANTIA[f.tipo] || 'Sin nombre',
     documento: f.doc_numero,
+    telefono: f.telefono,
+    email: f.email,
+    // La normalización va acá y no en la pantalla: la regla de dónde termina el
+    // código de área es de negocio, se prueba sin navegador, y el día que haya
+    // un segundo lugar que arme un wa.me tiene que dar el mismo número.
+    whatsapp: normalizarAr(f.telefono),
     tipo: f.tipo,
+    tipoTexto: ETIQUETA_TIPO_GARANTIA[f.tipo] ?? f.tipo,
     detalle: f.detalle,
-    // `date` de Postgres no lleva zona: se recorta el texto en vez de pasarlo
-    // por `Date`, que le inventaría una medianoche UTC y correría el día.
-    venceEl: f.vence_el ? String(f.vence_el).slice(0, 10) : null,
+    venceEl,
+    vencida: venceEl !== null && venceEl < hoy,
     firmoEl: f.firmo_el ? String(f.firmo_el).slice(0, 10) : null,
 
     bcra: {
@@ -469,12 +722,33 @@ function aGarante(f: FilaGarante): Garante {
       motivo: consultado ? (f.bcra_detalle?.motivo ?? null) : null,
       entidades: f.bcra_detalle?.entidades ?? [],
       advertencias: f.bcra_detalle?.advertencias ?? [],
+
+      revisarEl,
+      revisionMemoria: consultado ? (f.bcra_detalle?.revisionMemoria ?? null) : null,
+      // Comparación de dos textos AAAA-MM-DD, que ordenan igual que las fechas
+      // que representan. Sin `Date` de por medio no hay zona que corra el día.
+      revisionVencida: revisarEl !== null && revisarEl <= hoy,
+
+      cheques: f.bcra_cheques ?? null,
+      chequesError: consultado ? (f.historial?.chequesError ?? null) : null,
+
+      historial: {
+        consultas: Number(f.historial?.consultas ?? 0),
+        primera: f.historial?.primera ?? null,
+        ultima: f.historial?.ultima ?? null,
+      },
     },
 
     documentos,
     faltan,
     legajoCompleto: faltan.length === 0,
   };
+}
+
+/** Fechas en dd/mm/aaaa, también dentro de una frase que arma el back. */
+function ddmmaaaa(iso: string): string {
+  const [a, m, d] = String(iso).slice(0, 10).split('-');
+  return `${d}/${m}/${a}`;
 }
 
 function esDuplicado(err: unknown): boolean {

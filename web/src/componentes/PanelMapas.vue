@@ -117,13 +117,37 @@ onMounted(cargar);
     <details v-if="!diag.configurado" class="como">
       <summary>Cómo se configura</summary>
       <p>
-        Se crea en Google Cloud: habilitar <b>Geocoding API</b>, activar la
-        facturación del proyecto, y restringir la key <b>por IP</b> (no por
-        referrer HTTP: las consultas salen del servidor, no del navegador).
+        Se crea en Google Cloud: habilitar <b>Geocoding API</b> (sólo esa),
+        activar la facturación del proyecto, y ponerle a la key <b>dos</b>
+        restricciones: <b>de aplicación → direcciones IP</b> con la IP pública de
+        salida del servidor —no «sitios web / referente HTTP»: las consultas
+        salen del backend, sin cabecera <code class="mono">Referer</code>, y una
+        key restringida por referrer devuelve
+        <code class="mono">REQUEST_DENIED</code>— y <b>de API → Geocoding API</b>.
+      </p>
+      <p>
         Después va en <code class="mono">GOOGLE_MAPS_API_KEY</code> del
-        <code class="mono">.env</code> y se reinicia la API.
+        <code class="mono">.env</code> y se levanta la API con
+        <code class="mono">docker compose up -d api</code>.
+        <b>No alcanza con <code class="mono">docker compose restart api</code></b>:
+        reinicia el contenedor con el entorno con el que se creó y el
+        <code class="mono">.env</code> nuevo no entra.
+      </p>
+      <p>
+        El paso a paso completo, con los topes de cuota, está en
+        <code class="mono">.env.example</code> y en
+        <code class="mono">docs/CONTINUAR.md</code>.
       </p>
     </details>
+
+    <!-- El mapa de la ficha NO depende de esta key: es un iframe de
+         `maps?…&output=embed`, que no la lleva. Lo que falta sin key es resolver
+         una dirección a coordenadas. Decirlo acá evita que quien lee este panel
+         crea que sin la key no hay mapas en ningún lado. -->
+    <p v-if="!diag.configurado" class="detalle">
+      Las propiedades que ya tienen latitud y longitud —cargadas a mano o
+      importadas— muestran su mapa igual: el mapa de la ficha no usa esta key.
+    </p>
 
     <template v-if="pendientes > 0">
       <p class="pendientes">

@@ -79,7 +79,7 @@ describe('Invitaciones', () => {
       .set(...auth(inmo.tokens.owner))
       .expect(200);
 
-    expect(equipo.body.map((m: { email: string }) => m.email)).toContain(
+    expect(equipo.body.miembros.map((m: { email: string }) => m.email)).toContain(
       'nuevo@test.local',
     );
   });

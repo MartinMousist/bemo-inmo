@@ -5,6 +5,9 @@ import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
+import StatusChip from '../componentes/StatusChip.vue';
+import { money } from '../dominio/formato';
+import { ETIQUETA_ESTADO, TONO_ESTADO } from '../dominio/comisiones';
 
 /**
  * La política de comisiones de la inmobiliaria, en una sola pantalla.
@@ -147,7 +150,90 @@ async function guardar() {
   } finally { guardando.value = false; }
 }
 
-onMounted(cargar);
+// ── El catálogo de inmobiliarias con las que se comparte ────────────────────
+//
+// Nace acá, en la misma pantalla donde vive la política de comisiones: una
+// tabla sin pantalla es una feature que no existe (error #3 del playbook, que
+// este módulo ya cometió cuatro veces).
+//
+// Lo que contesta y antes era imposible: cuánto se le pagó a cada agencia. Con
+// el nombre escrito a mano en cada comisión, «Propiedades del Oeste», «Prop.
+// del Oeste» y «propiedades del oeste» eran tres agencias distintas.
+
+interface Externa {
+  id: string;
+  nombre: string;
+  cuit: string | null;
+  contacto: string | null;
+  telefono: string | null;
+  email: string | null;
+  activa: boolean;
+  pagado: Array<{ moneda: string; estado: string; total: number; operaciones: number }>;
+}
+
+const externas = ref<Externa[]>([]);
+const cargandoExternas = ref(true);
+const verInactivas = ref(false);
+const nuevaExterna = reactive({ nombre: '', cuit: '', contacto: '', telefono: '', email: '' });
+const creandoExterna = ref(false);
+
+async function cargarExternas() {
+  cargandoExternas.value = true;
+  try {
+    externas.value = await api<Externa[]>(
+      `/comisiones/externas${verInactivas.value ? '?todas=true' : ''}`,
+    );
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar el catálogo.';
+  } finally { cargandoExternas.value = false; }
+}
+
+async function crearExterna() {
+  creandoExterna.value = true; error.value = '';
+  try {
+    await api<Externa>('/comisiones/externas', {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre: nuevaExterna.nombre.trim(),
+        ...(nuevaExterna.cuit.trim() ? { cuit: nuevaExterna.cuit.trim() } : {}),
+        ...(nuevaExterna.contacto.trim() ? { contacto: nuevaExterna.contacto.trim() } : {}),
+        ...(nuevaExterna.telefono.trim() ? { telefono: nuevaExterna.telefono.trim() } : {}),
+        ...(nuevaExterna.email.trim() ? { email: nuevaExterna.email.trim() } : {}),
+      }),
+    });
+    ui.ok('Inmobiliaria cargada', `«${nuevaExterna.nombre.trim()}» ya se puede elegir al repartir.`);
+    nuevaExterna.nombre = ''; nuevaExterna.cuit = '';
+    nuevaExterna.contacto = ''; nuevaExterna.telefono = ''; nuevaExterna.email = '';
+    await cargarExternas();
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar la inmobiliaria.';
+  } finally { creandoExterna.value = false; }
+}
+
+/**
+ * Dar de baja NO borra: desactiva.
+ *
+ * Un DELETE se llevaría puesto el enlace de las comisiones ya pagadas —la FK es
+ * `ON DELETE SET NULL`— y con él la única forma de sumar el histórico por
+ * agencia. Desactivada sale del autocompletar y sigue en el registro.
+ */
+async function alternarExterna(e: Externa) {
+  error.value = '';
+  try {
+    await api(`/comisiones/externas/${e.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ activa: !e.activa }),
+    });
+    await cargarExternas();
+  } catch (err) {
+    error.value = err instanceof ApiError ? err.paraMostrar : 'No se pudo cambiar el estado.';
+  }
+}
+
+onMounted(() => {
+  void cargar();
+  void cargarExternas();
+});
 </script>
 
 <template>
@@ -270,6 +356,97 @@ onMounted(cargar);
         saber con qué reparto trabajás.
       </p>
     </form>
+
+    <!-- ── El catálogo de inmobiliarias con las que se comparte ───────────── -->
+    <section class="card stack">
+      <div class="row entre">
+        <h2>Inmobiliarias con las que compartimos</h2>
+        <label class="tilde">
+          <input v-model="verInactivas" type="checkbox" @change="cargarExternas" />
+          <span>Ver las dadas de baja</span>
+        </label>
+      </div>
+      <p class="nota">
+        Cuando una operación se comparte, la otra agencia se elige de acá. Sirve para
+        contestar cuánto se le pagó a cada una: con el nombre escrito a mano en cada
+        comisión, «Propiedades del Oeste» y «Prop. del Oeste» eran dos agencias
+        distintas. El nombre queda <strong>congelado</strong> en la comisión: renombrar
+        una ficha no cambia a quién se le pagó.
+      </p>
+
+      <p v-if="cargandoExternas" class="nota">Cargando…</p>
+      <p v-else-if="!externas.length" class="nota">
+        Todavía no hay ninguna cargada. También se puede dar de alta en el momento, desde
+        el reparto de una venta o de un contrato.
+      </p>
+
+      <table v-else class="externas">
+        <thead>
+          <tr><th>Nombre</th><th>Contacto</th><th>Se le pagó</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="e in externas" :key="e.id" :class="{ inactiva: !e.activa }">
+            <td>
+              <strong>{{ e.nombre }}</strong>
+              <!-- En bloque: en línea, «Propiedades del OesteCUIT 30712345678»
+                   se lee como una sola palabra. -->
+              <span v-if="e.cuit" class="mono chica bloque">CUIT {{ e.cuit }}</span>
+              <span v-if="!e.activa" class="chica baja">dada de baja</span>
+            </td>
+            <td class="chica">
+              <span v-if="e.contacto">{{ e.contacto }}</span>
+              <span v-if="e.telefono" class="mono bloque">{{ e.telefono }}</span>
+              <span v-if="e.email" class="mono bloque">{{ e.email }}</span>
+              <span v-if="!e.contacto && !e.telefono && !e.email">—</span>
+            </td>
+            <td>
+              <!-- Por moneda Y por estado: ARS y USD no se suman nunca, y
+                   «cobrada» y «proyectada» tampoco — una es plata que salió y
+                   la otra una promesa. -->
+              <span v-for="(p, i) in e.pagado" :key="i" class="pago">
+                <span class="mono">{{ money(p.total, p.moneda) }}</span>
+                <StatusChip
+                  :texto="ETIQUETA_ESTADO[p.estado] ?? p.estado"
+                  :tono="TONO_ESTADO[p.estado] ?? 'neutro'" />
+              </span>
+              <span v-if="!e.pagado.length" class="chica">todavía nada</span>
+            </td>
+            <td class="der">
+              <button
+                v-if="puedeEditar" class="btn secondary sm" type="button"
+                @click="alternarExterna(e)">
+                {{ e.activa ? 'Dar de baja' : 'Reactivar' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <form v-if="puedeEditar" class="alta" @submit.prevent="crearExterna">
+        <label class="campo"><span>Nombre</span>
+          <input v-model="nuevaExterna.nombre" required maxlength="120" placeholder="Agencia" />
+        </label>
+        <label class="campo"><span>CUIT</span>
+          <input v-model="nuevaExterna.cuit" maxlength="20" placeholder="30-12345678-9" />
+        </label>
+        <label class="campo"><span>Contacto</span>
+          <input v-model="nuevaExterna.contacto" maxlength="120" placeholder="Nombre y apellido" />
+        </label>
+        <label class="campo"><span>Teléfono</span>
+          <input v-model="nuevaExterna.telefono" maxlength="40" />
+        </label>
+        <label class="campo"><span>Correo</span>
+          <input v-model="nuevaExterna.email" type="email" maxlength="160" />
+        </label>
+        <button class="btn" type="submit" :disabled="creandoExterna || !nuevaExterna.nombre.trim()">
+          Agregar
+        </button>
+      </form>
+      <p v-else class="nota">
+        Un asesor puede cargar una inmobiliaria en el momento, desde el reparto de la
+        operación. Darlas de baja es del titular y administración.
+      </p>
+    </section>
   </div>
 </template>
 
@@ -285,4 +462,24 @@ onMounted(cargar);
 .resto { color: var(--muted); font-variant-numeric: tabular-nums; }
 .negativo td, .negativo th { color: var(--danger); }
 .acciones { display: flex; gap: var(--s-sm); }
+
+.tilde { display: inline-flex; align-items: center; gap: var(--s-sm); font-size: 12px; color: var(--muted); cursor: pointer; }
+.externas { width: 100%; border-collapse: collapse; }
+.externas th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding-bottom: var(--s-sm); border-bottom: 1px solid var(--line); }
+.externas td { padding: var(--s-md) var(--s-sm) var(--s-md) 0; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13px; vertical-align: top; }
+.externas tr:last-child td { border-bottom: none; }
+.externas .der { text-align: right; }
+.inactiva { opacity: 0.6; }
+.chica { font-size: 11px; color: var(--muted-2); }
+.bloque { display: block; }
+.baja { display: block; color: var(--warning-ink); }
+.pago { display: inline-flex; align-items: center; gap: var(--s-xs); margin-right: var(--s-md); }
+.alta { display: flex; align-items: flex-end; gap: var(--s-md); flex-wrap: wrap; padding-top: var(--s-md); border-top: 1px solid var(--line); }
+.alta .campo { display: flex; flex-direction: column; gap: var(--s-xs); }
+.alta .campo > span { font-size: 11px; color: var(--muted); }
+.alta input {
+  font: inherit; font-size: 13px; padding: var(--s-sm) var(--s-md);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--surface); color: var(--ink); width: 18ch;
+}
 </style>

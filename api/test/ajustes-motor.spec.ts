@@ -2,6 +2,7 @@ import {
   AjusteImposible,
   calcularAjuste,
   fechasDeAjuste,
+  periodosDeAjuste,
   redondear,
   round2,
   sumarMeses,
@@ -185,6 +186,53 @@ describe('Motor de ajustes', () => {
       // Ajustar el mes en que el contrato termina no tiene sentido.
       const f = fechasDeAjuste('2026-01-01', '2026-06-30', 6);
       expect(f).toEqual([]);
+    });
+  });
+
+  /**
+   * La cadena entera. Vivía suelta adentro de `proyectarAjustes()` mezclada con
+   * consultas a la base, así que estas dos reglas —el mes anterior, y que cada
+   * ajuste arranque donde terminó el anterior— no se podían probar con papel.
+   */
+  describe('periodosDeAjuste', () => {
+    it('el índice es el del MES ANTERIOR al ajuste', () => {
+      // El IPC de un mes lo publica INDEC a mediados del siguiente: el de «este
+      // mes» nunca está a tiempo.
+      const c = periodosDeAjuste('2025-08-01', '2027-08-01', 4, '2025-07-01', '2026-12-01');
+      expect(c[0]).toEqual({
+        vigenteDesde: '2025-12-01', periodoBase: '2025-07-01', periodoActual: '2025-11-01',
+      });
+    });
+
+    it('cada ajuste arranca donde terminó el anterior', () => {
+      // Si el segundo midiera otra vez desde el mes_base del contrato, contaría
+      // dos veces la misma inflación y el alquiler se multiplicaría.
+      const c = periodosDeAjuste('2025-11-01', '2028-11-01', 3, '2025-10-01', '2026-11-01');
+      expect(c.map((p) => [p.vigenteDesde, p.periodoBase, p.periodoActual])).toEqual([
+        ['2026-02-01', '2025-10-01', '2026-01-01'],
+        ['2026-05-01', '2026-01-01', '2026-04-01'],
+        ['2026-08-01', '2026-04-01', '2026-07-01'],
+        ['2026-11-01', '2026-07-01', '2026-10-01'],
+      ]);
+    });
+
+    it('se planta en el límite, no en el fin del contrato', () => {
+      // Un contrato de tres años no proyecta doce aumentos de una: más allá del
+      // límite los índices ni siquiera existen.
+      const largo = periodosDeAjuste('2025-01-01', '2028-01-01', 3, '2024-12-01', '2026-11-01');
+      const sinLimite = fechasDeAjuste('2025-01-01', '2028-01-01', 3);
+      expect(largo.length).toBeLessThan(sinLimite.length);
+      expect(largo[largo.length - 1].vigenteDesde).toBe('2026-10-01');
+    });
+
+    it('el que cae justo en el límite entra; el siguiente no', () => {
+      const c = periodosDeAjuste('2025-11-01', '2028-11-01', 3, '2025-10-01', '2026-08-01');
+      expect(c.map((p) => p.vigenteDesde)).toEqual(['2026-02-01', '2026-05-01', '2026-08-01']);
+    });
+
+    it('un contrato más corto que su periodicidad no ajusta nunca', () => {
+      expect(periodosDeAjuste('2026-01-01', '2026-06-30', 6, '2025-12-01', '2027-01-01'))
+        .toEqual([]);
     });
   });
 

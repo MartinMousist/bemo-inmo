@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
+import SelectAgente from '../componentes/SelectAgente.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import ThOrden from '../componentes/ThOrden.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
@@ -11,7 +12,9 @@ import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { fecha, money, numero, plural, ETIQUETA_TIPO } from '../dominio/formato';
 import { filtrosRecordados } from '../dominio/filtros';
+import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
 import { consulta, type Pagina } from '../dominio/pagina';
+import { useAuth } from '../stores/auth';
 
 /**
  * La cartera en venta y la cartera en alquiler, por separado.
@@ -58,6 +61,7 @@ interface Propiedad {
   dormitorios: number | null;
   cocheras: number | null;
   ubicacionConocida: boolean;
+  agenteCaptador: { id: string; nombre: string } | null;
   operaciones: Operacion[];
 }
 
@@ -89,9 +93,15 @@ const cargando = ref(true);
 const error = ref('');
 const q = ref('');
 
+const auth = useAuth();
+
+// `agente` NO lleva lista de válidos acá: los uuid del equipo llegan por fetch
+// y el helper valida en el constructor, contra listas estáticas. La regla 2
+// —descartar un valor que ya no existe— la aplica `SelectAgente` cuando el
+// equipo terminó de cargar.
 const { valores: filtros, limpiar: limpiarFiltros } = filtrosRecordados(
   'cartera-propiedades',
-  { tipo: '', estado: '' },
+  { tipo: '', estado: '', agente: '' },
   { tipo: Object.keys(ETIQUETA_TIPO), estado: Object.keys(ESTADO) },
 );
 
@@ -121,6 +131,7 @@ async function cargar() {
           incluirCerradas: 'true',
           tipo: filtros.value.tipo,
           estado: filtros.value.estado,
+          ...paramsDeAgente(filtros.value.agente, auth.usuario?.id ?? null),
           orden: orden.value ?? '',
           dir: orden.value ? dir.value : '',
         },
@@ -141,11 +152,16 @@ async function cargar() {
 }
 
 let debounce: ReturnType<typeof setTimeout> | undefined;
+// `deep: true`: `filtros` es un ref que guarda un objeto y elegir un tipo o un
+// estado lo MUTA, sin cambiar su identidad. Sin esto el watch nunca se enteraba
+// y la lista no se recargaba: la preferencia quedaba guardada y recién se
+// aplicaba la próxima vez que se abría la pantalla. Ver el comentario largo en
+// `ContratosPage.vue`, que es donde apareció.
 watch([q, filtros], () => {
   clearTimeout(debounce);
   pagina.value = 1;
   debounce = setTimeout(cargar, 220);
-});
+}, { deep: true });
 watch(pagina, () => void cargar());
 // Cambiar de venta a alquiler es cambiar de listado: se limpia todo lo que era
 // del anterior, incluida la página.
@@ -184,7 +200,10 @@ function tonoDias(d: number | null): 'ok' | 'warn' | 'err' | 'neutro' {
   return 'neutro';
 }
 
-const hayFiltro = computed(() => !!(q.value || filtros.value.tipo || filtros.value.estado || orden.value));
+const hayFiltro = computed(
+  () => !!(q.value || filtros.value.tipo || filtros.value.estado || orden.value)
+    || hayFiltroDeAgente(filtros.value.agente),
+);
 
 function limpiarTodo() {
   q.value = '';
@@ -251,10 +270,18 @@ async function exportar() {
         </select>
       </label>
 
+      <SelectAgente v-model="filtros.agente" etiqueta="Captó" con-sin-asignar />
+
       <button v-if="hayFiltro" class="btn secondary sm" type="button" @click="limpiarTodo">
         Limpiar
       </button>
     </div>
+
+    <!-- `GET /exportar/:recurso.csv` no toma ningún filtro: baja la cartera
+         entera. Al lado de una lista filtrada, quien apreta cree lo contrario. -->
+    <p v-if="hayFiltro" class="aviso-exportar">
+      El botón «Exportar» baja la cartera completa, no lo que está filtrado.
+    </p>
 
     <UiSkeleton v-if="cargando" :filas="5" :alto="48" />
 
@@ -287,6 +314,10 @@ async function exportar() {
               Dirección
             </ThOrden>
             <th class="secundaria">Tipo</th>
+            <!-- Se puede filtrar por captador, así que la fila tiene que decir
+                 de quién es: una lista filtrada por una persona en la que no se
+                 ve el nombre obliga a confiar en el filtro a ciegas. -->
+            <th class="secundaria">Captó</th>
 
             <!-- ── Columnas de VENTA ─────────────────────────────────────── -->
             <template v-if="esVenta">
@@ -340,6 +371,10 @@ async function exportar() {
               <span v-if="!p.ubicacionConocida" class="sin-ubi">sin ubicar</span>
             </td>
             <td class="secundaria">{{ ETIQUETA_TIPO[p.tipo] ?? p.tipo }}</td>
+            <td class="secundaria chico">
+              <span v-if="p.agenteCaptador">{{ p.agenteCaptador.nombre }}</span>
+              <span v-else class="vacio">sin captador</span>
+            </td>
 
             <template v-if="esVenta">
               <td class="num">{{ numero(p.supTotal) }}</td>
@@ -415,6 +450,7 @@ async function exportar() {
 .sin-ubi { margin-left: var(--s-sm); font-size: 11px; color: var(--warning-ink); }
 .vacio { color: var(--muted-2); }
 .chico { font-size: 12px; }
+.aviso-exportar { margin: 0; font-size: 12px; color: var(--muted); }
 .fuerte { color: var(--ink); }
 
 /* Tipo, metros y expensas se van en pantalla angosta: el precio y la ocupación

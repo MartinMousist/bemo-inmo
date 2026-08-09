@@ -124,6 +124,96 @@ export class RecordatoriosService {
         );
       }
 
+      // ── Garantías por vencer ──
+      //
+      // El evento `garantia_por_vencer` estaba declarado en el CHECK de la 010
+      // y **nunca lo emitió nadie**: `garantia.vence_el` existía, la pantalla no
+      // la cargaba y ningún bloque de acá la miraba. Es el error #3 del playbook
+      // en tres capas a la vez, y por eso el campo «Vence el» de la pantalla de
+      // garantes va en el mismo movimiento que este bloque: emitir sobre una
+      // columna que ninguna pantalla llena es la misma feature fantasma con otra
+      // ropa.
+      //
+      // Sólo contratos VIGENTES. Un seguro de caución que vence en un contrato
+      // que ya terminó no hay que renovarlo, y avisarlo es ruido que entrena a
+      // la gente a ignorar la bandeja.
+      for (const dias of avisos.garantia_por_vencer ?? []) {
+        sumar(
+          'garantia_por_vencer',
+          await this.insertar(
+            ej,
+            tenantId,
+            `SELECT 'garantia_por_vencer', 'garantia', g.id,
+                    (g.vence_el - $2::int) AS dispara,
+                    'Vence la garantía de ' || trim(pr.calle || ' ' || coalesce(pr.numero,'')),
+                    coalesce(
+                      nullif(trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')), ''),
+                      nullif(g.detalle, ''),
+                      'La garantía')
+                      || ' · vence el ' || to_char(g.vence_el, 'DD/MM/YYYY') ||
+                      '. Pedí la renovación antes de que el contrato quede sin respaldo.',
+                    jsonb_build_object('diasAntes', $2, 'venceEl', g.vence_el,
+                                       'tipo', g.tipo, 'contratoId', g.contrato_id)
+               FROM garantia g
+               JOIN contrato_alquiler c ON c.id = g.contrato_id
+               JOIN propiedad pr ON pr.id = c.propiedad_id
+               LEFT JOIN persona p ON p.id = g.persona_id
+              WHERE c.estado = 'vigente' AND g.vence_el IS NOT NULL
+                AND (g.vence_el - $2::int) BETWEEN current_date AND current_date + 400`,
+            [tenantId, dias],
+          ),
+        );
+      }
+
+      // ── Revisión del BCRA ──
+      //
+      // El aviso NO consulta: avisa que hay que consultar. La diferencia es toda
+      // la feature. Un cron que le pidiera al BCRA el dato bancario de un
+      // garante cada seis meses estaría averiguando la situación crediticia de
+      // un tercero sin que nadie se lo pida —el incidente que ya está anotado en
+      // docs/CONTINUAR.md, pero a escala y repetido— y encima contra una API con
+      // control de tráfico por IP. Acá aparece el aviso, lo aprieta una persona
+      // y queda su nombre en `garantia_bcra_consulta.consultado_por`.
+      //
+      // La ventana arranca 180 días ANTES de hoy, al revés que las otras: una
+      // revisión que venció hace dos meses sigue estando vencida, y si el
+      // generador no corrió ese día el aviso no puede perderse para siempre.
+      for (const dias of avisos.garantia_revision_bcra ?? []) {
+        sumar(
+          'garantia_revision_bcra',
+          await this.insertar(
+            ej,
+            tenantId,
+            `SELECT 'garantia_revision_bcra', 'garantia', g.id,
+                    (g.bcra_revisar_el - $2::int) AS dispara,
+                    'Revisar el BCRA del garante de ' || trim(pr.calle || ' ' || coalesce(pr.numero,'')),
+                    coalesce(
+                      nullif(trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')), ''),
+                      'El garante')
+                      || ': la última consulta es del ' ||
+                      to_char(g.bcra_consultado_el, 'DD/MM/YYYY') ||
+                      '. Volvé a consultarlo desde el contrato.',
+                    jsonb_build_object('diasAntes', $2, 'revisarEl', g.bcra_revisar_el,
+                                       'situacionAnterior', g.bcra_situacion,
+                                       'contratoId', g.contrato_id)
+               FROM garantia g
+               JOIN contrato_alquiler c ON c.id = g.contrato_id
+               JOIN propiedad pr ON pr.id = c.propiedad_id
+               LEFT JOIN persona p ON p.id = g.persona_id
+              WHERE c.estado = 'vigente' AND g.bcra_revisar_el IS NOT NULL
+                -- La fecha de revisión se calcula al consultar, con el
+                -- vencimiento de la garantía que había ESE día. Si después
+                -- alguien lo adelanta, la fecha guardada queda del otro lado y
+                -- el aviso pediría revisar una garantía ya vencida. Se vuelve a
+                -- comprobar acá, contra el dato de hoy.
+                AND (g.vence_el IS NULL OR g.bcra_revisar_el <= g.vence_el)
+                AND (g.bcra_revisar_el - $2::int)
+                    BETWEEN current_date - 180 AND current_date + 400`,
+            [tenantId, dias],
+          ),
+        );
+      }
+
       // ── Cuotas impagas ──
       // Acá los días van HACIA ADELANTE del vencimiento: se avisa el día que
       // vence y después a los 5 y 15 de mora.

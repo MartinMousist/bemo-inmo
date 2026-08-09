@@ -168,6 +168,191 @@ describe('Recordatorios', () => {
     expect(res.body.total).toBe(0);
   });
 
+  // ── Garantías ─────────────────────────────────────────────────────────────
+  //
+  // `garantia_por_vencer` estaba en el CHECK de la migración 010 desde el día
+  // uno y **nunca lo emitió nadie**: la columna existía, ninguna pantalla la
+  // llenaba y ningún bloque del generador la miraba. Estos tests son el gate de
+  // que eso dejó de ser cierto.
+
+  /** Un garante con vencimiento, colgado de un contrato. */
+  async function garanteQueVence(contratoId: string, diasParaVencer: number, i = inmo) {
+    const p = await http().post('/v1/personas').set(...como(i))
+      .send({
+        nombre: 'Garante', apellido: `Aviso ${Math.random().toString(36).slice(2, 6)}`,
+        docTipo: 'dni', docNumero: `${Math.floor(10_000_000 + Math.random() * 80_000_000)}`,
+      }).expect(201);
+
+    const g = await http().post(`/v1/contratos/${contratoId}/garantes`).set(...como(i))
+      .send({ personaId: p.body.id }).expect(201);
+
+    // El aviso sale 30 días antes: con menos de 30 el `dispara_el` ya pasó y no
+    // entra en la ventana del generador.
+    const vence = new Date(Date.now() + diasParaVencer * 86_400_000).toISOString().slice(0, 10);
+    await http().patch(`/v1/garantes/${g.body.id}`).set(...como(i))
+      .send({ venceEl: vence }).expect(200);
+
+    return g.body.id as string;
+  }
+
+  async function conOwner<T extends object>(texto: string, params: unknown[] = []): Promise<T[]> {
+    const c = new Client({ connectionString: loadEnv().DATABASE_OWNER_URL });
+    await c.connect();
+    try {
+      const { rows } = await c.query<T>(texto, params);
+      return rows;
+    } finally {
+      await c.end();
+    }
+  }
+
+  it('avisa la garantía que vence, y nombra la propiedad y al garante', async () => {
+    const c = await contratoQueVence(300);
+    const garanteId = await garanteQueVence(c.id, 45);
+
+    const r = await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+    expect(r.body.garantia_por_vencer).toBeGreaterThanOrEqual(1);
+
+    const bandeja = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
+    const aviso = bandeja.body.items.find(
+      (e: { entidadId: string; tipo: string }) =>
+        e.entidadId === garanteId && e.tipo === 'garantia_por_vencer',
+    );
+    expect(aviso).toBeDefined();
+    // El título nombra la dirección y el detalle al garante, igual que los otros.
+    expect(aviso.titulo).toContain('Vence la garantía de');
+    expect(aviso.detalle).toContain('Garante');
+    expect(aviso.entidadTipo).toBe('garantia');
+  });
+
+  it('generar dos veces no duplica el aviso de garantía', async () => {
+    const c = await contratoQueVence(320);
+    const garanteId = await garanteQueVence(c.id, 60);
+
+    await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+    const segunda = await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+    expect(segunda.body.garantia_por_vencer).toBe(0);
+
+    const filas = await conOwner<{ n: string }>(
+      `SELECT count(*)::text AS n FROM evento_programado
+        WHERE entidad_id = $1 AND tipo = 'garantia_por_vencer'`,
+      [garanteId],
+    );
+    expect(Number(filas[0].n)).toBe(1);
+  });
+
+  it('una garantía de un contrato que NO está vigente no genera nada', async () => {
+    // Un seguro de caución que vence en un contrato ya terminado no hay que
+    // renovarlo. Avisarlo es ruido, y el ruido entrena a ignorar la bandeja.
+    const c = await contratoQueVence(280);
+    const garanteId = await garanteQueVence(c.id, 50);
+
+    await conOwner("UPDATE contrato_alquiler SET estado = 'rescindido' WHERE id = $1", [c.id]);
+    await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+
+    const filas = await conOwner<{ n: string }>(
+      `SELECT count(*)::text AS n FROM evento_programado
+        WHERE entidad_id = $1 AND tipo = 'garantia_por_vencer'`,
+      [garanteId],
+    );
+    expect(Number(filas[0].n)).toBe(0);
+  });
+
+  it('avisa que hay que revisar el BCRA — y NO lo consulta', async () => {
+    // El aviso avisa; la consulta la aprieta una persona. Un cron que le
+    // pidiera al BCRA el dato bancario de un garante cada seis meses estaría
+    // averiguando la situación crediticia de un tercero sin que nadie se lo
+    // pida, contra una API con control de tráfico por IP.
+    const c = await contratoQueVence(340);
+    const garanteId = await garanteQueVence(c.id, 400);
+
+    // La fecha de revisión la escribe `consultarBcra()`, que sale a internet.
+    // Acá se pone a mano lo que esa consulta habría dejado.
+    await conOwner(
+      `UPDATE garantia
+          SET bcra_consultado_el = now() - interval '6 months',
+              bcra_situacion = 1,
+              bcra_revisar_el = current_date
+        WHERE id = $1`,
+      [garanteId],
+    );
+
+    const r = await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+    expect(r.body.garantia_revision_bcra).toBeGreaterThanOrEqual(1);
+
+    const bandeja = await http().get('/v1/avisos?futuros=true').set(...como(inmo)).expect(200);
+    const aviso = bandeja.body.items.find(
+      (e: { entidadId: string; tipo: string }) =>
+        e.entidadId === garanteId && e.tipo === 'garantia_revision_bcra',
+    );
+    expect(aviso).toBeDefined();
+    expect(aviso.titulo).toContain('Revisar el BCRA');
+    expect(aviso.detalle).toContain('Volvé a consultarlo');
+
+    // Idempotente, como todos.
+    const segunda = await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+    expect(segunda.body.garantia_revision_bcra).toBe(0);
+  });
+
+  it('la revisión no se avisa si la garantía ya venció antes de esa fecha', async () => {
+    // La fecha de revisión se calcula al consultar, con el vencimiento que
+    // había ESE día. Si después alguien lo adelanta, el aviso pediría revisar
+    // una garantía que ya no cubre nada.
+    const c = await contratoQueVence(360);
+    const garanteId = await garanteQueVence(c.id, 200);
+
+    await conOwner(
+      `UPDATE garantia
+          SET bcra_consultado_el = now(), bcra_situacion = 1,
+              bcra_revisar_el = current_date,
+              vence_el = current_date - 5
+        WHERE id = $1`,
+      [garanteId],
+    );
+
+    await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+    const filas = await conOwner<{ n: string }>(
+      `SELECT count(*)::text AS n FROM evento_programado
+        WHERE entidad_id = $1 AND tipo = 'garantia_revision_bcra'`,
+      [garanteId],
+    );
+    expect(Number(filas[0].n)).toBe(0);
+  });
+
+  it('el filtro por tipo acepta TODOS los tipos que acepta la base', async () => {
+    // Se descubrió usando la app: `garantia_revision_bcra` entró en el CHECK de
+    // `evento_programado` en la migración 019 y no en `TIPOS_EVENTO`, así que
+    // el generador creaba avisos que el desplegable de la pantalla no podía
+    // filtrar — 400 «El campo «tipo» no es válido». Dos listas de lo mismo en
+    // dos archivos: este test es lo que las mantiene juntas.
+    const rows = await conOwner<{ def: string }>(
+      `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conname = 'evento_programado_tipo_check'`,
+    );
+
+    const deLaBase = [...rows[0].def.matchAll(/'([a-z_]+)'::text/g)].map((m) => m[1]);
+    expect(deLaBase.length).toBeGreaterThan(0);
+
+    for (const tipo of deLaBase) {
+      await http().get(`/v1/avisos?tipo=${tipo}`).set(...como(inmo)).expect(200);
+    }
+  });
+
+  it('cero fuga: la vecina no ve los avisos de garantías ajenas', async () => {
+    const c = await contratoQueVence(310);
+    await garanteQueVence(c.id, 55);
+    await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+
+    const res = await http().get('/v1/avisos?futuros=true&tipo=garantia_por_vencer')
+      .set(...como(otra)).expect(200);
+    expect(res.body.items).toHaveLength(0);
+    expect(res.body.total).toBe(0);
+
+    // Y generar desde la vecina no toca las garantías de la otra inmobiliaria.
+    const suyo = await http().post('/v1/avisos/generar').set(...como(otra)).expect(201);
+    expect(suyo.body.garantia_por_vencer ?? 0).toBe(0);
+  });
+
   it('la clave única impide un duplicado incluso por SQL directo', async () => {
     await contratoQueVence(40);
     await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);

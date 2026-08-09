@@ -52,8 +52,28 @@ export class OportunidadesService {
     return this.db.withTenant(tenantId, async (ej) => {
       // Un asesor ve las suyas. No es sólo cosmético: es la diferencia entre
       // "el equipo colabora" y "cualquiera se lleva la cartera de leads".
+      //
+      // Los leads son la EXCEPCIÓN declarada al filtro por agente del resto de
+      // los listados: en propiedades, cartera, ventas y publicaciones el filtro
+      // es una herramienta y cualquiera ve todo. Acá es una regla de negocio, y
+      // abrirla no se revierte con un deploy: el que carga un lead deja de
+      // tenerlo protegido para siempre.
       const soloPropias = actor.rol === 'agente';
       const q = f.q ? `%${f.q.trim()}%` : null;
+
+      // Un asesor que filtraba por un compañero recibía UNA LISTA VACÍA: las
+      // dos condiciones —la pedida y la forzada— caen sobre la misma columna y
+      // no se pueden cumplir a la vez. Eso es indistinguible de «ese agente no
+      // tiene ningún lead», o sea un bug de datos fabricado. Ahora lo dice.
+      //
+      // La pantalla, además, no le ofrece otros agentes al rol `agente`: este
+      // 403 es la red por abajo, no la interfaz.
+      if (soloPropias && f.agenteId && f.agenteId !== actor.usuarioId) {
+        throw AppError.forbidden(
+          'Un asesor ve solamente sus propios leads. Los del resto del equipo ' +
+            'los ve un titular o administración.',
+        );
+      }
 
       const params = [
         q,

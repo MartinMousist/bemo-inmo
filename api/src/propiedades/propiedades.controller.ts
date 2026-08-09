@@ -20,6 +20,7 @@ import {
   EditarPropiedadDto,
   FiltroPropiedadesDto,
 } from './propiedades.dto';
+import { ComisionesOperacionDto } from '../ventas/ventas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
 @Controller('propiedades')
@@ -31,13 +32,33 @@ export class PropiedadesController {
   ) {}
 
   /**
-   * Le dice al front si el mapa está disponible. Sin esto, la UI tendría que
-   * adivinar por qué una propiedad no tiene coordenadas: puede ser que falte la
-   * API key o que la dirección no exista, y son problemas distintos.
+   * Qué puede hacer el front hoy, capacidad por capacidad.
+   *
+   * Antes esto devolvía un solo booleano `mapas`, y ahí estaba el defecto:
+   * mezclaba DOS cosas distintas que no dependen de lo mismo.
+   *
+   *  · **Geocodificar** —de una dirección a lat/lng— lo hace el servidor contra
+   *    la Geocoding API y necesita la key. Sin key no hay coordenadas, y la UI
+   *    ofrece cargarlas a mano.
+   *
+   *  · **Mostrar el mapa** de una propiedad que YA tiene coordenadas es un
+   *    `<iframe>` a `www.google.com/maps?q=…&output=embed`, que **no lleva key**.
+   *    Verificado desde el contenedor de la API: HTTP 200, sin `X-Frame-Options`
+   *    que lo bloquee. Con el booleano único, una propiedad con lat/lng cargadas
+   *    a mano mostraba «El mapa necesita la API key de Google» y escondía un
+   *    mapa que habría funcionado perfecto.
+   *
+   * `mapaEmbebido` es `true` constante, y está igual porque es un dato del
+   * contrato: el día que Google cierre esa URL —no está documentada, ver
+   * `docs/CONTINUAR.md`— se apaga acá y las fichas degradan solas.
    */
   @Get('capacidades')
   capacidades() {
-    return { mapas: this.geo.configurado, fotos: this.almacen.configurado };
+    return {
+      geocodificacion: this.geo.configurado,
+      mapaEmbebido: true,
+      fotos: this.almacen.configurado,
+    };
   }
 
   /**
@@ -114,6 +135,26 @@ export class PropiedadesController {
     @Body() dto: CrearOperacionDto,
   ) {
     return this.propiedades.agregarOperacion(actor.tenantId, id, dto);
+  }
+
+  /**
+   * Los honorarios de esta operación, distintos de los de la casa.
+   *
+   * **owner + admin**, sin el asesor: el precio de la propiedad lo carga
+   * cualquiera, pero cuánto cobra la inmobiliaria por venderla es política
+   * comercial. Es el mismo recorte que ya tiene `PUT /comisiones/config`.
+   *
+   * Mandar `{}` limpia el override y la operación vuelve a heredar.
+   */
+  @Patch(':id/operaciones/:operacionId/comisiones')
+  @Roles('owner', 'admin')
+  editarComisiones(
+    @ActorActual() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('operacionId', ParseUUIDPipe) operacionId: string,
+    @Body() dto: ComisionesOperacionDto,
+  ) {
+    return this.propiedades.editarComisiones(actor.tenantId, id, operacionId, dto);
   }
 
   @Patch(':id/operaciones/:operacionId')

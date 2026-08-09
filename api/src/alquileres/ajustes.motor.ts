@@ -195,3 +195,59 @@ export function sumarMeses(periodo: string, meses: number): string {
     .toISOString()
     .slice(0, 10);
 }
+
+export interface PeriodoDeAjuste {
+  /** Desde cuándo rige el aumento. Día 1 del mes. */
+  vigenteDesde: string;
+  /** El mes del índice contra el que se compara. */
+  periodoBase: string;
+  /** El mes del índice que se toma para actualizar. */
+  periodoActual: string;
+}
+
+/**
+ * La cadena entera de ajustes de un contrato, sin tocar la base.
+ *
+ * Vivía suelta adentro de `ContratosService.proyectarAjustes()`, que la usa
+ * mezclada con consultas. El seed necesita la misma cadena para sembrar ajustes
+ * calculados de verdad en vez de tipearlos a mano, y copiarla habría dejado dos
+ * versiones de la regla: el día que se decida usar el índice de dos meses antes,
+ * la demo mostraría números que la aplicación no produce.
+ *
+ * Las dos reglas que encapsula:
+ *
+ * **El índice es el del MES ANTERIOR al ajuste.** El IPC de un mes lo publica
+ * INDEC a mediados del siguiente, así que el de «este mes» nunca está a tiempo.
+ * Es la trampa que ya está anotada en `docs/CONTINUAR.md`: cargar el índice sólo
+ * de los meses del ajuste no proyecta nada.
+ *
+ * **Cada ajuste arranca donde terminó el anterior.** El período base del segundo
+ * aumento es el período actual del primero, no el `mes_base` del contrato. Sin
+ * eso, cada ajuste mediría la inflación desde el principio del contrato y el
+ * alquiler se multiplicaría.
+ *
+ * ⚠️ Lo que esta función NO puede saber: que un ajuste **ya exista** en la base
+ * con otro período base —típicamente uno cargado a mano—. Eso re-ancla la cadena
+ * y es estado, no cálculo: se resuelve en `proyectarAjustes()`, donde está
+ * comentado del otro lado.
+ */
+export function periodosDeAjuste(
+  fechaInicio: string,
+  fechaFin: string,
+  periodicidadMeses: number,
+  mesBase: string,
+  /** Hasta dónde proyectar. Más allá los índices ni siquiera existen. */
+  limite: string,
+): PeriodoDeAjuste[] {
+  const salida: PeriodoDeAjuste[] = [];
+  let periodoBase = mesBase;
+
+  for (const vigenteDesde of fechasDeAjuste(fechaInicio, fechaFin, periodicidadMeses)) {
+    if (vigenteDesde > limite) break;
+    const periodoActual = sumarMeses(vigenteDesde, -1);
+    salida.push({ vigenteDesde, periodoBase, periodoActual });
+    periodoBase = periodoActual;
+  }
+
+  return salida;
+}

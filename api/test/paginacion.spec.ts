@@ -45,15 +45,20 @@ const LISTAS = [
  * de estar acotado por lo que dice el comentario, el lugar donde se discute es
  * este test.
  *
- *  · `/v1/equipo` — la cantidad de gente que trabaja en la inmobiliaria.
+ *  · `/v1/equipo` — la cantidad de gente que trabaja en la inmobiliaria. Desde
+ *    la etapa de comisiones devuelve un OBJETO (`miembros` + la política de la
+ *    casa) y no un array pelado, así que se comprueba `miembros`.
  *  · `/v1/plantillas` — las ocho base más las que alguien escriba.
  *  · `/v1/ventas/comisiones/por-agente` — es un AGREGADO, no una lista: una fila
  *    por (agente × moneda × estado). Paginarlo sería partir un total en pedazos.
  */
-const SIN_PAGINAR = [
-  '/v1/equipo',
-  '/v1/plantillas',
-  '/v1/ventas/comisiones/por-agente',
+const SIN_PAGINAR: Array<{ ruta: string; lista: string | null }> = [
+  { ruta: '/v1/equipo', lista: 'miembros' },
+  { ruta: '/v1/plantillas', lista: null },
+  { ruta: '/v1/ventas/comisiones/por-agente', lista: null },
+  // El catálogo de inmobiliarias externas: la libreta de colegas de la zona.
+  // Entre cinco y veinte en una inmobiliaria de barrio; es un bound del mundo.
+  { ruta: '/v1/comisiones/externas', lista: null },
 ];
 
 describe('Paginación de las listas', () => {
@@ -192,12 +197,13 @@ describe('Paginación de las listas', () => {
     });
   });
 
-  it.each(SIN_PAGINAR)('%s sigue devolviendo un array, y está bien', async (ruta) => {
+  it.each(SIN_PAGINAR)('$ruta sigue devolviendo un array, y está bien', async ({ ruta, lista }) => {
     // No es un olvido: cada uno está acotado por algo real. Ver el comentario de
     // SIN_PAGINAR. Si alguno deja de estarlo, este test es el lugar de la
     // discusión — no una lista que un día devuelve 8.000 filas en silencio.
     const res = await http().get(ruta).set(...como()).expect(200);
-    expect(Array.isArray(res.body)).toBe(true);
+    const cuerpo = lista ? res.body[lista] : res.body;
+    expect(Array.isArray(cuerpo)).toBe(true);
   });
 
   it('las listas siguen respetando los roles', async () => {

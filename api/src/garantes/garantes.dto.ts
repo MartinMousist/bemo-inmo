@@ -21,7 +21,18 @@ export class CrearGaranteDto {
 export class EditarGaranteDto {
   @IsOptional() @IsIn(TIPOS_GARANTIA as unknown as string[]) tipo?: string;
   @IsOptional() @IsString() @MaxLength(500) detalle?: string;
-  @IsOptional() @IsISO8601() venceEl?: string;
+  /**
+   * La única fecha que se puede BORRAR mandando `null`, y por eso es la única
+   * que no va por `coalesce`.
+   *
+   * El resto de los campos sigue la regla del proyecto —lo que no viene no se
+   * pisa con NULL, que es la trampa del PATCH parcial ya anotada— pero acá hace
+   * falta la excepción: sobre `vence_el` dispara un recordatorio, y una fecha
+   * mal tipeada que no se puede sacar deja avisando para siempre una garantía
+   * que no vence. `undefined` (el campo no vino) sigue sin tocar nada; `null`
+   * es una orden explícita de borrarla.
+   */
+  @IsOptional() @IsISO8601() venceEl?: string | null;
   /** El día que firmó el contrato. Todos los garantes tienen que firmarlo. */
   @IsOptional() @IsISO8601() firmoEl?: string;
 }

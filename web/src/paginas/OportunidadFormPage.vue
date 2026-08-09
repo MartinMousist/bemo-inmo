@@ -33,7 +33,7 @@ async function guardar() {
         notas: form.notas || undefined,
       }),
     });
-    router.replace('/oportunidades');
+    router.replace('/leads');
   } catch (e) {
     error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo guardar.';
   } finally { guardando.value = false; }
@@ -43,8 +43,8 @@ async function guardar() {
 <template>
   <div class="stack">
     <PageHeader
-      titulo="Nueva oportunidad"
-      bajada="Si la persona no existe, se crea junto con la oportunidad. No hace falta ir a otra pantalla."
+      titulo="Nuevo lead"
+      bajada="Si la persona no existe, se crea junto con el lead. No hace falta ir a otra pantalla."
     />
     <form class="card stack" @submit.prevent="guardar">
       <div class="grid">

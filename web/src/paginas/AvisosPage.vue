@@ -19,6 +19,10 @@ const TIPO: Record<string, string> = {
   contrato_por_vencer: 'Contrato', ajuste_por_aplicar: 'Aumento',
   cuota_impaga: 'Cuota', reserva_por_vencer: 'Reserva',
   visita_agendada: 'Visita', garantia_por_vencer: 'Garantía',
+  // Se llama distinto de «Garantía» a propósito: uno pide renovar un papel que
+  // se vence y el otro pide volver a consultar el BCRA. Con la misma etiqueta,
+  // el filtro por tipo mezcla dos tareas que no se hacen igual.
+  garantia_revision_bcra: 'Revisión BCRA',
 };
 
 const POR_PAGINA = 50;

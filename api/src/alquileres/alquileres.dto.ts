@@ -4,6 +4,7 @@ import {
   IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import { PaginacionDto } from '../common/paginacion';
+import { FiltroConAgenteDto } from '../common/filtro-agente';
 
 export const INDICES = ['ipc', 'icl', 'uva', 'icp', 'porcentaje_fijo', 'ninguno'] as const;
 export const INDICES_PUBLICADOS = ['ipc', 'icl', 'uva', 'icp'] as const;
@@ -64,7 +65,14 @@ export const ESTADOS_CONTRATO = [
   'borrador', 'por_iniciar', 'vigente', 'vencido', 'rescindido', 'renovado',
 ] as const;
 
-export class FiltroContratosDto extends PaginacionDto {
+/**
+ * `agenteId` hereda de `FiltroConAgenteDto` y, en alquileres, es el **captador
+ * de la propiedad**: `contrato_alquiler` no tiene columna de agente propia.
+ * La pantalla lo rotula «Captador» por eso mismo. Si algún día hace falta «lo
+ * que coloqué yo», es una columna nueva (`agente_colocador_id`) con su
+ * migración, no un rótulo distinto sobre el mismo dato.
+ */
+export class FiltroContratosDto extends FiltroConAgenteDto {
   @IsOptional()
   @IsIn(ESTADOS_CONTRATO as unknown as string[])
   estado?: string;

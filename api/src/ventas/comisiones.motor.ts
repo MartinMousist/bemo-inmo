@@ -31,8 +31,14 @@ export interface EntradaComision {
    * Puntas donde interviene OTRA inmobiliaria y el % que se lleva.
    * `{ vendedora: 50 }` = de lo cobrado a la punta vendedora, la mitad es de
    * la otra inmobiliaria.
+   *
+   * `externaId` es la ficha del catálogo (`inmobiliaria_externa`), y es
+   * OPCIONAL: se puede compartir con una agencia que todavía no está cargada y
+   * el reparto tiene que salir igual. El `nombre` es el que manda —es el que se
+   * congela en la comisión— y el id sólo sirve para poder sumar después cuánto
+   * se le pagó a cada una.
    */
-  externas?: Partial<Record<Punta, { nombre: string; porcentaje: number }>>;
+  externas?: Partial<Record<Punta, { nombre: string; porcentaje: number; externaId?: string }>>;
 
   /** Reparto puertas adentro, en % de lo que le queda a la casa. */
   repartoInterno?: {
@@ -52,8 +58,18 @@ export interface LineaComision {
   beneficiarioTipo: 'operacion' | 'casa' | 'agente' | 'inmobiliaria_externa';
   beneficiarioId?: string;
   beneficiarioNombre?: string;
+  /** La ficha del catálogo, sólo en las líneas de inmobiliaria externa. */
+  externaId?: string;
   /** Índice de la línea de la que sale, para encadenar padre → hijo. */
   padre?: number;
+  /**
+   * La cuenta escrita, para que la pantalla no la tenga que rearmar.
+   *
+   * «Todo cálculo lleva su memoria» es una regla del dominio, no un adorno: sin
+   * esto, quien mira una comisión de USD 2.430 no puede decir de dónde salió, y
+   * el día que alguien discute un pago hay que abrir la base.
+   */
+  memoria: string;
 }
 
 export interface ResultadoComisiones {
@@ -98,6 +114,7 @@ export function calcularComisiones(e: EntradaComision): ResultadoComisiones {
       monto: montoPunta,
       moneda: e.moneda,
       beneficiarioTipo: 'operacion',
+      memoria: memoria(e.moneda, e.base, pct, montoPunta),
     });
     totalOperacion = round2(totalOperacion + montoPunta);
 
@@ -117,7 +134,9 @@ export function calcularComisiones(e: EntradaComision): ResultadoComisiones {
         moneda: e.moneda,
         beneficiarioTipo: 'inmobiliaria_externa',
         beneficiarioNombre: externa.nombre,
+        externaId: externa.externaId,
         padre: iNivel1,
+        memoria: memoria(e.moneda, montoPunta, externa.porcentaje, montoExterna),
       });
       totalExternas = round2(totalExternas + montoExterna);
       // El resto se calcula por diferencia y NO con (100 - pct): así, si el
@@ -146,6 +165,7 @@ export function calcularComisiones(e: EntradaComision): ResultadoComisiones {
         beneficiarioId: quien.usuarioId,
         beneficiarioNombre: quien.nombre,
         padre: iNivel1,
+        memoria: memoria(e.moneda, paraLaCasa, quien.porcentaje, montoAgente),
       });
       totalAgentes = round2(totalAgentes + montoAgente);
       restoCasa = round2(restoCasa - montoAgente);
@@ -164,6 +184,9 @@ export function calcularComisiones(e: EntradaComision): ResultadoComisiones {
         moneda: e.moneda,
         beneficiarioTipo: 'casa',
         padre: iNivel1,
+        memoria:
+          `${plata(e.moneda, paraLaCasa)} de la ${ETIQUETA_PUNTA[p]} − lo de los agentes ` +
+          `= ${plata(e.moneda, restoCasa)}`,
       });
       totalCasa = round2(totalCasa + restoCasa);
     }
@@ -189,4 +212,28 @@ export function cuadra(r: ResultadoComisiones): boolean {
 
 function round4(n: number): number {
   return Math.round((n + Number.EPSILON) * 1e4) / 1e4;
+}
+
+/**
+ * La memoria de cálculo de una línea: `USD 162.000 × 3 % = USD 4.860`.
+ *
+ * Se arma acá, en el motor, y no en la pantalla: es el motor el que sabe sobre
+ * qué base aplicó cada porcentaje, y ese dato se pierde apenas la línea entra
+ * en la base. La pantalla que la rearmara tendría que reimplementar el
+ * encadenado de los tres niveles para escribir una frase.
+ *
+ * Lleva la moneda pegada a cada número porque ningún monto va sin ella, ni
+ * siquiera adentro de una explicación.
+ */
+export function memoria(moneda: string, base: number, porcentaje: number, monto: number): string {
+  return `${plata(moneda, base)} × ${num(porcentaje)} % = ${plata(moneda, monto)}`;
+}
+
+function plata(moneda: string, n: number): string {
+  return `${moneda} ${num(n)}`;
+}
+
+/** es-AR: miles con punto, decimales con coma. Sin centavos cuando son cero. */
+function num(n: number): string {
+  return n.toLocaleString('es-AR', { maximumFractionDigits: 2 });
 }

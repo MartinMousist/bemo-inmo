@@ -9,6 +9,15 @@ export class RegistrarDto {
   @Length(2, 120)
   inmobiliaria!: string;
 
+  /**
+   * Qué clase de cuenta es. Opcional y con default `inmobiliaria`: las cuentas
+   * que ya existían se crearon sin esto y un signup viejo tiene que seguir
+   * funcionando igual.
+   */
+  @IsOptional()
+  @IsIn(['inmobiliaria', 'gestor'])
+  tipo?: string;
+
   @IsOptional()
   @IsString()
   @Length(2, 60)

@@ -45,18 +45,22 @@ export class PublicacionesService {
   async listar(tenantId: string, f: FiltroPublicacionesDto) {
     return this.db.withTenant(tenantId, async (ej) => {
       const q = f.q ? `%${f.q.trim()}%` : null;
-      const params = [q, f.portal ?? null, f.estado ?? null];
+      const params = [q, f.portal ?? null, f.estado ?? null, f.agenteId ?? null];
 
+      // El filtro por captador sale del JOIN a propiedad que ya estaba en el
+      // FROM: una condición y ninguna tabla nueva.
       const desde = `
         FROM publicacion p
         JOIN operacion o ON o.id = p.operacion_id
         JOIN propiedad pr ON pr.id = o.propiedad_id
+        LEFT JOIN usuario cap ON cap.id = pr.agente_captador_id
        WHERE ($1::text IS NULL
               OR p.aviso->>'titulo' ILIKE $1
               OR pr.calle ILIKE $1
               OR pr.codigo::text = trim(both '%' from $1))
          AND ($2::text IS NULL OR p.portal = $2)
-         AND ($3::text IS NULL OR p.estado = $3)`;
+         AND ($3::text IS NULL OR p.estado = $3)
+         AND ($4::uuid IS NULL OR pr.agente_captador_id = $4)`;
 
       const { rows: conteo } = await ej.query<{ total: string }>(
         `SELECT count(*)::text AS total ${desde}`,
@@ -69,10 +73,14 @@ export class PublicacionesService {
                 p.aviso->>'titulo' AS titulo,
                 o.id AS "operacionId", o.tipo AS "tipoOperacion",
                 pr.codigo AS "codigoPropiedad",
-                trim(pr.calle || ' ' || coalesce(pr.numero,'')) AS direccion
+                trim(pr.calle || ' ' || coalesce(pr.numero,'')) AS direccion,
+                -- Quién captó la propiedad. Viaja siempre y no sólo cuando hay
+                -- filtro: una lista filtrada por una persona que no muestra de
+                -- quién es cada fila obliga a confiar en el filtro a ciegas.
+                pr.agente_captador_id AS "captadorId", cap.nombre AS "captadorNombre"
          ${desde}
           ORDER BY p.updated_at DESC
-          LIMIT $4 OFFSET $5`,
+          LIMIT $5 OFFSET $6`,
         [...params, f.porPagina, offset(f)],
       );
 

@@ -6,6 +6,7 @@ import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
+import SelectAgente from '../componentes/SelectAgente.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiPager from '../componentes/UiPager.vue';
@@ -14,6 +15,7 @@ import ThOrden from '../componentes/ThOrden.vue';
 import { fecha, money, moneyCorto, periodo as fmtPeriodo, proximidad, plural } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
 import { filtrosRecordados } from '../dominio/filtros';
+import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
 
 /**
  * La cartera de alquileres.
@@ -33,6 +35,8 @@ interface Fila {
   propiedad: { id: string; etiqueta: string; direccion: string };
   inquilino: string | null;
   propietario: string | null;
+  /** Quién captó la PROPIEDAD. No hay «agente del contrato» en la base. */
+  captador: { id: string; nombre: string } | null;
   montoVigente: number;
   moneda: string;
   indice: string;
@@ -95,7 +99,7 @@ const q = ref('');
  */
 const { valores: filtros, limpiar: limpiarFiltros } = filtrosRecordados(
   'cartera',
-  { cobranza: '', indice: '', venceEn: '' },
+  { cobranza: '', indice: '', venceEn: '', agente: '' },
   { cobranza: Object.keys(ETIQUETA_COBRANZA), indice: Object.keys(ETIQUETA_INDICE) },
 );
 
@@ -168,6 +172,10 @@ async function cargar() {
           cobranza: filtros.value.cobranza,
           indice: filtros.value.indice,
           venceEn: filtros.value.venceEn,
+          // En alquileres el agente es el CAPTADOR de la propiedad:
+          // `contrato_alquiler` no tiene agente propio. Por eso el control se
+          // rotula «Captador» y no «Agente».
+          ...paramsDeAgente(filtros.value.agente, auth.usuario?.id ?? null),
           orden: orden.value ?? '',
           dir: orden.value ? dir.value : '',
         },
@@ -187,11 +195,25 @@ async function cargar() {
 }
 
 let debounce: ReturnType<typeof setTimeout> | undefined;
+/**
+ * `deep: true` y no es cosmético: **sin esto los filtros no filtraban**.
+ *
+ * `filtros` es un `ref` que guarda un objeto. Cambiar `filtros.value.cobranza`
+ * lo MUTA: la identidad del objeto no cambia, y un `watch` sobre el ref compara
+ * identidades. La consecuencia era que elegir «En mora» guardaba la preferencia
+ * en `localStorage` —ese watch sí es `deep`— y la lista seguía mostrando los 18
+ * contratos. El filtro recién se aplicaba **la próxima vez que se abría la
+ * pantalla**, así que parecía que a veces andaba.
+ *
+ * Apareció al montar el filtro por agente: el chip se prendía, el desplegable
+ * cambiaba, el «Limpiar» aparecía —todo eso son `computed`, que sí siguen las
+ * mutaciones— y el número del encabezado no se movía.
+ */
 watch([q, filtros], () => {
   clearTimeout(debounce);
   pagina.value = 1;
   debounce = setTimeout(cargar, 220);
-});
+}, { deep: true });
 watch(pagina, () => void cargar());
 
 // ── Selección ──────────────────────────────────────────────────────────────
@@ -322,7 +344,8 @@ function irA(id: string) { router.push(`/contratos/${id}`); }
 
 const hayFiltro = computed(
   () => !!(q.value || filtros.value.cobranza || filtros.value.indice || filtros.value.venceEn
-           || orden.value),
+           || orden.value)
+    || hayFiltroDeAgente(filtros.value.agente),
 );
 
 /** Limpiar borra también el orden: si no, «Limpiar» no limpia todo. */
@@ -377,6 +400,11 @@ onMounted(cargar);
         <input v-model="filtros.venceEn" type="month" />
       </label>
 
+      <!-- «Captador» y no «Agente»: `contrato_alquiler` no tiene columna de
+           agente, así que lo único que la base sabe es quién captó la
+           propiedad. Quien colocó el inquilino puede ser otra persona. -->
+      <SelectAgente v-model="filtros.agente" etiqueta="Captador" />
+
       <button
         v-if="hayFiltro"
         class="btn secondary sm"
@@ -386,6 +414,11 @@ onMounted(cargar);
         Limpiar
       </button>
     </div>
+
+    <!-- `GET /exportar/contratos.csv` no toma filtros: baja la cartera entera. -->
+    <p v-if="hayFiltro" class="aviso-exportar">
+      El botón «Exportar» baja la cartera completa, no lo que está filtrado.
+    </p>
 
     <!-- ── Barra de selección ───────────────────────────────────────────── -->
     <div v-if="seleccion.size" class="lote">
@@ -500,6 +533,10 @@ onMounted(cargar);
                 <td class="clicable" @click="irA(f.id)">
                   <span class="mono cod">{{ f.propiedad.etiqueta }}</span>
                   <span class="dir">{{ f.propiedad.direccion }}</span>
+                  <!-- Va acá abajo y no en una columna propia: la tabla ya tiene
+                       diez. Y dice «captó» porque eso es lo que el dato afirma:
+                       quien colocó el inquilino puede ser otra persona. -->
+                  <span v-if="f.captador" class="captador">captó {{ f.captador.nombre }}</span>
                 </td>
 
                 <td class="clicable" @click="irA(f.id)">
@@ -787,6 +824,8 @@ tbody tr:focus-visible {
 .dir { color: var(--ink); }
 .cada { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-2); font-family: var(--font-ui); }
 .inter { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-2); }
+.captador { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-2); }
+.aviso-exportar { margin: 0; font-size: 12px; color: var(--muted); }
 .cuando { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-2); }
 .vacio { color: var(--muted-2); }
 .monto-nuevo { color: var(--ink); }

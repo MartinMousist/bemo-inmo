@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
+import SelectAgente from '../componentes/SelectAgente.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
 import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { ETIQUETA_OPERACION, fechaHora } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
+import { filtrosRecordados } from '../dominio/filtros';
+import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
+import { useAuth } from '../stores/auth';
 
 interface Publicacion {
   id: string; portal: string; estado: string; titulo: string | null;
   etiquetaPropiedad: string; direccion: string; tipoOperacion: string;
   urlPublica: string | null; ultimoSync: string | null; integracionActiva: boolean;
+  /** Quién captó la propiedad del aviso. */
+  captadorId: string | null; captadorNombre: string | null;
 }
 interface Aviso {
   titulo: string; precioTexto: string; descripcion: string;
@@ -45,6 +51,17 @@ const paginas = ref(1);
 const pagina = ref(1);
 const q = ref('');
 const filtroPortal = ref('');
+const auth = useAuth();
+
+/**
+ * Es el listado donde el filtro por agente más sirve: «qué avisos míos están
+ * todavía sin publicar» era una pregunta que había que contestar leyendo la
+ * lista entera. El agente de un aviso es el CAPTADOR de la propiedad.
+ */
+const { valores: filtros } = filtrosRecordados('publicaciones', { agente: '' });
+const hayFiltro = computed(
+  () => !!q.value || !!filtroPortal.value || hayFiltroDeAgente(filtros.value.agente),
+);
 const feed = ref<{ token: string; url: string } | null>(null);
 const abierta = ref<string | null>(null);
 const aviso = ref<Aviso | null>(null);
@@ -59,7 +76,11 @@ async function cargar() {
       api<Pagina<Publicacion>>(
         `/publicaciones?${consulta(
           { pagina: pagina.value, porPagina: POR_PAGINA },
-          { q: q.value.trim(), portal: filtroPortal.value },
+          {
+            q: q.value.trim(),
+            portal: filtroPortal.value,
+            ...paramsDeAgente(filtros.value.agente, auth.usuario?.id ?? null),
+          },
         )}`,
       ),
       api<{ token: string; url: string }>('/publicaciones/feed/token').catch(() => null),
@@ -74,14 +95,14 @@ async function cargar() {
 }
 
 let debounce: ReturnType<typeof setTimeout> | undefined;
-watch([q, filtroPortal], () => {
+watch([q, filtroPortal, filtros], () => {
   clearTimeout(debounce);
   pagina.value = 1;
   // Al cambiar el filtro se cierra el detalle abierto: la fila que se estaba
   // mirando puede no estar más en la lista.
   abierta.value = null;
   debounce = setTimeout(cargar, 220);
-});
+}, { deep: true });
 watch(pagina, () => {
   abierta.value = null;
   void cargar();
@@ -147,14 +168,16 @@ onMounted(cargar);
           {{ nombre }}
         </button>
       </div>
+
+      <SelectAgente v-model="filtros.agente" etiqueta="Captó" />
     </div>
 
     <UiSkeleton v-if="cargando" :filas="3" :alto="64" />
 
     <UiEmpty
-      v-else-if="!items.length && (q || filtroPortal)"
+      v-else-if="!items.length && hayFiltro"
       titulo="Ningún aviso coincide"
-      detalle="Probá con otro texto o sacá el filtro de portal."
+      detalle="Probá con otro texto, sacá el filtro de portal o mirá los de toda la inmobiliaria."
     />
     <UiEmpty v-else-if="!items.length" titulo="Todavía no hay avisos armados"
       detalle="Desde una operación disponible se genera el aviso para el portal que quieras. El texto sale listo con título, precio y atributos." />
@@ -174,6 +197,10 @@ onMounted(cargar);
             <span class="op">{{ ETIQUETA_OPERACION[p.tipoOperacion] ?? p.tipoOperacion }}</span>
           </span>
           <span class="dir">{{ p.direccion }}</span>
+          <!-- Se puede filtrar por captador, así que la fila dice de quién es.
+               Filtrar por una persona sin ver el nombre en las filas obliga a
+               confiar en el filtro a ciegas. -->
+          <span v-if="p.captadorNombre" class="captador">captó {{ p.captadorNombre }}</span>
         </div>
         <StatusChip :texto="NOMBRE_PORTAL[p.portal] ?? p.portal" tono="acento" />
         <StatusChip :texto="ETIQUETA_ESTADO[p.estado] ?? p.estado"
@@ -222,6 +249,7 @@ onMounted(cargar);
 .linea { display: flex; align-items: baseline; gap: var(--s-sm); }
 .op { font-size: 11px; color: var(--muted); }
 .dir { color: var(--ink); font-size: 13px; }
+.captador { font-size: 10px; color: var(--muted-2); text-align: left; }
 .modo { font-size: 11px; color: var(--muted-2); }
 .sync { font-size: 11px; color: var(--muted-2); }
 .detalle { border-top: 1px solid var(--line); background: var(--surface-2); padding: var(--s-lg); }

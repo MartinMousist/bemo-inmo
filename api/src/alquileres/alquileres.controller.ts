@@ -67,10 +67,29 @@ export class ContratosController {
     return this.contratos.obtener(a.tenantId, id);
   }
 
+  /**
+   * Lo que dice cada cabecera de la ficha con su bloque cerrado.
+   *
+   * **Sin `@Roles`, igual que la ficha**: lo ve todo el equipo, contable
+   * incluido. La regla está escrita en `resumenFicha()` — la cabecera no puede
+   * decir nada que el bloque abierto no diga, ni al revés esconder algo que el
+   * bloque muestra.
+   *
+   * Va DESPUÉS de `@Get('cartera')` y `@Get('vencimientos')`, como todo lo que
+   * cuelga de `:id`: Nest resuelve por orden de declaración y `cartera` entraría
+   * como un id que después falla en el ParseUUIDPipe.
+   */
+  @Get(':id/ficha')
+  ficha(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.contratos.resumenFicha(a.tenantId, id);
+  }
+
   @Post()
   @Roles('owner', 'admin')
   crear(@ActorActual() a: Actor, @Body() dto: CrearContratoDto) {
-    return this.contratos.crear(a.tenantId, dto);
+    // El `usuarioId` viaja porque el contrato nuevo genera su pre-contrato en el
+    // mismo movimiento, y un documento generado lleva quién lo generó.
+    return this.contratos.crear(a.tenantId, dto, a.usuarioId);
   }
 
   @Get(':id/ajustes')

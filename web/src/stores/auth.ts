@@ -17,13 +17,41 @@ export const useAuth = defineStore('auth', () => {
   const rol = ref<Rol | null>(null);
   const listo = ref(false);
 
+  /**
+   * Los módulos que esta cuenta tiene prendidos.
+   *
+   * Vive en el store y no en cada pantalla porque lo consume el MENÚ, que se
+   * dibuja una vez por sesión y en cada navegación. `null` mientras no se
+   * cargó: distinto de `[]`, que es un gestor sin ningún módulo opcional. Si
+   * fueran lo mismo, la barra lateral parpadearía mostrando Ventas y Comisiones
+   * medio segundo antes de esconderlas.
+   */
+  const modulos = ref<string[] | null>(null);
+
   const autenticado = computed(() => usuario.value !== null);
+
+  /** Mientras no se sabe, se asume que sí: esconder de más es peor que de menos. */
+  function tieneModulo(clave: string): boolean {
+    return modulos.value === null || modulos.value.includes(clave);
+  }
+
+  async function cargarCuenta(): Promise<void> {
+    try {
+      const c = await api<{ activos: string[] }>('/cuenta');
+      modulos.value = c.activos;
+    } catch {
+      // Si falla, se deja `null` y se ve todo. Una barra lateral vacía por un
+      // error de red es peor que una con una entrada de más.
+      modulos.value = null;
+    }
+  }
 
   function guardar(s: Sesion): void {
     fijarToken(s.accessToken);
     usuario.value = s.usuario;
     tenant.value = s.tenant;
     rol.value = s.rol;
+    void cargarCuenta();
   }
 
   function limpiar(): void {
@@ -31,6 +59,7 @@ export const useAuth = defineStore('auth', () => {
     usuario.value = null;
     tenant.value = null;
     rol.value = null;
+    modulos.value = null;
   }
 
   /**
@@ -47,6 +76,7 @@ export const useAuth = defineStore('auth', () => {
         usuario.value = yo.usuario;
         tenant.value = yo.tenant;
         rol.value = yo.rol;
+        await cargarCuenta();
       } catch {
         limpiar();
       }
@@ -69,6 +99,8 @@ export const useAuth = defineStore('auth', () => {
     email: string;
     password: string;
     nombre: string;
+    /** `inmobiliaria` o `gestor`: decide con qué módulos arranca la cuenta. */
+    tipo?: string;
   }): Promise<void> {
     guardar(
       await api<Sesion>('/auth/registrar', {
@@ -100,6 +132,9 @@ export const useAuth = defineStore('auth', () => {
     rol,
     listo,
     autenticado,
+    modulos,
+    tieneModulo,
+    cargarCuenta,
     restaurar,
     login,
     registrar,

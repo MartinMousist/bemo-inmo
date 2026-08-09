@@ -27,6 +27,16 @@ export interface FilaCartera {
   inquilino: string | null;
   propietario: string | null;
 
+  /**
+   * Quién captó la PROPIEDAD, no quién colocó el alquiler.
+   *
+   * `contrato_alquiler` no tiene columna de agente propia, así que esto es lo
+   * único que la base sabe. Por eso la columna de la pantalla se llama
+   * «Captador»: quien coloca un inquilino no siempre es quien captó el inmueble,
+   * y rotularlo «Agente» sería afirmar algo que el dato no dice.
+   */
+  captador: { id: string; nombre: string } | null;
+
   montoVigente: number;
   moneda: string;
   indice: string;
@@ -84,7 +94,8 @@ export class CarteraService {
       // `venceEn` llega como `YYYY-MM`; se compara contra el mes completo.
       const mes = f.venceEn ? `${f.venceEn}-01` : null;
 
-      const params = [q, f.estado ?? null, f.indice ?? null, mes, f.cobranza ?? null];
+      const params = [q, f.estado ?? null, f.indice ?? null, mes, f.cobranza ?? null,
+                      f.agenteId ?? null];
 
       const { rows: conteo } = await ej.query<{ total: string }>(
         `${BASE} SELECT count(*)::text AS total ${DESDE} ${DONDE}`,
@@ -121,7 +132,7 @@ export class CarteraService {
       const { rows } = await ej.query<Fila>(
         `${BASE} ${SELECT} ${DESDE} ${DONDE}
           ORDER BY ${orden}
-          LIMIT $6 OFFSET $7`,
+          LIMIT $7 OFFSET $8`,
         [...params, f.porPagina, offset(f)],
       );
 
@@ -263,6 +274,7 @@ const SELECT = `
 
          pr.id AS propiedad_id, pr.codigo AS propiedad_codigo,
          trim(pr.calle || ' ' || coalesce(pr.numero, '')) AS direccion,
+         pr.agente_captador_id AS captador_id, cap.nombre AS captador_nombre,
 
          coalesce(
            (SELECT a.monto_nuevo FROM contrato_ajuste a
@@ -296,6 +308,7 @@ const SELECT = `
 const DESDE = `
   FROM contrato_alquiler c
   JOIN propiedad pr ON pr.id = c.propiedad_id
+  LEFT JOIN usuario cap ON cap.id = pr.agente_captador_id
   LEFT JOIN resumen r ON r.contrato_id = c.id
   LEFT JOIN ultima  u ON u.contrato_id = c.id
   LEFT JOIN proximo aj ON aj.contrato_id = c.id`;
@@ -311,13 +324,19 @@ const DONDE = `
     AND ($2::text IS NULL OR c.estado = $2)
     AND ($3::text IS NULL OR c.indice = $3)
     AND ($4::date IS NULL OR date_trunc('month', c.fecha_fin) = date_trunc('month', $4::date))
-    AND ($5::text IS NULL OR ${COBRANZA} = $5)`;
+    AND ($5::text IS NULL OR ${COBRANZA} = $5)
+    -- El captador sale del JOIN a propiedad que el FROM ya hace: no hace falta
+    -- una tabla más. Y va acá, en el DONDE que COMPARTEN el conteo y la página:
+    -- si el filtro entrara sólo en la consulta de datos, el pager seguiría
+    -- diciendo el total sin filtrar.
+    AND ($6::uuid IS NULL OR pr.agente_captador_id = $6)`;
 
 interface Fila {
   id: string; moneda: string; indice: string; indice_porcentaje: string | null;
   periodicidad_meses: number; administrado: boolean; fecha_fin: string;
   estado: string; dias_para_vencer: number;
   propiedad_id: string; propiedad_codigo: number; direccion: string;
+  captador_id: string | null; captador_nombre: string | null;
   monto_vigente: string; inquilino: string | null; propietario: string | null;
   aj_id: string | null; aj_desde: string | null; aj_monto: string | null;
   aj_moneda: string | null; aj_estado: string | null;
@@ -337,6 +356,7 @@ function aFila(f: Fila): FilaCartera {
     },
     inquilino: f.inquilino || null,
     propietario: f.propietario || null,
+    captador: f.captador_id ? { id: f.captador_id, nombre: f.captador_nombre ?? '' } : null,
 
     montoVigente: Number(f.monto_vigente),
     moneda: f.moneda,

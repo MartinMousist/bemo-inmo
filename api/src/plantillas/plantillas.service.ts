@@ -16,9 +16,25 @@ export interface Plantilla {
 export interface Documento {
   texto: string;
   faltantes: string[];
-  plantilla: { id: string; nombre: string };
+  plantilla: { id: string; nombre: string; tipo: string };
   /** Un problema de la PLANTILLA, no del documento. La UI lo muestra aparte. */
   advertencia?: string;
+}
+
+/**
+ * A quién se le puede mandar este documento.
+ *
+ * Sale del mismo `SELECT` que arma el contexto y no de una consulta aparte: son
+ * las partes del contrato, que ya se leyeron. Va SEPARADO del contexto porque no
+ * es una variable de plantilla —nadie escribe `{{ destinatarios }}`— sino lo que
+ * llena el selector de la pantalla. Antes de esto no había a quién mandarle
+ * nada: el contexto traía nombre, documento y domicilio, y ni un teléfono.
+ */
+export interface Destinatario {
+  nombre: string;
+  rol: 'locatario' | 'locador' | 'garante';
+  telefono: string | null;
+  email: string | null;
 }
 
 const ETIQUETA_MEDIO: Record<string, string> = {
@@ -151,21 +167,59 @@ export class PlantillasService {
     plantillaId: string,
     contratoId: string,
   ): Promise<Documento> {
+    return this.db.withTenant(tenantId, (ej) => this.generarCon(ej, plantillaId, contratoId));
+  }
+
+  /**
+   * Lo mismo que `generar()`, pero con el ejecutor de afuera.
+   *
+   * Existe para que `DocumentosService` guarde el documento y lo renderice en
+   * **una sola transacción**: si el contrato cambia entre las dos consultas, lo
+   * que se guardaría como «lo que produjo el motor» no sería lo que produjo el
+   * motor. `generar()` queda como la puerta pública y llama acá.
+   */
+  async generarCon(ej: Ejecutor, plantillaId: string, contratoId: string): Promise<Documento> {
+    const { rows: p } = await ej.query<{ id: string; tipo: string; nombre: string; contenido: string }>(
+      'SELECT id, tipo, nombre, contenido FROM plantilla_doc WHERE id = $1',
+      [plantillaId],
+    );
+    if (!p.length) throw AppError.notFound('No se encontró esa plantilla.');
+
+    const ctx = await this.contextoDeContrato(ej, contratoId);
+    const r = renderizar(p[0].contenido, ctx);
+
+    return {
+      texto: r.texto,
+      faltantes: r.faltantes,
+      plantilla: { id: p[0].id, nombre: p[0].nombre, tipo: p[0].tipo },
+    };
+  }
+
+  /**
+   * Las partes del contrato que tienen algún dato de contacto.
+   *
+   * El locatario va primero: el pre-contrato se le manda a quien va a firmar
+   * como inquilino en el 90% de los casos. Los que no tienen ni teléfono ni mail
+   * quedan afuera de la lista en vez de aparecer como una opción que después no
+   * se puede usar — un control que no va a funcionar es peor que su ausencia.
+   */
+  async destinatarios(tenantId: string, contratoId: string): Promise<Destinatario[]> {
     return this.db.withTenant(tenantId, async (ej) => {
-      const { rows: p } = await ej.query<{ id: string; nombre: string; contenido: string }>(
-        'SELECT id, nombre, contenido FROM plantilla_doc WHERE id = $1',
-        [plantillaId],
+      const { rows } = await ej.query<{
+        nombre: string; rol: string; telefono: string | null; email: string | null;
+      }>(
+        `SELECT trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')) AS nombre,
+                CASE WHEN cp.rol IN ('garante','fiador') THEN 'garante' ELSE cp.rol END AS rol,
+                pe.telefono, pe.email
+           FROM contrato_parte cp
+           JOIN persona pe ON pe.id = cp.persona_id
+          WHERE cp.contrato_id = $1
+            AND (pe.telefono IS NOT NULL OR pe.email IS NOT NULL)
+          ORDER BY CASE cp.rol WHEN 'locatario' THEN 0 WHEN 'locador' THEN 1 ELSE 2 END,
+                   pe.apellido, pe.nombre`,
+        [contratoId],
       );
-      if (!p.length) throw AppError.notFound('No se encontró esa plantilla.');
-
-      const ctx = await this.contextoDeContrato(ej, contratoId);
-      const r = renderizar(p[0].contenido, ctx);
-
-      return {
-        texto: r.texto,
-        faltantes: r.faltantes,
-        plantilla: { id: p[0].id, nombre: p[0].nombre },
-      };
+      return rows as Destinatario[];
     });
   }
 
@@ -263,7 +317,7 @@ export class PlantillasService {
       return {
         texto: r.texto,
         faltantes: r.faltantes,
-        plantilla: { id: p[0].id, nombre: p[0].nombre },
+        plantilla: { id: p[0].id, nombre: p[0].nombre, tipo: 'recibo' },
         ...(usaElCobro
           ? {}
           : {
@@ -279,7 +333,11 @@ export class PlantillasService {
   /** Previsualiza una plantilla contra datos de ejemplo, sin tocar un contrato. */
   previsualizar(contenido: string): Documento {
     const r = renderizar(contenido, EJEMPLO);
-    return { texto: r.texto, faltantes: r.faltantes, plantilla: { id: '', nombre: 'Ejemplo' } };
+    return {
+      texto: r.texto,
+      faltantes: r.faltantes,
+      plantilla: { id: '', nombre: 'Ejemplo', tipo: 'otro' },
+    };
   }
 
   private async contextoDeContrato(ej: Ejecutor, contratoId: string): Promise<Contexto> {
@@ -296,11 +354,19 @@ export class PlantillasService {
               pr.codigo, pr.calle, pr.numero, pr.piso, pr.depto, pr.localidad,
               pr.provincia, pr.tipo AS tipo_propiedad,
               t.nombre AS inmobiliaria, t.cuit AS inmobiliaria_cuit,
+              -- telefono y email entran acá desde la 020. Se usan para el
+              -- selector de destinatario del envío —antes no había a quién
+              -- mandarle nada— y de paso quedan disponibles en la plantilla.
+              -- (Sin comillas invertidas: adentro de un template literal cierran
+              --  la cadena y tsc falla en la línea de abajo. Está en la tabla de
+              --  trampas de docs/CONTINUAR.md.)
               (SELECT json_agg(json_build_object(
                   'nombre', trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')),
                   'documento', pe.doc_numero,
                   'tipoDocumento', upper(coalesce(pe.doc_tipo,'')),
                   'domicilio', pe.domicilio,
+                  'telefono', pe.telefono,
+                  'email', pe.email,
                   'porcentaje', cp.porcentaje) ORDER BY cp.porcentaje DESC NULLS LAST)
                  FROM contrato_parte cp JOIN persona pe ON pe.id = cp.persona_id
                 WHERE cp.contrato_id = c.id AND cp.rol = 'locador') AS locadores,
@@ -308,13 +374,17 @@ export class PlantillasService {
                   'nombre', trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')),
                   'documento', pe.doc_numero,
                   'tipoDocumento', upper(coalesce(pe.doc_tipo,'')),
-                  'domicilio', pe.domicilio))
+                  'domicilio', pe.domicilio,
+                  'telefono', pe.telefono,
+                  'email', pe.email))
                  FROM contrato_parte cp JOIN persona pe ON pe.id = cp.persona_id
                 WHERE cp.contrato_id = c.id AND cp.rol = 'locatario') AS locatarios,
               (SELECT json_agg(json_build_object(
                   'nombre', trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')),
                   'documento', pe.doc_numero,
-                  'domicilio', pe.domicilio))
+                  'domicilio', pe.domicilio,
+                  'telefono', pe.telefono,
+                  'email', pe.email))
                  FROM contrato_parte cp JOIN persona pe ON pe.id = cp.persona_id
                 WHERE cp.contrato_id = c.id AND cp.rol IN ('garante','fiador')) AS garantes
          FROM contrato_alquiler c

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useAuth } from '../stores/auth';
 import { guardarPlegado, leerPlegado } from '../dominio/sidebar';
 import UiIcon from './UiIcon.vue';
@@ -48,10 +48,10 @@ const grupos = [
   {
     titulo: 'Comercial',
     items: [
-      { a: '/oportunidades', icono: 'embudo', texto: 'Oportunidades' },
-      { a: '/reservas', icono: 'sena', texto: 'Reservas' },
-      { a: '/ventas', icono: 'grafico', texto: 'Ventas' },
-      { a: '/publicaciones', icono: 'mapa', texto: 'Publicaciones' },
+      { a: '/leads', icono: 'embudo', texto: 'Leads', modulo: 'leads' },
+      { a: '/reservas', icono: 'sena', texto: 'Reservas', modulo: 'reservas' },
+      { a: '/ventas', icono: 'grafico', texto: 'Ventas', modulo: 'ventas' },
+      { a: '/publicaciones', icono: 'mapa', texto: 'Publicaciones', modulo: 'publicaciones' },
     ],
   },
   {
@@ -59,13 +59,30 @@ const grupos = [
     items: [
       { a: '/plantillas', icono: 'documento', texto: 'Pre-contratos' },
       { a: '/equipo', icono: 'equipo', texto: 'Equipo' },
-      { a: '/comisiones', icono: 'moneda', texto: 'Comisiones' },
+      { a: '/comisiones', icono: 'moneda', texto: 'Comisiones', modulo: 'comisiones' },
       { a: '/importar', icono: 'mas', texto: 'Importar' },
       { a: '/movimientos', icono: 'grafico', texto: 'Movimientos' },
+      { a: '/cuenta', icono: 'panel', texto: 'Tu cuenta' },
       { a: '/plan', icono: 'documento', texto: 'Tu plan' },
     ],
   },
 ];
+
+/**
+ * El menú que corresponde a esta cuenta.
+ *
+ * Una cuenta de gestión de alquileres no vende ni reparte comisiones: mostrarle
+ * Ventas, Comisiones, Leads, Publicaciones y Reservas son cinco entradas que no
+ * va a abrir nunca, y su sola presencia dice «esto no es para vos».
+ *
+ * El grupo se descarta cuando se queda sin ítems: un título «Comercial» sobre
+ * la nada es peor que no tener la sección.
+ */
+const gruposVisibles = computed(() =>
+  grupos
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.modulo || auth.tieneModulo(i.modulo)) }))
+    .filter((g) => g.items.length > 0),
+);
 
 const drawerAbierto = ref(false);
 const paletaAbierta = ref(false);
@@ -108,7 +125,7 @@ window.addEventListener('keydown', (e) => {
       </RouterLink>
 
       <nav>
-        <div v-for="g in grupos" :key="g.titulo" class="grupo">
+        <div v-for="g in gruposVisibles" :key="g.titulo" class="grupo">
           <p class="grupo-titulo">{{ g.titulo }}</p>
           <RouterLink
             v-for="i in g.items"

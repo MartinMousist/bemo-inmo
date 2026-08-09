@@ -2,6 +2,13 @@ import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsOptional } from 'class-validator';
 import { PaginacionDto } from '../common/paginacion';
 
+/**
+ * Los mismos tipos que enumera el CHECK de `evento_programado`. Tienen que ir
+ * en los dos lados: un tipo que la base acepta y este filtro no deja pasar
+ * genera avisos que después nadie puede filtrar —el 400 sale recién cuando
+ * alguien toca el desplegable, o sea en producción y no en un test—. Pasó al
+ * agregar `garantia_revision_bcra` en la migración 019.
+ */
 export const TIPOS_EVENTO = [
   'contrato_por_vencer',
   'ajuste_por_aplicar',
@@ -9,6 +16,7 @@ export const TIPOS_EVENTO = [
   'reserva_por_vencer',
   'visita_agendada',
   'garantia_por_vencer',
+  'garantia_revision_bcra',
 ] as const;
 
 /** `q` busca por título o detalle del aviso. */

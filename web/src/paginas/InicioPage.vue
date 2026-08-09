@@ -312,7 +312,7 @@ onMounted(cargar);
           </template>
         </section>
 
-        <!-- ── Oportunidades frías ────────────────────────────────────── -->
+        <!-- ── Leads fríos ────────────────────────────────────── -->
         <section class="card bloque compacto">
           <header>
             <h2>Consultas sin mover</h2>
@@ -329,7 +329,7 @@ onMounted(cargar);
 
           <ul v-else class="lista">
             <li v-for="o in d.oportunidadesFrias.items" :key="o.id">
-              <RouterLink to="/oportunidades">
+              <RouterLink to="/leads">
                 <span class="linea1"><span class="ref">{{ o.nombre }}</span></span>
                 <span class="linea2 mono">
                   {{ ETIQUETA_ESTADO_OP[o.estado] ?? o.estado }} · entró por {{ o.origen }}
@@ -342,7 +342,7 @@ onMounted(cargar);
           <RouterLink
             v-if="d.oportunidadesFrias.total > d.oportunidadesFrias.items.length"
             class="ver-todo"
-            to="/oportunidades"
+            to="/leads"
           >
             Ver las {{ d.oportunidadesFrias.total }}
           </RouterLink>

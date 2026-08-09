@@ -251,7 +251,9 @@ describe('Espina: personas, propiedades y oportunidades', () => {
       .get('/v1/propiedades/capacidades')
       .set(...como(inmo))
       .expect(200);
-    expect(caps.body.mapas).toBe(false);
+    // `geocodificacion` y no `mapas`: son dos capacidades y sólo ésta depende
+    // de la key. Ver el test de `geocoding.spec.ts` que las separa.
+    expect(caps.body.geocodificacion).toBe(false);
   });
 
   it('las coordenadas manuales se respetan', async () => {

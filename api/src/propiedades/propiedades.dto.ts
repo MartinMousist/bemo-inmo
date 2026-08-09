@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -16,6 +16,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { PaginacionDto } from '../common/paginacion';
+import { FiltroConAgenteDto } from '../common/filtro-agente';
 
 export const TIPOS_PROPIEDAD = [
   'departamento', 'casa', 'ph', 'local', 'oficina',
@@ -45,10 +46,21 @@ export class CrearPropiedadDto {
   @IsOptional() @IsString() @MaxLength(60) provincia?: string;
   @IsOptional() @IsString() @MaxLength(12) cp?: string;
 
-  /** Si vienen, se respetan y NO se geocodifica. Es la salida manual cuando
-   *  no hay API key o cuando Google ubica mal la dirección. */
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(-90) @Max(90) lat?: number;
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(-180) @Max(180) lng?: number;
+  /**
+   * Si vienen, se respetan y NO se geocodifica. Es la salida manual cuando no
+   * hay API key **o cuando Google ubica mal la dirección** — el segundo caso no
+   * desaparece el día que llegue la key.
+   *
+   * Van SIEMPRE de a dos. En un PATCH, `null` explícito en las dos significa
+   * «borrá las coordenadas», y ausentes significa «no las toques»: es la misma
+   * distinción undefined/null del captador. Media coordenada —una sola de las
+   * dos con valor— es un 422, porque antes borraba las dos en silencio.
+   *
+   * El tipo admite `null` por eso: `@Type(() => Number)` deja pasar el `null`
+   * sin convertirlo a 0 (verificado) y `@IsOptional()` no lo valida.
+   */
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(-90) @Max(90) lat?: number | null;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(-180) @Max(180) lng?: number | null;
 
   @IsIn(TIPOS_PROPIEDAD as unknown as string[]) tipo!: string;
 
@@ -68,7 +80,15 @@ export class CrearPropiedadDto {
 
   @IsOptional() @IsString() @MaxLength(5000) descripcion?: string;
   @IsOptional() @IsString() @MaxLength(5000) notasInternas?: string;
-  @IsOptional() @IsUUID() agenteCaptadorId?: string;
+  /**
+   * Quién captó la propiedad.
+   *
+   * `null` explícito significa **desasignar** y no «no vino»: es la excepción a
+   * la regla del PATCH parcial, igual que el % de comisión de un agente. Ver el
+   * comentario del UPDATE en `propiedades.service.ts`. Por eso el tipo admite
+   * `null` en vez de sólo `string | undefined`.
+   */
+  @IsOptional() @IsUUID() agenteCaptadorId?: string | null;
 
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => TitularDto)
   @ArrayMaxSize(20)
@@ -100,7 +120,7 @@ export class EditarOperacionDto extends CrearOperacionDto {
   @IsOptional() @IsIn(MONEDAS as unknown as string[]) declare moneda: string;
 }
 
-export class FiltroPropiedadesDto extends PaginacionDto {
+export class FiltroPropiedadesDto extends FiltroConAgenteDto {
   @IsOptional() @IsIn(TIPOS_PROPIEDAD as unknown as string[]) tipo?: string;
   @IsOptional() @IsIn(TIPOS_OPERACION as unknown as string[]) operacion?: string;
   @IsOptional() @IsIn(['borrador', 'disponible', 'reservada', 'cerrada', 'suspendida'])
@@ -119,4 +139,25 @@ export class FiltroPropiedadesDto extends PaginacionDto {
    */
   @IsOptional() @IsBoolean() @Type(() => Boolean)
   incluirCerradas?: boolean;
+
+  /**
+   * Las que NO tienen captador asignado.
+   *
+   * Es un estado real y no un caso raro: el importador de CSV ni siquiera lista
+   * la columna `agente_captador_id` en su INSERT, así que **toda** propiedad que
+   * entra por importación nace sin captador. Sin esta opción, «¿cuáles quedaron
+   * sin dueño de la captación?» no se puede contestar desde la pantalla.
+   *
+   * Va como campo aparte y no como un valor centinela de `agenteId` (tipo
+   * `agenteId=sin-asignar`) porque `agenteId` es un uuid validado: meterle una
+   * palabra mágica obligaría a aflojar el `@IsUUID()` de los seis listados para
+   * que uno solo pueda decir «ninguno».
+   *
+   * `@Transform` y no `@Type(() => Boolean)`: `Boolean('false')` es `true`, así
+   * que con el transform de tipo mandar `sinCaptador=false` filtraría igual.
+   */
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  sinCaptador?: boolean;
 }

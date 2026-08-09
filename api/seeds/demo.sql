@@ -124,6 +124,23 @@ INSERT INTO persona (id, tenant_id, tipo, nombre, apellido, doc_tipo, doc_numero
   ('a0000000-0000-4000-8000-000000000022','11111111-1111-4111-8111-111111111111','fisica','Carla','Zapata','dni','32445599','czapata@correo.test','261 673-2214','Espejo 480, Ciudad'),
   ('a0000000-0000-4000-8000-000000000023','11111111-1111-4111-8111-111111111111','fisica','Emilio','Núñez','dni','28112244','enunez@correo.test','261 636-7701','Necochea 320, Ciudad'),
   ('a0000000-0000-4000-8000-000000000024','11111111-1111-4111-8111-111111111111','fisica','Fabiana','Ledesma','dni','33221100','fledesma@correo.test','261 659-4433','Montevideo 150, Ciudad'),
+  -- Las partes de los cuatro contratos que proyectan (c15..c18). Propietarios,
+  -- inquilinos y garantes: cuatro de cada uno, con teléfono y mail cargados,
+  -- que es lo que el envío del pre-contrato necesita para tener a quién
+  -- mandárselo. Los teléfonos van escritos como los escribe una persona —«261
+  -- 615-2233»— porque es lo que `telefono.motor.ts` tiene que saber leer.
+  ('a0000000-0000-4000-8000-000000000025','11111111-1111-4111-8111-111111111111','fisica','Gabriela','Sosa','dni','21445566','gsosa@correo.test','261 613-8890','Boulogne Sur Mer 1240, Ciudad'),
+  ('a0000000-0000-4000-8000-000000000026','11111111-1111-4111-8111-111111111111','fisica','Osvaldo','Funes','dni','16778899','ofunes@correo.test','261 627-4471','Tiburcio Benegas 780, Godoy Cruz'),
+  ('a0000000-0000-4000-8000-000000000027','11111111-1111-4111-8111-111111111111','fisica','Mercedes','Ávila','dni','19556677','mavila@correo.test','261 634-2218','San Lorenzo 455, Ciudad'),
+  ('a0000000-0000-4000-8000-000000000028','11111111-1111-4111-8111-111111111111','fisica','Ramiro','Quiroz','dni','23887766','rquiroz@correo.test','261 648-9930','Carlos Pellegrini 2130, Guaymallén'),
+  ('a0000000-0000-4000-8000-000000000029','11111111-1111-4111-8111-111111111111','fisica','Lucía','Bianchi','dni','39112244','lbianchi@correo.test','261 695-7712','Boulogne Sur Mer 1240, Ciudad'),
+  ('a0000000-0000-4000-8000-000000000030','11111111-1111-4111-8111-111111111111','fisica','Damián','Ojeda','dni','34556688','dojeda@correo.test','261 684-3320','Tiburcio Benegas 780, Godoy Cruz'),
+  ('a0000000-0000-4000-8000-000000000031','11111111-1111-4111-8111-111111111111','fisica','Paula','Ibáñez','dni','37665544','pibanez@correo.test','261 691-4408','San Lorenzo 455, Ciudad'),
+  ('a0000000-0000-4000-8000-000000000032','11111111-1111-4111-8111-111111111111','fisica','Sebastián','Roldán','dni','32998811','sroldan@correo.test','261 679-2245','Carlos Pellegrini 2130, Guaymallén'),
+  ('a0000000-0000-4000-8000-000000000033','11111111-1111-4111-8111-111111111111','fisica','Norma','Bianchi','dni','18334422','nbianchi@correo.test','261 620-1194','Chacabuco 610, Ciudad'),
+  ('a0000000-0000-4000-8000-000000000034','11111111-1111-4111-8111-111111111111','fisica','Aníbal','Ojeda','dni','17223344','aojeda@correo.test','261 616-5583','Perú 980, Ciudad'),
+  ('a0000000-0000-4000-8000-000000000035','11111111-1111-4111-8111-111111111111','fisica','Cristina','Ibáñez','dni','20667788','cibanez@correo.test','261 625-7739','Godoy Cruz 1180, Ciudad'),
+  ('a0000000-0000-4000-8000-000000000036','11111111-1111-4111-8111-111111111111','fisica','Hugo','Roldán','dni','15889977','hroldan@correo.test','261 611-3326','Alem 450, Ciudad'),
   -- La otra inmobiliaria
   ('a2000000-0000-4000-8000-000000000001','22222222-2222-4222-8222-222222222222','fisica','Alberto','Krause','dni','12334455','akrause@correo.test','11 5544-2200','Av. Cabildo 2200, CABA'),
   ('a2000000-0000-4000-8000-000000000002','22222222-2222-4222-8222-222222222222','fisica','Mariana','Ostrovsky','dni','27889900','mostrovsky@correo.test','11 5566-8877','Juramento 1450, CABA'),
@@ -151,6 +168,18 @@ INSERT INTO propiedad (id, tenant_id, codigo, calle, numero, piso, depto, locali
   ('b0000000-0000-4000-8000-000000000012','11111111-1111-4111-8111-111111111111',12,'Las Heras','670',NULL,'C-14','Ciudad','Mendoza','5500',NULL,NULL,NULL,NULL,'cochera', 14, 14,NULL,NULL,NULL,1,15,NULL,'bueno','{seguridad}','Cochera cubierta en playa con acceso 24 h.','11000000-0000-4000-8000-000000000003','5c000000-0000-4000-8000-000000000001'),
   ('b0000000-0000-4000-8000-000000000013','11111111-1111-4111-8111-111111111111',13,'Viamonte','3200',NULL,NULL,'Chacras de Coria','Mendoza','5505',-32.9855000,-68.8801000,'google',now()-interval '12 days','terreno',600,NULL,NULL,NULL,NULL,NULL,NULL,'norte','bueno','{}','Lote en Chacras, todos los servicios, apto duplex.','11000000-0000-4000-8000-000000000003','5c000000-0000-4000-8000-000000000001'),
   ('b0000000-0000-4000-8000-000000000014','11111111-1111-4111-8111-111111111111',14,'Colón','445','2','A','Ciudad','Mendoza','5500',-32.8912000,-68.8480000,'google',now()-interval '90 days','departamento', 70, 66,3,2,1,1,16,'este','bueno','{ascensor,balcon}','Tres ambientes sobre Colón, con balcón corrido.','11000000-0000-4000-8000-000000000003','5c000000-0000-4000-8000-000000000001'),
+  -- Las cuatro de los contratos que PROYECTAN sus aumentos (ver la tabla de
+  -- casos en la sección de Contratos). Propiedades nuevas y no alguna de las
+  -- catorce de arriba: el constraint EXCLUDE de contratos solapados no se toca,
+  -- y cada contrato queda con su propia historia limpia.
+  --
+  -- Los códigos arrancan en 31 y no en 15 porque `seeds/demo-cartera.sql` —la
+  -- cartera ofrecida— se reserva del 15 al 30. `UNIQUE (tenant_id, codigo)` no
+  -- perdona, y el error que tira no menciona al otro archivo.
+  ('b3000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111',31,'Boulogne Sur Mer','1240',NULL,NULL,'Ciudad','Mendoza','5500',-32.8935000,-68.8531000,'google',now()-interval '65 days','departamento', 82, 76,3,2,2,1,9,'norte','muy_bueno','{balcon,ascensor,seguridad}','Tres ambientes con balcón, a una cuadra del Parque Central.','11000000-0000-4000-8000-000000000003','5c000000-0000-4000-8000-000000000001'),
+  ('b3000000-0000-4000-8000-000000000002','11111111-1111-4111-8111-111111111111',32,'Tiburcio Benegas','780',NULL,NULL,'Godoy Cruz','Mendoza','5501',-32.9155000,-68.8541000,'google',now()-interval '58 days','ph', 95, 88,4,2,1,1,26,'este','bueno','{patio,parrilla}','PH al frente con patio y parrilla, entrada independiente.','11000000-0000-4000-8000-000000000005','5c000000-0000-4000-8000-000000000002'),
+  ('b3000000-0000-4000-8000-000000000003','11111111-1111-4111-8111-111111111111',33,'San Lorenzo','455','6','A','Ciudad','Mendoza','5500',-32.8886000,-68.8503000,'google',now()-interval '44 days','departamento', 68, 64,3,2,1,1,13,'noreste','muy_bueno','{ascensor,balcon,sum}','Tres ambientes en torre sobre San Lorenzo, con SUM.','11000000-0000-4000-8000-000000000003','5c000000-0000-4000-8000-000000000001'),
+  ('b3000000-0000-4000-8000-000000000004','11111111-1111-4111-8111-111111111111',34,'Carlos Pellegrini','2130',NULL,NULL,'Guaymallén','Mendoza','5519',-32.8871000,-68.8014000,'google',now()-interval '36 days','casa',240,165,5,3,2,2,31,'oeste','bueno','{patio,quincho}','Casa con quincho y patio grande, sobre calle asfaltada.','11000000-0000-4000-8000-000000000005','5c000000-0000-4000-8000-000000000002'),
   -- La otra inmobiliaria: dos propiedades alcanzan para probar el aislamiento.
   ('b2000000-0000-4000-8000-000000000001','22222222-2222-4222-8222-222222222222', 1,'Av. Cabildo','2200','7','B','CABA','Buenos Aires','1428',-34.5620000,-58.4560000,'google',now()-interval '20 days','departamento', 68, 64,3,2,1,1,14,'norte','muy_bueno','{ascensor,seguridad}','Tres ambientes en Belgrano.',NULL,'5c000000-0000-4000-8000-000000000003'),
   ('b2000000-0000-4000-8000-000000000002','22222222-2222-4222-8222-222222222222', 2,'Juramento','1450',NULL,NULL,'CABA','Buenos Aires','1428',NULL,NULL,NULL,NULL,'local', 95, 90,NULL,NULL,1,0,30,'sur','bueno','{vidriera}','Local sobre Juramento.',NULL,'5c000000-0000-4000-8000-000000000003')
@@ -189,6 +218,10 @@ INSERT INTO titularidad (id, tenant_id, propiedad_id, persona_id, porcentaje) VA
   ('7a000000-0000-4000-8000-000000000013','11111111-1111-4111-8111-111111111111','b0000000-0000-4000-8000-000000000012','a0000000-0000-4000-8000-000000000008',100),
   ('7a000000-0000-4000-8000-000000000014','11111111-1111-4111-8111-111111111111','b0000000-0000-4000-8000-000000000013','a0000000-0000-4000-8000-000000000006',100),
   ('7a000000-0000-4000-8000-000000000015','11111111-1111-4111-8111-111111111111','b0000000-0000-4000-8000-000000000014','a0000000-0000-4000-8000-000000000001',100),
+  ('7a000000-0000-4000-8000-000000000016','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000025',100),
+  ('7a000000-0000-4000-8000-000000000017','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000002','a0000000-0000-4000-8000-000000000026',100),
+  ('7a000000-0000-4000-8000-000000000018','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000003','a0000000-0000-4000-8000-000000000027',100),
+  ('7a000000-0000-4000-8000-000000000019','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000004','a0000000-0000-4000-8000-000000000028',100),
   ('7a200000-0000-4000-8000-000000000001','22222222-2222-4222-8222-222222222222','b2000000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000001',100),
   ('7a200000-0000-4000-8000-000000000002','22222222-2222-4222-8222-222222222222','b2000000-0000-4000-8000-000000000002','a2000000-0000-4000-8000-000000000002',100)
 ON CONFLICT (id) DO NOTHING;
@@ -220,6 +253,14 @@ INSERT INTO operacion (id, tenant_id, propiedad_id, tipo, precio, moneda, expens
   ('c0000000-0000-4000-8000-000000000018','11111111-1111-4111-8111-111111111111','b0000000-0000-4000-8000-000000000014','alquiler',   398000,'ARS', 47000,'ARS','cerrada',    current_date-750,NULL),
   ('c0000000-0000-4000-8000-000000000019','11111111-1111-4111-8111-111111111111','b0000000-0000-4000-8000-000000000014','venta',      112000,'USD',     0,'ARS','cerrada',    current_date-300,NULL),
   ('c0000000-0000-4000-8000-000000000020','11111111-1111-4111-8111-111111111111','b0000000-0000-4000-8000-000000000013','alquiler',   150000,'ARS',     0,'ARS','borrador',   NULL,NULL),
+  -- Las de los cuatro contratos que proyectan. Estado 'cerrada' porque es el
+  -- estado de una unidad alquilada: la cartera de alquiler filtra por eso, y
+  -- dejarlas 'disponible' las mostraría como si estuvieran libres teniendo un
+  -- inquilino adentro (la trampa que apareció en la etapa 11.4).
+  ('c3000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000001','alquiler',   640000,'ARS', 72000,'ARS','cerrada',    current_date-400,NULL),
+  ('c3000000-0000-4000-8000-000000000002','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000002','alquiler',   415000,'ARS',     0,'ARS','cerrada',    current_date-300,NULL),
+  ('c3000000-0000-4000-8000-000000000003','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000003','alquiler',   520000,'ARS', 58000,'ARS','cerrada',    current_date-300,NULL),
+  ('c3000000-0000-4000-8000-000000000004','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000004','alquiler',   380000,'ARS',     0,'ARS','cerrada',    current_date-400,NULL),
   ('c2000000-0000-4000-8000-000000000001','22222222-2222-4222-8222-222222222222','b2000000-0000-4000-8000-000000000001','alquiler',   620000,'ARS', 88000,'ARS','cerrada',    current_date-190,NULL),
   ('c2000000-0000-4000-8000-000000000002','22222222-2222-4222-8222-222222222222','b2000000-0000-4000-8000-000000000002','venta',      145000,'USD',     0,'ARS','disponible', current_date-45, NULL)
 ON CONFLICT (id) DO NOTHING;
@@ -242,6 +283,25 @@ ON CONFLICT (id) DO NOTHING;
 --   c12  ninguno USD   al día                          la otra moneda
 --   c13  ICL           rescindido hace ocho meses      el otro final posible
 --   c14  UVA           por_iniciar el mes que viene    todavía no arrancó
+--
+-- Y los cuatro que existen para que el AJUSTE se vea proyectar de verdad, con
+-- las dos periodicidades más usadas y los dos índices que hoy se usan:
+--
+--   c15  ICL  cada 4 meses, plazo de 2 años    inicio M0-12 · fin M0+12
+--   c16  ICL  cada 3 meses                     inicio M0-9  · fin M0+27
+--   c17  IPC  cada 3 meses                     inicio M0-9  · fin M0+27
+--   c18  IPC  cada 4 meses                     inicio M0-12 · fin M0+24
+--
+-- Las fechas no son al azar: con estas, cada uno saca TRES aumentos reales y se
+-- frena en el cuarto porque el índice de ese mes todavía no se publicó — y lo
+-- informa por `sinIndice` en vez de estimarlo. En una demo eso es lo mejor de
+-- los dos mundos: se ven los cuatro tipos de ajuste funcionando y se ve el
+-- mensaje honesto de «falta el índice de tal mes».
+--
+-- Los ajustes de estos cuatro NO se escriben acá: los calcula `seed.ts` con
+-- `calcularAjuste()` y `periodosDeAjuste()`, o sea con el motor de verdad. Los
+-- doce de más abajo están tipeados a mano con su coeficiente, que es dibujar el
+-- resultado en vez de dejar que el sistema lo produzca.
 --
 -- `mes_base` va SIEMPRE un mes antes del arranque: el índice de un mes se
 -- publica a mediados del siguiente, y un ajuste que mira el mes en curso no
@@ -323,6 +383,30 @@ INSERT INTO contrato_alquiler (
     480000,'ARS','uva',NULL,6,(date_trunc('month',current_date))::date,
     true, 960000,'ARS', 8, 0.100,'propietario','por_iniciar',NULL,'Firmado, arranca el mes que viene.'),
 
+  -- ICL cada 4 meses, plazo de 2 años. Con expensas.
+  ('d0000000-0000-4000-8000-000000000015','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000001','c3000000-0000-4000-8000-000000000001',
+    (date_trunc('month',current_date)-interval '12 months')::date, (date_trunc('month',current_date)+interval '12 months')::date, 10,
+    640000,'ARS','icl',NULL,4,(date_trunc('month',current_date)-interval '13 months')::date,
+    true, 640000,'ARS', 8, 0.100,'propietario','vigente',NULL,'ICL cuatrimestral, dos años de plazo. Proyecta tres aumentos.'),
+
+  -- ICL cada 3 meses. Sin expensas.
+  ('d0000000-0000-4000-8000-000000000016','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000002','c3000000-0000-4000-8000-000000000002',
+    (date_trunc('month',current_date)-interval '9 months')::date, (date_trunc('month',current_date)+interval '27 months')::date, 5,
+    415000,'ARS','icl',NULL,3,(date_trunc('month',current_date)-interval '10 months')::date,
+    true, 415000,'ARS', 8, 0.100,'propietario','vigente',NULL,'ICL trimestral, que es la combinación más usada hoy.'),
+
+  -- IPC cada 3 meses. Con expensas.
+  ('d0000000-0000-4000-8000-000000000017','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000003','c3000000-0000-4000-8000-000000000003',
+    (date_trunc('month',current_date)-interval '9 months')::date, (date_trunc('month',current_date)+interval '27 months')::date, 10,
+    520000,'ARS','ipc',NULL,3,(date_trunc('month',current_date)-interval '10 months')::date,
+    true, 520000,'ARS', 8, 0.100,'propietario','vigente',NULL,'IPC trimestral. Mismas fechas que el ICL de al lado, a propósito: se pueden comparar los dos índices sobre el mismo plazo.'),
+
+  -- IPC cada 4 meses. Sin expensas.
+  ('d0000000-0000-4000-8000-000000000018','11111111-1111-4111-8111-111111111111','b3000000-0000-4000-8000-000000000004','c3000000-0000-4000-8000-000000000004',
+    (date_trunc('month',current_date)-interval '12 months')::date, (date_trunc('month',current_date)+interval '24 months')::date, 10,
+    380000,'ARS','ipc',NULL,4,(date_trunc('month',current_date)-interval '13 months')::date,
+    true, 760000,'ARS', 7, 0.080,'propietario','vigente',NULL,'IPC cuatrimestral. Depósito de dos meses.'),
+
   ('d2000000-0000-4000-8000-000000000001','22222222-2222-4222-8222-222222222222','b2000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000001',
     (date_trunc('month',current_date)-interval '6 months')::date, (date_trunc('month',current_date)+interval '30 months')::date, 10,
     620000,'ARS','ipc',NULL,3,(date_trunc('month',current_date)-interval '7 months')::date,
@@ -368,7 +452,82 @@ INSERT INTO contrato_parte (id, tenant_id, contrato_id, persona_id, rol, porcent
   ('9a000000-0000-4000-8000-000000000031','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000014','a0000000-0000-4000-8000-000000000005','locador',100),
   ('9a000000-0000-4000-8000-000000000032','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000014','a0000000-0000-4000-8000-000000000019','locatario',NULL),
   ('9a200000-0000-4000-8000-000000000001','22222222-2222-4222-8222-222222222222','d2000000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000001','locador',100),
-  ('9a200000-0000-4000-8000-000000000002','22222222-2222-4222-8222-222222222222','d2000000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000003','locatario',NULL)
+  ('9a200000-0000-4000-8000-000000000002','22222222-2222-4222-8222-222222222222','d2000000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000003','locatario',NULL),
+  -- El segundo garante del contrato 1: sin él, ningún contrato de la demo llega
+  -- al mínimo de dos y el legajo completo no se ve nunca.
+  ('9a000000-0000-4000-8000-000000000033','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000008','garante',NULL),
+  -- Las partes de los cuatro que proyectan. Los tres roles en cada uno: el
+  -- pre-contrato imprime el bloque de GARANTÍA sólo si hay garante, y sin él la
+  -- demo del documento mostraría siempre la versión corta.
+  ('9a000000-0000-4000-8000-000000000034','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000015','a0000000-0000-4000-8000-000000000025','locador',100),
+  ('9a000000-0000-4000-8000-000000000035','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000015','a0000000-0000-4000-8000-000000000029','locatario',NULL),
+  ('9a000000-0000-4000-8000-000000000036','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000015','a0000000-0000-4000-8000-000000000033','garante',NULL),
+  ('9a000000-0000-4000-8000-000000000037','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000016','a0000000-0000-4000-8000-000000000026','locador',100),
+  ('9a000000-0000-4000-8000-000000000038','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000016','a0000000-0000-4000-8000-000000000030','locatario',NULL),
+  ('9a000000-0000-4000-8000-000000000039','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000016','a0000000-0000-4000-8000-000000000034','garante',NULL),
+  ('9a000000-0000-4000-8000-000000000040','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000017','a0000000-0000-4000-8000-000000000027','locador',100),
+  ('9a000000-0000-4000-8000-000000000041','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000017','a0000000-0000-4000-8000-000000000031','locatario',NULL),
+  ('9a000000-0000-4000-8000-000000000042','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000017','a0000000-0000-4000-8000-000000000035','garante',NULL),
+  ('9a000000-0000-4000-8000-000000000043','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000018','a0000000-0000-4000-8000-000000000028','locador',100),
+  ('9a000000-0000-4000-8000-000000000044','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000018','a0000000-0000-4000-8000-000000000032','locatario',NULL),
+  ('9a000000-0000-4000-8000-000000000045','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000018','a0000000-0000-4000-8000-000000000036','garante',NULL)
+ON CONFLICT (id) DO NOTHING;
+
+
+-- ── Garantías ───────────────────────────────────────────────────────────────
+-- `contrato_parte` ya decía quién garantiza cada contrato, pero el legajo vive
+-- en `garantia` y el .sql sembraba CERO filas: el panel de garantes de la demo
+-- arrancaba vacío, que es la peor forma de mostrar una feature terminada.
+--
+-- Cinco casos para que se vea el ciclo entero, no cinco filas iguales:
+--
+--   1. Adriana Rossi (contrato 1) — legajo completo y firmado. El caso bueno.
+--   2. Héctor Molina (contrato 1) — igual, para que el contrato llegue a DOS.
+--      Es propietario en otro contrato y garante en éste: la regla de roles
+--      derivados otra vez, ahora del lado de las garantías.
+--   3. Pablo Arce (contrato 2) — firmó, pero el legajo está a medias.
+--   4. Silvina Correa (contrato 5) — ni firmó ni trajo los recibos.
+--   5. Un seguro de caución (contrato 4, el comercial) que vence en 30 días,
+--      SIN persona: es el único caso que le da algo que emitir a
+--      `garantia_por_vencer`, y el único donde el legajo no son un DNI y tres
+--      recibos sino la póliza.
+--
+-- ⚠️⚠️ **TODAS con `bcra_*` en NULL, y no es un olvido.** Los DNI de este
+-- archivo le pertenecen a personas reales —ya pasó: una consulta con un garante
+-- demo trajo el nombre y la deuda bancaria de alguien que no dio su
+-- consentimiento, y quedó guardada en la base de desarrollo—. Sembrar un
+-- veredicto significaría o inventarlo (dato falso en la pantalla) o haberlo
+-- consultado (un tercero sin consentimiento). No se hace ninguna de las dos.
+--
+-- Corolario para quien mire la demo: los cinco garantes van a decir «falta
+-- consultar el BCRA» y ningún contrato va a quedar «en regla». **Está bien**:
+-- sin consulta no hay veredicto, que es la regla que sostiene toda la feature.
+-- Para ver el control funcionando se consulta con un CUIT de sociedad o con el
+-- documento propio, nunca con uno de acá.
+
+INSERT INTO garantia (id, tenant_id, contrato_id, persona_id, tipo, detalle, vence_el, firmo_el) VALUES
+  ('9c000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000016',
+    'garante_solidario','Tía de la inquilina. Empleada municipal, antigüedad 14 años.',NULL,
+    (date_trunc('month',current_date)-interval '18 months')::date),
+
+  ('9c000000-0000-4000-8000-000000000002','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000008',
+    'garante_solidario','Segundo garante. Propietario de la cochera de Las Heras.',NULL,
+    (date_trunc('month',current_date)-interval '18 months')::date),
+
+  ('9c000000-0000-4000-8000-000000000003','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000002','a0000000-0000-4000-8000-000000000017',
+    'garante_solidario','Firmó en la oficina. Quedó en traer los dos recibos que faltan.',NULL,
+    (date_trunc('month',current_date)-interval '14 months')::date),
+
+  ('9c000000-0000-4000-8000-000000000004','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000005','a0000000-0000-4000-8000-000000000018',
+    'garante_solidario','Presentó el DNI. Falta que firme y que traiga los recibos.',NULL,NULL),
+
+  -- El único con `vence_el`: una póliza se renueva, un garante solidario no.
+  -- A 30 días exactos porque el aviso `garantia_por_vencer` está configurado en
+  -- 30 (`tenant.avisos`): así el evento cae HOY y se ve en la bandeja apenas se
+  -- recalcula, en vez de quedar escondido en «futuros».
+  ('9c000000-0000-4000-8000-000000000005','11111111-1111-4111-8111-111111111111','d0000000-0000-4000-8000-000000000004',NULL,
+    'seguro_caucion','Póliza de caución N° 4471-0093 a nombre de Bar Don Genaro SRL.',
+    (current_date + 30),NULL)
 ON CONFLICT (id) DO NOTHING;
 
 
@@ -705,28 +864,88 @@ INSERT INTO operacion_venta (id, tenant_id, operacion_id, comprador_id, precio_c
   ('f0000000-0000-4000-8000-000000000006','11111111-1111-4111-8111-111111111111','c0000000-0000-4000-8000-000000000012','a0000000-0000-4000-8000-000000000021',465000,'USD',current_date-5, NULL,NULL,NULL,'en_curso',NULL,'Galpón. Reserva tomada esta semana.')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO comision (id, tenant_id, venta_id, contrato_id, padre_id, nivel, punta, base_monto, moneda, porcentaje, monto, beneficiario_tipo, beneficiario_id, beneficiario_nombre, concepto, estado, cobrada_el) VALUES
-  -- Venta 1 · escriturada y cobrada. Punta compradora y vendedora.
-  ('c9000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,NULL,1,'vendedora',70000,'USD',3.0000,2100.00,'operacion',NULL,NULL,'Honorarios punta vendedora','cobrada',current_date-10),
-  ('c9000000-0000-4000-8000-000000000002','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,NULL,1,'compradora',70000,'USD',3.0000,2100.00,'operacion',NULL,NULL,'Honorarios punta compradora','cobrada',current_date-10),
-  ('c9000000-0000-4000-8000-000000000003','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000001',2,'vendedora',2100,'USD',100.0000,2100.00,'casa',NULL,NULL,'Queda en la casa: captación propia','cobrada',current_date-10),
-  ('c9000000-0000-4000-8000-000000000004','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000003',3,'vendedora',2100,'USD',25.0000, 525.00,'agente','11000000-0000-4000-8000-000000000003',NULL,'Sofía Luna · captación','cobrada',current_date-8),
-  ('c9000000-0000-4000-8000-000000000005','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000002',2,'compradora',2100,'USD',50.0000,1050.00,'inmobiliaria_externa',NULL,'Propiedades del Oeste','50/50 con la otra inmobiliaria','cobrada',current_date-10),
-  -- Venta 2 · escriturada hace ocho meses
-  ('c9000000-0000-4000-8000-000000000006','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000002',NULL,NULL,1,'vendedora',112000,'USD',3.0000,3360.00,'operacion',NULL,NULL,'Honorarios punta vendedora','cobrada',current_date-240),
-  ('c9000000-0000-4000-8000-000000000007','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000002',NULL,'c9000000-0000-4000-8000-000000000006',2,'vendedora',3360,'USD',100.0000,3360.00,'casa',NULL,NULL,'Queda en la casa','cobrada',current_date-240),
-  ('c9000000-0000-4000-8000-000000000008','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000002',NULL,'c9000000-0000-4000-8000-000000000007',3,'vendedora',3360,'USD',30.0000,1008.00,'agente','11000000-0000-4000-8000-000000000005',NULL,'Nicolás Paz · cierre','cobrada',current_date-235),
-  -- Venta 4 · con boleto: devengada pero NO cobrada. Es "comisiones por cobrar".
-  ('c9000000-0000-4000-8000-000000000009','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000004',NULL,NULL,1,'vendedora',162000,'USD',3.0000,4860.00,'operacion',NULL,NULL,'Honorarios punta vendedora','devengada',NULL),
-  ('c9000000-0000-4000-8000-000000000010','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000004',NULL,'c9000000-0000-4000-8000-000000000009',2,'vendedora',4860,'USD',100.0000,4860.00,'casa',NULL,NULL,'Queda en la casa','devengada',NULL),
-  ('c9000000-0000-4000-8000-000000000011','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000004',NULL,'c9000000-0000-4000-8000-000000000010',3,'vendedora',4860,'USD',25.0000,1215.00,'agente','11000000-0000-4000-8000-000000000005',NULL,'Nicolás Paz · captación y cierre','devengada',NULL),
-  -- Ventas en curso: proyectadas, todavía no son plata de nadie
-  ('c9000000-0000-4000-8000-000000000012','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000003',NULL,NULL,1,'vendedora',207000,'USD',3.0000,6210.00,'operacion',NULL,NULL,'Honorarios punta vendedora','proyectada',NULL),
-  ('c9000000-0000-4000-8000-000000000013','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000006',NULL,NULL,1,'vendedora',465000,'USD',3.0000,13950.00,'operacion',NULL,NULL,'Honorarios punta vendedora','proyectada',NULL),
-  -- Venta caída: anulada
-  ('c9000000-0000-4000-8000-000000000014','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000005',NULL,NULL,1,'vendedora',320000,'USD',3.0000,9600.00,'operacion',NULL,NULL,'Honorarios punta vendedora','anulada',NULL),
-  -- Comisión de ALQUILER: la punta locadora del contrato nuevo
-  ('c9000000-0000-4000-8000-000000000015','11111111-1111-4111-8111-111111111111',NULL,'d0000000-0000-4000-8000-000000000010',NULL,1,'locadora',398000,'ARS',100.0000,398000.00,'operacion',NULL,NULL,'Honorarios de contrato · un mes','cobrada',current_date-20)
+-- El catálogo de inmobiliarias con las que se comparte (migración 021). Sin
+-- esto, «Propiedades del Oeste» es texto libre adentro de una comisión y no hay
+-- forma de contestar cuánto se le pagó en el año.
+INSERT INTO inmobiliaria_externa (id, tenant_id, nombre, cuit, contacto, telefono, email, activa, notas) VALUES
+  ('ce000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111','Propiedades del Oeste','30712345678','Marcelo Duarte','261 423-9080','operaciones@delOeste.test',true,'Trabajamos 50/50 desde 2023. Cobran a los 30 días de la escritura.'),
+  ('ce000000-0000-4000-8000-000000000002','11111111-1111-4111-8111-111111111111','Cuyo Negocios Inmobiliarios','30798765432','Vanina Ruiz','261 155-33-2210','vruiz@cuyoneg.test',true,NULL),
+  ('ce000000-0000-4000-8000-000000000003','11111111-1111-4111-8111-111111111111','Inmobiliaria San Martín',NULL,NULL,NULL,NULL,false,'Cerró la oficina en 2025. Se deja para el histórico de lo que se le pagó.'),
+  ('ce200000-0000-4000-8000-000000000001','22222222-2222-4222-8222-222222222222','Norte Propiedades',NULL,'Sergio Vidal','11 4790-1122',NULL,true,NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- ── El reparto, con la MISMA forma que produce el motor ─────────────────────
+--
+-- Este bloque estaba escrito a mano con otro árbol —el nivel 3 colgaba del
+-- nivel 2, y había filas de nivel 2 con beneficiario 'casa' que el motor nunca
+-- emite— y por eso **diez de las once ventas no cuadraban**: PROP-0011 mostraba
+-- «Comisión USD 4.860 / A la casa USD 4.860» con un agente llevándose 1.215.
+-- El seed entra por SQL directo y no pasa por `repartir()`, que es donde vive
+-- la validación, así que el error era invisible: cada número se veía razonable
+-- por separado.
+--
+-- La forma correcta, la que emite `comisiones.motor.ts`:
+--
+--   nivel 1 · una por punta, beneficiario 'operacion', sin padre
+--   nivel 2 · la otra inmobiliaria, si la hay. Padre: la de nivel 1 de SU punta
+--   nivel 3 · captador, cerrador y el RESTO de la casa. Padre: también la de
+--             nivel 1 de su punta, NO la de nivel 2
+--
+-- El nivel 3 se aplica sobre lo que queda de cada punta **después** del nivel
+-- 2, así que compartir al 50% le baja la comisión al agente a la mitad. Se ve
+-- en la venta 1: Sofía cobra 525 por la punta propia y 262,50 por la compartida.
+--
+-- Hay un test que afirma que todas las ventas del seed cuadran, para que esto
+-- no se vuelva a desviar.
+INSERT INTO comision (id, tenant_id, venta_id, contrato_id, padre_id, nivel, punta, base_monto, moneda, porcentaje, monto, beneficiario_tipo, beneficiario_id, beneficiario_nombre, externa_id, concepto, estado, cobrada_el) VALUES
+  -- ── Venta 1 · USD 70.000, escriturada y cobrada. Dos puntas, y la compradora
+  --    compartida 50/50 con Propiedades del Oeste. Es la que muestra el efecto
+  --    de compartir sobre lo que se lleva el agente.
+  ('c9000000-0000-4000-8000-000000000001','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,NULL,1,'vendedora',70000,'USD',3.0000,2100.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','cobrada',current_date-10),
+  ('c9000000-0000-4000-8000-000000000002','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000001',3,'vendedora',2100,'USD',25.0000,525.00,'agente','11000000-0000-4000-8000-000000000003',NULL,NULL,'Sofía Luna · captador 25%','cobrada',current_date-8),
+  ('c9000000-0000-4000-8000-000000000003','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000001',3,'vendedora',2100,'USD',75.0000,1575.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','cobrada',current_date-10),
+  ('c9000000-0000-4000-8000-000000000004','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,NULL,1,'compradora',70000,'USD',3.0000,2100.00,'operacion',NULL,NULL,NULL,'Honorarios punta compradora · 3%','cobrada',current_date-10),
+  ('c9000000-0000-4000-8000-000000000005','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000004',2,'compradora',2100,'USD',50.0000,1050.00,'inmobiliaria_externa',NULL,'Propiedades del Oeste','ce000000-0000-4000-8000-000000000001','Propiedades del Oeste · 50% de la punta compradora','cobrada',current_date-10),
+  ('c9000000-0000-4000-8000-000000000006','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000004',3,'compradora',1050,'USD',25.0000,262.50,'agente','11000000-0000-4000-8000-000000000003',NULL,NULL,'Sofía Luna · captador 25%','cobrada',current_date-8),
+  ('c9000000-0000-4000-8000-000000000007','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000001',NULL,'c9000000-0000-4000-8000-000000000004',3,'compradora',1050,'USD',75.0000,787.50,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta compradora','cobrada',current_date-10),
+
+  -- ── Venta 2 · USD 112.000, escriturada hace ocho meses. Cerró Nicolás.
+  ('c9000000-0000-4000-8000-000000000008','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000002',NULL,NULL,1,'vendedora',112000,'USD',3.0000,3360.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','cobrada',current_date-240),
+  ('c9000000-0000-4000-8000-000000000009','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000002',NULL,'c9000000-0000-4000-8000-000000000008',3,'vendedora',3360,'USD',30.0000,1008.00,'agente','11000000-0000-4000-8000-000000000005',NULL,NULL,'Nicolás Paz · cerrador 30%','cobrada',current_date-235),
+  ('c9000000-0000-4000-8000-000000000010','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000002',NULL,'c9000000-0000-4000-8000-000000000008',3,'vendedora',3360,'USD',70.0000,2352.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','cobrada',current_date-240),
+
+  -- ── Venta 4 · USD 162.000, con boleto: devengada y NO cobrada. Es el bloque
+  --    «comisiones por cobrar». Nicolás captó Y cerró: son DOS líneas, no una.
+  ('c9000000-0000-4000-8000-000000000011','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000004',NULL,NULL,1,'vendedora',162000,'USD',3.0000,4860.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','devengada',NULL),
+  ('c9000000-0000-4000-8000-000000000012','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000004',NULL,'c9000000-0000-4000-8000-000000000011',3,'vendedora',4860,'USD',25.0000,1215.00,'agente','11000000-0000-4000-8000-000000000005',NULL,NULL,'Nicolás Paz · captador 25%','devengada',NULL),
+  ('c9000000-0000-4000-8000-000000000013','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000004',NULL,'c9000000-0000-4000-8000-000000000011',3,'vendedora',4860,'USD',25.0000,1215.00,'agente','11000000-0000-4000-8000-000000000005',NULL,NULL,'Nicolás Paz · cerrador 25%','devengada',NULL),
+  ('c9000000-0000-4000-8000-000000000014','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000004',NULL,'c9000000-0000-4000-8000-000000000011',3,'vendedora',4860,'USD',50.0000,2430.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','devengada',NULL),
+
+  -- ── Ventas en curso: proyectadas. Todavía no son plata de nadie, pero el
+  --    reparto ya está acordado y por eso está escrito.
+  ('c9000000-0000-4000-8000-000000000015','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000003',NULL,NULL,1,'vendedora',207000,'USD',3.0000,6210.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','proyectada',NULL),
+  ('c9000000-0000-4000-8000-000000000016','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000003',NULL,'c9000000-0000-4000-8000-000000000015',3,'vendedora',6210,'USD',25.0000,1552.50,'agente','11000000-0000-4000-8000-000000000003',NULL,NULL,'Sofía Luna · captador 25%','proyectada',NULL),
+  ('c9000000-0000-4000-8000-000000000017','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000003',NULL,'c9000000-0000-4000-8000-000000000015',3,'vendedora',6210,'USD',75.0000,4657.50,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','proyectada',NULL),
+
+  ('c9000000-0000-4000-8000-000000000018','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000006',NULL,NULL,1,'vendedora',465000,'USD',3.0000,13950.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','proyectada',NULL),
+  ('c9000000-0000-4000-8000-000000000019','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000006',NULL,'c9000000-0000-4000-8000-000000000018',3,'vendedora',13950,'USD',25.0000,3487.50,'agente','11000000-0000-4000-8000-000000000007',NULL,NULL,'Martín Aguirre · captador 25%','proyectada',NULL),
+  ('c9000000-0000-4000-8000-000000000020','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000006',NULL,'c9000000-0000-4000-8000-000000000018',3,'vendedora',13950,'USD',75.0000,10462.50,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','proyectada',NULL),
+
+  -- ── Venta caída: el árbol entero anulado, no borrado. Lo que se acordó y
+  --    después no fue sigue siendo parte de la historia de la operación.
+  ('c9000000-0000-4000-8000-000000000021','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000005',NULL,NULL,1,'vendedora',320000,'USD',3.0000,9600.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','anulada',NULL),
+  ('c9000000-0000-4000-8000-000000000022','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000005',NULL,'c9000000-0000-4000-8000-000000000021',3,'vendedora',9600,'USD',25.0000,2400.00,'agente','11000000-0000-4000-8000-000000000005',NULL,NULL,'Nicolás Paz · captador 25%','anulada',NULL),
+  ('c9000000-0000-4000-8000-000000000023','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000005',NULL,'c9000000-0000-4000-8000-000000000021',3,'vendedora',9600,'USD',75.0000,7200.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','anulada',NULL),
+
+  -- ── La comisión de un ALQUILER, con su reparto completo.
+  --    Base: UN MES (`monto_inicial`, congelado al firmar, no la cuota vigente:
+  --    si se calculara contra el monto de hoy, cada ajuste por índice
+  --    recalcularía una comisión ya cobrada). Punta locadora al 100%: un mes
+  --    entero, que es como se cobra acá. Y se reparte igual que una venta.
+  ('c9000000-0000-4000-8000-000000000024','11111111-1111-4111-8111-111111111111',NULL,'d0000000-0000-4000-8000-000000000010',NULL,1,'locadora',398000,'ARS',100.0000,398000.00,'operacion',NULL,NULL,NULL,'Honorarios punta locadora · 100% (un mes)','cobrada',current_date-20),
+  ('c9000000-0000-4000-8000-000000000025','11111111-1111-4111-8111-111111111111',NULL,'d0000000-0000-4000-8000-000000000010','c9000000-0000-4000-8000-000000000024',3,'locadora',398000,'ARS',25.0000,99500.00,'agente','11000000-0000-4000-8000-000000000003',NULL,NULL,'Sofía Luna · captador 25%','cobrada',current_date-18),
+  ('c9000000-0000-4000-8000-000000000026','11111111-1111-4111-8111-111111111111',NULL,'d0000000-0000-4000-8000-000000000010','c9000000-0000-4000-8000-000000000024',3,'locadora',398000,'ARS',25.0000,99500.00,'agente','11000000-0000-4000-8000-000000000005',NULL,NULL,'Nicolás Paz · cerrador 25%','cobrada',current_date-18),
+  ('c9000000-0000-4000-8000-000000000027','11111111-1111-4111-8111-111111111111',NULL,'d0000000-0000-4000-8000-000000000010','c9000000-0000-4000-8000-000000000024',3,'locadora',398000,'ARS',50.0000,199000.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta locadora','cobrada',current_date-20)
 ON CONFLICT (id) DO NOTHING;
 
 
@@ -805,18 +1024,58 @@ INSERT INTO operacion_venta (id, tenant_id, operacion_id, comprador_id, precio_c
   ('f0000000-0000-4000-8000-000000000011','11111111-1111-4111-8111-111111111111','c0000000-0000-4000-8000-000000000024','a0000000-0000-4000-8000-000000000019', 52000,'USD',current_date-6, NULL,NULL,NULL,'en_curso','Monoambiente de Sarmiento. Recién reservado.')
 ON CONFLICT (id) DO NOTHING;
 
--- Nivel 1 de las ventas nuevas: sin esto el "honorarios devengados" del tablero
--- se queda con dos operaciones y no dibuja una serie.
-INSERT INTO comision (id, tenant_id, venta_id, contrato_id, padre_id, nivel, punta, base_monto, moneda, porcentaje, monto, beneficiario_tipo, beneficiario_id, concepto, estado, cobrada_el) VALUES
-  ('c9000000-0000-4000-8000-000000000016','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000007',NULL,NULL,1,'vendedora', 76500,'USD',3.0000,2295.00,'operacion',NULL,'Honorarios punta vendedora','cobrada',current_date-360),
-  ('c9000000-0000-4000-8000-000000000017','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000007',NULL,'c9000000-0000-4000-8000-000000000016',3,'vendedora',2295,'USD',25.0000, 573.75,'agente','11000000-0000-4000-8000-000000000006','Belén Ortiz · captación','cobrada',current_date-358),
-  ('c9000000-0000-4000-8000-000000000018','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000008',NULL,NULL,1,'vendedora', 93000,'USD',3.0000,2790.00,'operacion',NULL,'Honorarios punta vendedora','cobrada',current_date-320),
-  ('c9000000-0000-4000-8000-000000000019','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000008',NULL,'c9000000-0000-4000-8000-000000000018',3,'vendedora',2790,'USD',30.0000, 837.00,'agente','11000000-0000-4000-8000-000000000007','Martín Aguirre · cierre','cobrada',current_date-318),
-  ('c9000000-0000-4000-8000-000000000020','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000009',NULL,NULL,1,'vendedora', 86000,'USD',3.0000,2580.00,'operacion',NULL,'Honorarios punta vendedora','cobrada',current_date-140),
-  ('c9000000-0000-4000-8000-000000000021','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000009',NULL,'c9000000-0000-4000-8000-000000000020',3,'vendedora',2580,'USD',25.0000, 645.00,'agente','11000000-0000-4000-8000-000000000003','Sofía Luna · captación','cobrada',current_date-138),
-  ('c9000000-0000-4000-8000-000000000022','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000010',NULL,NULL,1,'vendedora', 18500,'USD',4.0000, 740.00,'operacion',NULL,'Honorarios punta vendedora','cobrada',current_date-110),
-  ('c9000000-0000-4000-8000-000000000023','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000011',NULL,NULL,1,'vendedora', 52000,'USD',3.0000,1560.00,'operacion',NULL,'Honorarios punta vendedora','proyectada',NULL)
+-- Las ventas de volumen, también con el árbol completo del motor: sin el nivel
+-- 3, «honorarios devengados» del tablero se queda con dos operaciones y no
+-- dibuja una serie, y el perfil de un agente no tiene nada que mostrar.
+INSERT INTO comision (id, tenant_id, venta_id, contrato_id, padre_id, nivel, punta, base_monto, moneda, porcentaje, monto, beneficiario_tipo, beneficiario_id, beneficiario_nombre, externa_id, concepto, estado, cobrada_el) VALUES
+  ('c9000000-0000-4000-8000-000000000031','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000007',NULL,NULL,1,'vendedora', 76500,'USD',3.0000,2295.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','cobrada',current_date-360),
+  ('c9000000-0000-4000-8000-000000000032','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000007',NULL,'c9000000-0000-4000-8000-000000000031',3,'vendedora',2295,'USD',25.0000, 573.75,'agente','11000000-0000-4000-8000-000000000006',NULL,NULL,'Belén Ortiz · captador 25%','cobrada',current_date-358),
+  ('c9000000-0000-4000-8000-000000000033','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000007',NULL,'c9000000-0000-4000-8000-000000000031',3,'vendedora',2295,'USD',75.0000,1721.25,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','cobrada',current_date-360),
+
+  -- Compartida con Cuyo Negocios: 40% para ellos. El agente cobra sobre lo que
+  -- QUEDA, no sobre el bruto — es la mitad de las discusiones de fin de mes.
+  ('c9000000-0000-4000-8000-000000000034','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000008',NULL,NULL,1,'vendedora', 93000,'USD',3.0000,2790.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','cobrada',current_date-320),
+  ('c9000000-0000-4000-8000-000000000035','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000008',NULL,'c9000000-0000-4000-8000-000000000034',2,'vendedora',2790,'USD',40.0000,1116.00,'inmobiliaria_externa',NULL,'Cuyo Negocios Inmobiliarios','ce000000-0000-4000-8000-000000000002','Cuyo Negocios Inmobiliarios · 40% de la punta vendedora','cobrada',current_date-320),
+  ('c9000000-0000-4000-8000-000000000036','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000008',NULL,'c9000000-0000-4000-8000-000000000034',3,'vendedora',1674,'USD',30.0000, 502.20,'agente','11000000-0000-4000-8000-000000000007',NULL,NULL,'Martín Aguirre · cerrador 30%','cobrada',current_date-318),
+  ('c9000000-0000-4000-8000-000000000037','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000008',NULL,'c9000000-0000-4000-8000-000000000034',3,'vendedora',1674,'USD',70.0000,1171.80,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','cobrada',current_date-320),
+
+  ('c9000000-0000-4000-8000-000000000038','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000009',NULL,NULL,1,'vendedora', 86000,'USD',3.0000,2580.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','cobrada',current_date-140),
+  ('c9000000-0000-4000-8000-000000000039','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000009',NULL,'c9000000-0000-4000-8000-000000000038',3,'vendedora',2580,'USD',25.0000, 645.00,'agente','11000000-0000-4000-8000-000000000003',NULL,NULL,'Sofía Luna · captador 25%','cobrada',current_date-138),
+  ('c9000000-0000-4000-8000-000000000040','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000009',NULL,'c9000000-0000-4000-8000-000000000038',3,'vendedora',2580,'USD',75.0000,1935.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','cobrada',current_date-140),
+
+  -- Una cochera al 4% y sin agente: la casa se lleva todo. El motor emite igual
+  -- la línea del resto, y por eso la operación cuadra sin nivel 3 de agentes.
+  ('c9000000-0000-4000-8000-000000000041','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000010',NULL,NULL,1,'vendedora', 18500,'USD',4.0000, 740.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 4%','cobrada',current_date-110),
+  ('c9000000-0000-4000-8000-000000000042','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000010',NULL,'c9000000-0000-4000-8000-000000000041',3,'vendedora',740,'USD',100.0000, 740.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','cobrada',current_date-110),
+
+  ('c9000000-0000-4000-8000-000000000043','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000011',NULL,NULL,1,'vendedora', 52000,'USD',3.0000,1560.00,'operacion',NULL,NULL,NULL,'Honorarios punta vendedora · 3%','proyectada',NULL),
+  ('c9000000-0000-4000-8000-000000000044','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000011',NULL,'c9000000-0000-4000-8000-000000000043',3,'vendedora',1560,'USD',25.0000, 390.00,'agente','11000000-0000-4000-8000-000000000003',NULL,NULL,'Sofía Luna · captador 25%','proyectada',NULL),
+  ('c9000000-0000-4000-8000-000000000045','11111111-1111-4111-8111-111111111111','f0000000-0000-4000-8000-000000000011',NULL,'c9000000-0000-4000-8000-000000000043',3,'vendedora',1560,'USD',75.0000,1170.00,'casa',NULL,NULL,NULL,'Inmobiliaria · resto de la punta vendedora','proyectada',NULL)
 ON CONFLICT (id) DO NOTHING;
+
+-- El % propio de dos personas del equipo.
+--
+-- NULL en las demás **no es cero**: es «hereda el 25/25 de la inmobiliaria».
+-- Sofía cobra más por captar porque trae la cartera, y Belén arrancó hace poco
+-- con un esquema más bajo. Sin al menos dos filas distintas, la pantalla de
+-- Equipo mostraría seis veces el mismo número y no se vería para qué sirve.
+UPDATE membresia SET comision_captador_pct = 30, comision_cerrador_pct = 20
+ WHERE tenant_id = '11111111-1111-4111-8111-111111111111'
+   AND usuario_id = '11000000-0000-4000-8000-000000000003';
+UPDATE membresia SET comision_captador_pct = 15, comision_cerrador_pct = 15
+ WHERE tenant_id = '11111111-1111-4111-8111-111111111111'
+   AND usuario_id = '11000000-0000-4000-8000-000000000006';
+
+-- Y una propiedad con honorarios propios: el lote de Viamonte se acordó al 4%
+-- + 2% en vez del 3% + 3% de la casa. `operacion.comision_config` existía desde
+-- la 006 y estaba vacía en todas las filas — la columna que nadie leía.
+--
+-- El seed corre como OWNER y **saltea RLS**: el filtro por tenant_id va a mano.
+-- Sin él, este UPDATE le cambiaría los honorarios a una operación de la otra
+-- inmobiliaria. Ya pasó una vez, con siete cuotas marcadas como pagadas.
+UPDATE operacion SET comision_config = '{"venta":{"compradora":2,"vendedora":4}}'::jsonb
+ WHERE tenant_id = '11111111-1111-4111-8111-111111111111'
+   AND id = 'c0000000-0000-4000-8000-000000000017';
 
 INSERT INTO reserva (id, tenant_id, operacion_id, persona_id, monto, moneda, fecha, vence_el, estado, notas) VALUES
   ('62000000-0000-4000-8000-000000000007','11111111-1111-4111-8111-111111111111','c0000000-0000-4000-8000-000000000021','a0000000-0000-4000-8000-000000000022',4000,'USD',current_date-420,current_date-390,'convertida','Terminó en escritura.'),

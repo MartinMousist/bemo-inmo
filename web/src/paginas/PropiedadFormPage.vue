@@ -4,9 +4,14 @@ import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import { ETIQUETA_TIPO } from '../dominio/formato';
+import { etiquetaRol } from '../dominio/roles';
+import { useAuth } from '../stores/auth';
+import { useEquipo } from '../stores/equipo';
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuth();
+const equipo = useEquipo();
 const id = route.params.id as string | undefined;
 const esEdicion = Boolean(id);
 
@@ -20,16 +25,36 @@ const form = reactive({
   lat: '', lng: '',
 });
 
-const mapasDisponibles = ref(false);
+/**
+ * Quién captó la propiedad.
+ *
+ * Vive aparte del `form` porque el `for…of` de arriba copia todo lo que venga
+ * de la API con el mismo nombre, y acá el valor de la ficha es un objeto
+ * (`agenteCaptador: { id, nombre }`) y lo que se manda es un uuid.
+ *
+ * **Editable, no fijo al usuario actual**: el captador no siempre es quien
+ * carga la propiedad —lo dice también la sugerencia de reparto, que llega
+ * editable por lo mismo—. En una propiedad nueva viene pre-llenado con quien
+ * está cargando, que es el caso más común, y `''` es «sin captador».
+ *
+ * Hasta ahora esta pantalla NUNCA mandaba el campo: `agente_captador_id` existía
+ * desde la migración 006 y sólo lo llenaba el seed. Filtrar por un dato que
+ * nadie puede cargar ni corregir es filtrar por el seed.
+ */
+const captadorId = ref('');
+
+const geocodificacionDisponible = ref(false);
 const guardando = ref(false);
 const error = ref('');
 const cargando = ref(esEdicion);
 
 onMounted(async () => {
+  void equipo.cargar();
+
   try {
-    const caps = await api<{ mapas: boolean }>('/propiedades/capacidades');
-    mapasDisponibles.value = caps.mapas;
-  } catch { /* si falla, se asume sin mapas y se ofrece carga manual */ }
+    const caps = await api<{ geocodificacion: boolean }>('/propiedades/capacidades');
+    geocodificacionDisponible.value = caps.geocodificacion;
+  } catch { /* si falla, se asume sin geocodificación y se explica la carga manual */ }
 
   if (esEdicion) {
     try {
@@ -38,17 +63,50 @@ onMounted(async () => {
         const v = p[k];
         if (v !== null && v !== undefined) form[k] = String(v);
       }
+      const cap = p.agenteCaptador as { id: string } | null;
+      captadorId.value = cap?.id ?? '';
+      latCargada.value = form.lat;
+      lngCargada.value = form.lng;
     } catch (e) {
       error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar la propiedad.';
     } finally {
       cargando.value = false;
     }
+  } else {
+    captadorId.value = auth.usuario?.id ?? '';
   }
 });
 
 function numeroOpcional(v: string): number | undefined {
   const n = Number(v);
   return v.trim() === '' || Number.isNaN(n) ? undefined : n;
+}
+
+/**
+ * Las coordenadas tal como las trajo la ficha, para saber si la persona las tocó.
+ *
+ * Sin esto, abrir Editar y guardar cualquier otra cosa mandaba lat y lng de
+ * vuelta —el formulario las pre-llena— y el backend las marcaba como carga
+ * **manual**. Efecto: una coordenada que había puesto Google quedaba congelada, y
+ * a partir de ahí corregir la dirección ya no la volvía a resolver. Guardar un
+ * campo no puede cambiar el origen de otro.
+ */
+const latCargada = ref('');
+const lngCargada = ref('');
+
+/**
+ * Qué se manda en `lat`/`lng`, con los tres significados del backend:
+ * `undefined` = no las toques · `null` en las dos = borralas · números = son
+ * éstas, cargadas a mano. Van de a dos: mandar una sola es 422, y el mensaje lo
+ * dice.
+ */
+function ubicacionAMandar(): { lat?: number | null; lng?: number | null } {
+  const sinTocar = form.lat === latCargada.value && form.lng === lngCargada.value;
+  if (sinTocar) return {};
+
+  const lat = numeroOpcional(form.lat);
+  const lng = numeroOpcional(form.lng);
+  return { lat: lat ?? null, lng: lng ?? null };
 }
 
 async function guardar() {
@@ -72,8 +130,11 @@ async function guardar() {
       cocheras: numeroOpcional(form.cocheras),
       antiguedad: numeroOpcional(form.antiguedad),
       descripcion: form.descripcion || undefined,
-      lat: numeroOpcional(form.lat),
-      lng: numeroOpcional(form.lng),
+      ...ubicacionAMandar(),
+      // `null` explícito y no `undefined`: en el PATCH significa DESASIGNAR.
+      // Con `undefined` el backend deja lo que había —es la regla del PATCH
+      // parcial— y vaciar el captador no haría nada visible.
+      agenteCaptadorId: captadorId.value || null,
     };
 
     const r = esEdicion
@@ -116,20 +177,66 @@ async function guardar() {
         </div>
 
         <div class="nota-mapa">
-          <p v-if="mapasDisponibles" class="nota">
+          <p v-if="geocodificacionDisponible" class="nota">
             La ubicación se resuelve automáticamente al guardar y se guarda una sola vez.
           </p>
-          <template v-else>
-            <p class="nota aviso">
-              El mapa no está configurado (falta <code class="mono">GOOGLE_MAPS_API_KEY</code>).
-              La propiedad se guarda igual, sin ubicación. Podés cargar las coordenadas a mano.
+          <p v-else class="nota aviso">
+            La ubicación automática no está configurada (falta
+            <code class="mono">GOOGLE_MAPS_API_KEY</code>). La propiedad se guarda igual, sin
+            coordenadas. Podés cargarlas a mano acá abajo — el mapa de la ficha las muestra
+            igual, no depende de la key.
+          </p>
+
+          <!--
+            La carga manual va SIEMPRE, no sólo cuando falta la key.
+
+            Antes vivía dentro del `v-else` de «hay mapas», así que el día que
+            llegue la key estos dos campos desaparecen. Y ahí falta justo el caso
+            que el propio `geocoding.service.ts` nombra: la salida manual sirve
+            cuando no hay key **o cuando Google ubica mal la dirección**. Sin
+            esto, `geocode_fuente = 'manual'` —que el backfill respeta a
+            propósito— dejaría de poder crearse desde la app.
+
+            Plegado porque es el caso raro cuando la geocodificación anda.
+          -->
+          <details class="ajuste" :open="!geocodificacionDisponible">
+            <summary>Ajustar la ubicación a mano</summary>
+            <p class="nota">
+              <template v-if="geocodificacionDisponible">
+                Si Google ubica mal la dirección, cargá las coordenadas acá: quedan marcadas
+                como carga manual y ninguna sincronización posterior las pisa.
+              </template>
+              <template v-else>
+                Se sacan de Google Maps: botón derecho sobre el punto exacto y las copia.
+              </template>
+              Van las dos o ninguna. Vaciar las dos borra la ubicación guardada.
             </p>
             <div class="grid">
               <label class="campo"><span>Latitud</span><input v-model="form.lat" inputmode="decimal" placeholder="-32.8908" /></label>
               <label class="campo"><span>Longitud</span><input v-model="form.lng" inputmode="decimal" placeholder="-68.8272" /></label>
             </div>
-          </template>
+          </details>
         </div>
+      </section>
+
+      <section class="card stack">
+        <h2>Captación</h2>
+        <label class="campo">
+          <span>Quién captó la propiedad</span>
+          <select v-model="captadorId">
+            <option value="">Sin captador</option>
+            <option v-for="m in equipo.activos" :key="m.usuarioId" :value="m.usuarioId">
+              {{ m.nombre }} · {{ etiquetaRol(m.rol) }}
+            </option>
+          </select>
+          <!-- `<p>` y no `<span>`: dentro de `.campo`, un `span` hijo directo es
+               LA ETIQUETA del campo y la capa familia lo pone en mayúsculas. -->
+          <p class="ayuda">
+            Pre-llena el reparto de la comisión y es lo que filtran los listados por agente.
+            No siempre es quien carga la propiedad, por eso se puede cambiar.
+          </p>
+        </label>
+        <p v-if="equipo.error" class="nota aviso">{{ equipo.error }}</p>
       </section>
 
       <section class="card stack">
@@ -193,5 +300,19 @@ async function guardar() {
   color: var(--warning);
 }
 .nota-mapa { display: flex; flex-direction: column; gap: var(--s-md); }
+.ajuste > summary {
+  cursor: pointer;
+  color: var(--accent-ink);
+  font-size: 13px;
+  /* El marcador nativo cambia de forma entre navegadores y no se alinea con el
+     resto. Se apaga y la flecha va en el pseudo-elemento, igual que PanelMapas. */
+  list-style: none;
+}
+.ajuste > summary::-webkit-details-marker { display: none; }
+.ajuste > summary::before { content: '▸ '; }
+.ajuste[open] > summary::before { content: '▾ '; }
+.ajuste > summary:focus-visible { outline: 0; box-shadow: var(--ring); border-radius: var(--r-sm); }
+.ajuste > .nota { margin: var(--s-sm) 0; }
+.ajuste > .grid { margin-top: var(--s-sm); }
 .acciones { padding-bottom: var(--s-xl); }
 </style>

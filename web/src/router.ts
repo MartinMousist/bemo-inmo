@@ -45,29 +45,71 @@ const router = createRouter({
     { path: '/propiedades/:id', component: () => import('./paginas/PropiedadDetallePage.vue') },
     { path: '/personas', component: () => import('./paginas/PersonasPage.vue') },
     { path: '/personas/nueva', component: () => import('./paginas/PersonaFormPage.vue') },
-    { path: '/oportunidades', component: () => import('./paginas/OportunidadesPage.vue') },
-    { path: '/oportunidades/nueva', component: () => import('./paginas/OportunidadFormPage.vue') },
+    // «Leads» es como se llama en una inmobiliaria. En la base y en la API sigue
+    // siendo `oportunidad`: renombrar una tabla, su endpoint y sus tests para
+    // cambiar una etiqueta de pantalla es mover cañerías por un cartel.
+    { path: '/leads', component: () => import('./paginas/OportunidadesPage.vue') },
+    { path: '/leads/nueva', component: () => import('./paginas/OportunidadFormPage.vue') },
+    // Las rutas viejas siguen andando: alguien tiene el enlace guardado.
+    { path: '/oportunidades', redirect: '/leads' },
+    { path: '/oportunidades/nueva', redirect: '/leads/nueva' },
     { path: '/reservas', component: () => import('./paginas/ReservasPage.vue') },
     { path: '/vencimientos', component: () => import('./paginas/VencimientosPage.vue') },
     { path: '/contratos', component: () => import('./paginas/ContratosPage.vue') },
     { path: '/contratos/nuevo', component: () => import('./paginas/ContratoFormPage.vue') },
     { path: '/contratos/:id', component: () => import('./paginas/ContratoDetallePage.vue') },
+    // La hoja imprimible de un documento generado. Ruta propia y no un modal:
+    // el `@media print` global esconde botones y navegación pero imprime todo
+    // el resto de la página, así que desde la ficha del contrato saldrían atrás
+    // del pre-contrato los aumentos, las cuotas y los garantes.
+    //
+    // Con sesión, como todo lo que no se declara público: el pre-contrato lleva
+    // los DNI y los domicilios de las partes. No es un enlace para compartir.
+    {
+      path: '/documentos/:id/imprimir',
+      component: () => import('./paginas/DocumentoImprimirPage.vue'),
+    },
     { path: '/liquidaciones', component: () => import('./paginas/LiquidacionesPage.vue') },
     { path: '/caja', component: () => import('./paginas/CajaPage.vue') },
     { path: '/movimientos', component: () => import('./paginas/AuditoriaPage.vue') },
     { path: '/indices', component: () => import('./paginas/IndicesPage.vue') },
     { path: '/ventas', component: () => import('./paginas/VentasPage.vue') },
+    // Faltaba: la fila de VentasPage navegaba acá desde el primer día y caía en
+    // NoEncontradaPage. Sin esta ruta, la mitad de la etapa de comisiones —de
+    // quién es cada peso de una venta— no tenía dónde vivir.
+    { path: '/ventas/:id', component: () => import('./paginas/VentaDetallePage.vue') },
     { path: '/publicaciones', component: () => import('./paginas/PublicacionesPage.vue') },
     { path: '/avisos', component: () => import('./paginas/AvisosPage.vue') },
     { path: '/equipo', component: () => import('./paginas/EquipoPage.vue') },
+    // El perfil de una persona del equipo: sus números, sus captaciones y sus
+    // operaciones. Los montos los filtra el back según quién mira.
+    { path: '/equipo/:usuarioId', component: () => import('./paginas/AgentePage.vue') },
     { path: '/comisiones', component: () => import('./paginas/ComisionesPage.vue') },
     { path: '/plan', component: () => import('./paginas/PlanPage.vue') },
+    { path: '/cuenta', component: () => import('./paginas/CuentaPage.vue') },
     { path: '/importar', component: () => import('./paginas/ImportarPage.vue') },
 
     { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },
   ],
   scrollBehavior: () => ({ top: 0 }),
 });
+
+/**
+ * Qué prefijo de ruta pertenece a qué módulo apagable.
+ *
+ * Va por prefijo y no por ruta exacta a propósito: `/ventas/:id` y
+ * `/leads/nueva` tienen que caer con su sección. El catálogo de módulos vive en
+ * el backend (`cuenta/modulos.motor.ts`); acá está sólo el mapa a rutas del
+ * front, que es lo que el backend no sabe.
+ */
+const RUTA_DE_MODULO: Array<[string, string]> = [
+  ['/leads', 'leads'],
+  ['/oportunidades', 'leads'],
+  ['/ventas', 'ventas'],
+  ['/comisiones', 'comisiones'],
+  ['/publicaciones', 'publicaciones'],
+  ['/reservas', 'reservas'],
+];
 
 /**
  * Guard de rutas. Por defecto TODO exige sesión; una ruta es pública sólo si lo
@@ -94,6 +136,14 @@ router.beforeEach(async (to) => {
     // `next` para volver adonde quería ir, en vez de tirarlo al inicio.
     return { path: '/login', query: { next: to.fullPath } };
   }
+
+  // Un módulo apagado no está sólo fuera del menú: su ruta tampoco existe.
+  // Filtrar únicamente la barra lateral dejaría la pantalla accesible tipeando
+  // la URL o con un enlace viejo, y entonces la cuenta de gestión de alquileres
+  // seguiría teniendo Ventas — escondida, que es peor que visible.
+  const modulo = RUTA_DE_MODULO.find(([prefijo]) => to.path.startsWith(prefijo));
+  if (modulo && !auth.tieneModulo(modulo[1])) return { path: '/inicio' };
+
   return true;
 });
 

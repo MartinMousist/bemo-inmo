@@ -35,6 +35,8 @@ export class AuthService {
       email: string;
       password: string;
       nombre: string;
+      /** `inmobiliaria` u `gestor`. Ver `cuenta/modulos.motor.ts`. */
+      tipo?: string;
     },
     ctx: Contexto,
   ): Promise<Sesion> {
@@ -59,7 +61,31 @@ export class AuthService {
     }
 
     const { usuario_id, tenant_id } = filas[0];
-    await this.auditar(tenant_id, usuario_id, 'auth.signup', 'permitido', ctx);
+
+    // El tipo se escribe DESPUÉS del alta y no adentro de `app_signup`.
+    //
+    // Esa función es `SECURITY DEFINER` —corre con privilegios elevados para
+    // poder crear el tenant antes de que exista contexto de tenant— y agregarle
+    // un parámetro por una preferencia de interfaz amplía la superficie de la
+    // única función del sistema que puede escribir sin RLS. El UPDATE de acá
+    // pasa por el rol de la app y hace exactamente lo mismo.
+    //
+    // La ventana entre las dos escrituras no la ve nadie: es la misma request y
+    // la sesión se emite recién abajo.
+    // Y va por `withTenant`, no por `db.query` pelado: `tenant` tiene RLS, y sin
+    // contexto la policy no devuelve filas — el UPDATE no falla, no escribe
+    // nada y el signup se guarda como inmobiliaria sin que nadie se entere. Es
+    // la trampa que el proyecto ya tiene anotada: olvidarse un `withTenant`
+    // rompe la feature, no filtra datos.
+    if (datos.tipo && datos.tipo !== 'inmobiliaria') {
+      await this.db.withTenant(tenant_id, (ej) =>
+        ej.query('UPDATE tenant SET tipo = $2 WHERE id = $1', [tenant_id, datos.tipo]),
+      );
+    }
+
+    await this.auditar(tenant_id, usuario_id, 'auth.signup', 'permitido', ctx, {
+      tipo: datos.tipo ?? 'inmobiliaria',
+    });
     return this.emitirSesion(usuario_id, tenant_id, ctx);
   }
 

@@ -47,11 +47,14 @@ describe('Aislamiento entre inmobiliarias (gate etapa 2)', () => {
       .set(...auth(plata.tokens.owner))
       .expect(200);
 
-    expect(resA.body).toHaveLength(4);
-    expect(resP.body).toHaveLength(4);
+    // `/equipo` devuelve `{ miembros, heredado, totalVenta }`: los dos números
+    // de la política de la casa viajan con la lista para que la pantalla pueda
+    // mostrar el % heredado en gris sin pedir la config aparte.
+    expect(resA.body.miembros).toHaveLength(4);
+    expect(resP.body.miembros).toHaveLength(4);
 
-    const mailsA = resA.body.map((m: { email: string }) => m.email);
-    const mailsP = resP.body.map((m: { email: string }) => m.email);
+    const mailsA = resA.body.miembros.map((m: { email: string }) => m.email);
+    const mailsP = resP.body.miembros.map((m: { email: string }) => m.email);
 
     expect(mailsA.every((e: string) => e.includes('andes'))).toBe(true);
     expect(mailsP.every((e: string) => e.includes('plata'))).toBe(true);
@@ -90,7 +93,7 @@ describe('Aislamiento entre inmobiliarias (gate etapa 2)', () => {
       .set(...auth(cruzado))
       .expect(200);
 
-    const mails = res.body.map((m: { email: string }) => m.email);
+    const mails = res.body.miembros.map((m: { email: string }) => m.email);
     expect(mails.filter((e: string) => e.includes('andes'))).toHaveLength(0);
   });
 

@@ -24,7 +24,7 @@ const error = ref('');
 
 const RECURSO: Record<string, string> = { usuarios: 'Usuarios', propiedades: 'Propiedades' };
 const MODULO: Record<string, string> = {
-  propiedades: 'Cartera', personas: 'Personas', oportunidades: 'Oportunidades',
+  propiedades: 'Cartera', personas: 'Personas', oportunidades: 'Leads',
   contratos: 'Contratos', ajustes: 'Ajustes por índice', cobranzas: 'Cobranzas',
   liquidaciones: 'Liquidaciones', plantillas: 'Plantillas', comisiones: 'Comisiones',
   recordatorios: 'Recordatorios', multisucursal: 'Multi-sucursal',

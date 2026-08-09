@@ -24,10 +24,22 @@ interface Nota {
   autor: string | null; creadaEl: string;
 }
 
-const props = defineProps<{
-  entidadTipo: 'contrato_alquiler' | 'propiedad' | 'persona' | 'oportunidad';
-  entidadId: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    entidadTipo: 'contrato_alquiler' | 'propiedad' | 'persona' | 'oportunidad';
+    entidadId: string;
+    /**
+     * `false` cuando lo envuelve un `BloqueColapsable`. El default es `true`
+     * a propósito: este panel también vive en la ficha de una propiedad y en la
+     * de una persona, y ésas no se tocaron.
+     */
+    marco?: boolean;
+  }>(),
+  { marco: true },
+);
+
+/** Crear, resolver o borrar una nota cambia el conteo de la cabecera. */
+const emit = defineEmits<{ cambio: [] }>();
 
 const TIPO: Record<string, string> = {
   nota: 'Nota', llamado: 'Llamado', whatsapp: 'WhatsApp',
@@ -76,6 +88,7 @@ async function agregar() {
     texto.value = '';
     recordarEl.value = '';
     await cargar();
+    emit('cambio');
   } catch (e) {
     ui.error('No se pudo guardar la nota', e instanceof ApiError ? e.paraMostrar : '');
   } finally {
@@ -87,6 +100,7 @@ async function resolver(n: Nota) {
   try {
     await api(`/notas/${n.id}/resolver`, { method: 'POST' });
     await cargar();
+    emit('cambio');
   } catch (e) {
     ui.error('No se pudo marcar como resuelta', e instanceof ApiError ? e.paraMostrar : '');
   }
@@ -104,6 +118,7 @@ async function borrar(n: Nota) {
   try {
     await api(`/notas/${n.id}`, { method: 'DELETE' });
     await cargar();
+    emit('cambio');
     ui.ok('Nota borrada');
   } catch (e) {
     ui.error('No se pudo borrar', e instanceof ApiError ? e.paraMostrar : '');
@@ -118,8 +133,9 @@ onMounted(cargar);
 </script>
 
 <template>
-  <section class="card stack">
-    <div class="cab">
+  <section class="stack" :class="{ card: marco }">
+    <!-- Con `marco: false` el título y el conteo los pone el colapsable. -->
+    <div v-if="marco" class="cab">
       <h2>Seguimiento</h2>
       <span v-if="!cargando" class="cuenta">{{ total }}</span>
     </div>

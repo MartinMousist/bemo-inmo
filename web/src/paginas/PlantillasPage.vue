@@ -95,16 +95,28 @@ function abrirNueva() {
     nombre: '',
     // Un textarea en blanco no dice cómo se escribe una plantilla. El esqueleto
     // muestra la sintaxis de las tres cosas que el motor sabe hacer.
+    //
+    // ⚠️ Este esqueleto enseñaba `{{#if x }}…{{/if}}` y `{{#each }}`, que es la
+    // sintaxis de Handlebars y **el motor de acá no la entiende**: los
+    // condicionales son `{% si x %}…{% fin %}` y las listas
+    // `{% para x en lista %}`. Comprobado contra la API: `{{#if
+    // contrato.deposito }}` sale literal en el documento y ni siquiera figura
+    // como variable faltante. O sea que una plantilla nacida de este esqueleto
+    // imprimía `{{#if contrato.deposito }}` adentro del contrato que se firma.
     contenido:
       'CONTRATO DE LOCACIÓN\n\n' +
       'Entre {{ locador.nombre }}, DNI {{ locador.documento }}, en adelante EL LOCADOR,\n' +
       'y {{ locatario.nombre }}, DNI {{ locatario.documento }}, en adelante EL LOCATARIO,\n' +
       'se conviene la locación de {{ propiedad.direccion }}.\n\n' +
-      'PLAZO: desde {{ contrato.inicio }} hasta {{ contrato.fin }}.\n' +
-      'PRECIO: {{ contrato.monto }} por mes, pagadero el día {{ contrato.diaVencimiento }}.\n\n' +
-      '{{#if contrato.deposito }}\n' +
-      'DEPÓSITO: {{ contrato.deposito }}, que se reintegra al finalizar.\n' +
-      '{{/if}}\n',
+      'PLAZO: desde {{ contrato.inicio | fecha_larga }} hasta {{ contrato.fin | fecha_larga }}.\n' +
+      'PRECIO: {{ contrato.monto | moneda }} por mes, pagadero el día {{ contrato.diaVencimiento }}.\n\n' +
+      '{% si contrato.deposito %}\n' +
+      'DEPÓSITO: {{ contrato.deposito | moneda }}, que se reintegra al finalizar.\n' +
+      '{% fin %}\n\n' +
+      '{% si garantes %}\n' +
+      'GARANTÍA. Firman como garantes solidarios:\n' +
+      '{% para g en garantes %}  · {{ g.nombre }}, DNI {{ g.documento }}\n' +
+      '{% fin %}{% fin %}\n',
   };
 }
 
@@ -202,8 +214,12 @@ async function sembrar() {
  */
 const SINTAXIS = {
   variable: ['{', '{ variable }', '}'].join(''),
-  condicional: ['{', '{#if x }', '}…{', '{/if }', '}'].join(''),
-  lista: ['{', '{#each lista }', '}…{', '{/each }', '}'].join(''),
+  formato: ['{', '{ contrato.monto | moneda }', '}'].join(''),
+  // No es Handlebars: el motor usa `{% %}` para las estructuras y `{{ }}` sólo
+  // para las variables. Acá decía `{{#if}}` y `{{#each}}`, que el motor no
+  // entiende y deja pasar tal cual al documento impreso.
+  condicional: '{% si x %}…{% fin %}',
+  lista: '{% para x en lista %}…{% fin %}',
 };
 
 /** Agrupadas por tipo: es como se buscan, no por nombre. */
@@ -309,6 +325,10 @@ const porTipo = computed(() => {
             <code class="mono">{{ SINTAXIS.variable }}</code> reemplaza,
             <code class="mono">{{ SINTAXIS.condicional }}</code> muestra si hay dato,
             <code class="mono">{{ SINTAXIS.lista }}</code> repite.
+            Con <code class="mono">{{ SINTAXIS.formato }}</code> se le da formato:
+            <code class="mono">moneda</code>, <code class="mono">numero</code>,
+            <code class="mono">fecha</code>, <code class="mono">fecha_larga</code>,
+            <code class="mono">mayusculas</code> y <code class="mono">letras</code>.
             No hay negación ni operadores: lo que haga falta se calcula en el contexto.
           </span>
         </label>

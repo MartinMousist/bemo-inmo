@@ -35,8 +35,20 @@ export interface Diagnostico {
  *
  * 1. Se geocodifica UNA vez, al guardar la dirección, y se persiste lat/lng.
  *    Resolver la dirección en cada render sería pagar lo mismo mil veces.
- * 2. Los listados usan Static Maps (una imagen), no el mapa interactivo.
- * 3. El mapa interactivo se carga sólo cuando el usuario lo pide.
+ * 2. **Los listados no muestran mapas.** `docs/spec.md:426` prometía Static Maps
+ *    en las tarjetas y nunca se escribió; queda así a propósito y no es un
+ *    pendiente. Son 25 imágenes pagas por página de listado, y una Static Maps
+ *    se pide DESDE EL NAVEGADOR: haría falta una SEGUNDA key restringida por
+ *    referrer HTTP, o sea exactamente lo contrario de la restricción por IP que
+ *    esta key necesita. Una sola key server-side es la decisión.
+ * 3. El mapa de una ficha —el único que hay— es un iframe a
+ *    `www.google.com/maps?…&output=embed`, que **no usa esta key ni ninguna**, y
+ *    se carga sólo cuando el usuario lo pide.
+ *
+ * O sea: esta key habilita UNA cosa, geocodificar. Por eso
+ * `GET /propiedades/capacidades` devuelve `geocodificacion` y `mapaEmbebido` por
+ * separado — con un solo booleano, una propiedad ubicada a mano decía que le
+ * faltaba la key y escondía un mapa que funcionaba.
  *
  * Si no hay API key configurada, la app NO se rompe y NO inventa coordenadas:
  * devuelve `motivo: 'sin_api_key'` y la UI ofrece cargar lat/lng a mano.

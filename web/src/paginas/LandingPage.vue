@@ -50,7 +50,7 @@ const modulos: Array<{
   },
   {
     icono: 'embudo',
-    titulo: 'Oportunidades',
+    titulo: 'Leads',
     detalle:
       'Cada consulta que entra por portal, WhatsApp o teléfono queda registrada, asignada y con su visita agendada.',
     estado: 'listo',

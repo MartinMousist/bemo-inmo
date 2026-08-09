@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '../api/cliente';
+import { useAuth } from '../stores/auth';
+import { useUi } from '../stores/ui';
+import { pct } from '../dominio/comisiones';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
@@ -12,6 +15,7 @@ import {
   ETIQUETA_ESTADO_OP,
   ETIQUETA_OPERACION,
   ETIQUETA_TIPO,
+  fecha,
   money,
   numero,
 } from '../dominio/formato';
@@ -19,26 +23,48 @@ import {
 interface Operacion {
   id: string; tipo: string; precio: number | null; moneda: string;
   expensas: number | null; expensasMoneda: string; estado: string;
+  /** Los honorarios de ESTA operación. `propio: false` = los de la casa. */
+  comision: { puntas: Record<string, number>; total: number; propio: boolean } | null;
 }
 interface Propiedad {
   id: string; etiqueta: string; direccion: string; tipo: string;
   lat: number | null; lng: number | null; ubicacionConocida: boolean;
+  /** `'manual'`, `'google'` o `null`. Decide qué dice el pie del mapa. */
+  geocodeFuente: string | null;
+  geocodeEl: string | null;
   supTotal: number | null; supCubierta: number | null;
   ambientes: number | null; dormitorios: number | null; banos: number | null; cocheras: number | null;
   antiguedad: number | null; descripcion: string | null;
+  agenteCaptador: { id: string; nombre: string } | null;
   operaciones: Operacion[];
   titulares: Array<{ personaId: string; nombre: string; porcentaje: number }>;
 }
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuth();
+const ui = useUi();
 const id = route.params.id as string;
 
 const p = ref<Propiedad | null>(null);
 const cargando = ref(true);
 const error = ref('');
 const mapaVisible = ref(false);
-const mapasDisponibles = ref(false);
+/**
+ * Dos capacidades y no una.
+ *
+ * `geocodificacion` es «el servidor puede resolver una dirección» y necesita la
+ * API key. `mapaEmbebido` es «se puede mostrar el mapa de una coordenada» y NO
+ * la necesita: el iframe va a `www.google.com/maps?…&output=embed`. Estaban
+ * juntas en un solo booleano `mapas`, y por eso una propiedad ubicada a mano
+ * decía que le faltaba la key.
+ *
+ * `mapaEmbebido` arranca en `false` y lo enciende la respuesta: si `capacidades`
+ * no contesta, se muestran las coordenadas y el enlace, que es lo que siempre
+ * funciona.
+ */
+const geocodificacionDisponible = ref(false);
+const mapaEmbebido = ref(false);
 const fotosDisponibles = ref(false);
 
 const nuevaOp = reactive({ abierto: false, tipo: 'alquiler', precio: '', moneda: 'ARS' });
@@ -48,10 +74,13 @@ async function cargar() {
   try {
     const [prop, caps] = await Promise.all([
       api<Propiedad>(`/propiedades/${id}`),
-      api<{ mapas: boolean; fotos: boolean }>('/propiedades/capacidades'),
+      api<{ geocodificacion: boolean; mapaEmbebido: boolean; fotos: boolean }>(
+        '/propiedades/capacidades',
+      ),
     ]);
     p.value = prop;
-    mapasDisponibles.value = caps.mapas;
+    geocodificacionDisponible.value = caps.geocodificacion;
+    mapaEmbebido.value = caps.mapaEmbebido;
     fotosDisponibles.value = caps.fotos;
   } catch (e) {
     error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cargar la propiedad.';
@@ -75,6 +104,71 @@ async function agregarOperacion() {
   } catch (e) {
     error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo crear la operación.';
   }
+}
+
+/**
+ * Los honorarios de la operación, acá y no sólo en el listado.
+ *
+ * En el listado la columna se esconde abajo de 760px —cuatro columnas con un
+ * editor adentro no entran en un teléfono, y la tarjeta recorta con `clip`, así
+ * que ni siquiera se podría scrollear hasta ella—. Este es el lugar donde el
+ * dato se edita desde el celular, y de paso donde se ve junto al precio.
+ *
+ * Cambiar el % NO recalcula un reparto ya hecho: pre-llena las operaciones
+ * nuevas. Rehacer uno existente es el botón del detalle de la venta, que además
+ * se bloquea si hay algo cobrado.
+ */
+const puedeEditarComision = computed(() => auth.rol === 'owner' || auth.rol === 'admin');
+const editandoComision = ref<string | null>(null);
+const borradorComision = ref({ a: '', b: '' });
+const guardandoComision = ref(false);
+
+function puntasDe(o: Operacion): Array<{ clave: string; etiqueta: string; valor: number }> {
+  const q = o.comision?.puntas ?? {};
+  return o.tipo === 'venta'
+    ? [
+        { clave: 'compradora', etiqueta: 'compradora', valor: q.compradora ?? 0 },
+        { clave: 'vendedora', etiqueta: 'vendedora', valor: q.vendedora ?? 0 },
+      ]
+    : [
+        { clave: 'locataria', etiqueta: 'locataria', valor: q.locataria ?? 0 },
+        { clave: 'locadora', etiqueta: 'locadora', valor: q.locadora ?? 0 },
+      ];
+}
+
+function abrirComision(o: Operacion) {
+  editandoComision.value = o.id;
+  const [a, b] = puntasDe(o);
+  borradorComision.value = { a: String(a.valor), b: String(b.valor) };
+}
+
+const comisionExcede = computed(
+  () => Number(borradorComision.value.a || 0) + Number(borradorComision.value.b || 0) > 100,
+);
+
+async function guardarComision(o: Operacion, heredar = false) {
+  guardandoComision.value = true; error.value = '';
+  try {
+    const cuerpo = heredar
+      ? {}
+      : o.tipo === 'venta'
+        ? { venta: { compradora: Number(borradorComision.value.a), vendedora: Number(borradorComision.value.b) } }
+        : { alquiler: { locataria: Number(borradorComision.value.a), locadora: Number(borradorComision.value.b) } };
+
+    p.value = await api<Propiedad>(`/propiedades/${id}/operaciones/${o.id}/comisiones`, {
+      method: 'PATCH',
+      body: JSON.stringify(cuerpo),
+    });
+    editandoComision.value = null;
+    ui.ok(
+      heredar ? 'Vuelve a heredar' : 'Honorarios guardados',
+      heredar
+        ? 'Esta operación usa de nuevo los de la inmobiliaria.'
+        : 'Sólo afecta a esta operación.',
+    );
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudieron guardar los honorarios.';
+  } finally { guardandoComision.value = false; }
 }
 
 function tono(estado: string) {
@@ -131,10 +225,67 @@ onMounted(cargar);
                 <p v-if="o.expensas" class="expensas mono">
                   + {{ money(o.expensas, o.expensasMoneda) }} de expensas
                 </p>
+
+                <div class="honorarios">
+                  <template v-if="editandoComision === o.id">
+                    <label class="mini">
+                      <span>{{ puntasDe(o)[0].etiqueta }}</span>
+                      <input
+                        v-model="borradorComision.a" class="pct" inputmode="decimal"
+                        :aria-label="`Punta ${puntasDe(o)[0].etiqueta}`"
+                        @keydown.enter.prevent="guardarComision(o)"
+                        @keydown.esc="editandoComision = null" />
+                    </label>
+                    <label class="mini">
+                      <span>{{ puntasDe(o)[1].etiqueta }}</span>
+                      <input
+                        v-model="borradorComision.b" class="pct" inputmode="decimal"
+                        :aria-label="`Punta ${puntasDe(o)[1].etiqueta}`"
+                        @keydown.enter.prevent="guardarComision(o)"
+                        @keydown.esc="editandoComision = null" />
+                    </label>
+                    <button class="btn sm" type="button"
+                            :disabled="guardandoComision || comisionExcede"
+                            @click="guardarComision(o)">OK</button>
+                    <button class="btn secondary sm" type="button"
+                            @click="editandoComision = null">Cancelar</button>
+                    <button v-if="o.comision?.propio" class="btn secondary sm" type="button"
+                            :disabled="guardandoComision" @click="guardarComision(o, true)">
+                      Volver a heredar
+                    </button>
+                    <p v-if="comisionExcede" class="alert" role="alert">
+                      Las dos puntas no pueden sumar más del 100 %.
+                    </p>
+                  </template>
+
+                  <template v-else>
+                    <span class="hon-et">Honorarios</span>
+                    <span class="mono hon-total">{{ pct(o.comision?.total ?? 0) }}</span>
+                    <span class="hon-detalle">
+                      {{ puntasDe(o).map((x) => `${x.etiqueta} ${x.valor}`).join(' + ') }}
+                      · {{ o.comision?.propio ? 'de esta propiedad' : 'de la inmobiliaria' }}
+                    </span>
+                    <button v-if="puedeEditarComision" class="btn secondary sm" type="button"
+                            @click="abrirComision(o)">
+                      Cambiar
+                    </button>
+                  </template>
+                </div>
               </li>
             </ul>
             <p v-else class="vacio">
               Sin operaciones. Una propiedad puede estar en venta y en alquiler a la vez.
+            </p>
+
+            <p class="vacio">
+              <template v-if="p.agenteCaptador">
+                Captó <strong>{{ p.agenteCaptador.nombre }}</strong>: es quien pre-llena el
+                reparto de la comisión, como valor por defecto editable.
+              </template>
+              <template v-else>
+                <strong>Sin captador cargado.</strong> Se carga desde Editar, y es lo que
+                pre-llena el reparto de la comisión cuando se cierra la operación.
+              </template>
             </p>
           </section>
 
@@ -157,10 +308,21 @@ onMounted(cargar);
           <section class="card stack">
             <h2>Ubicación</h2>
 
-            <!-- Static Maps en la ficha; el interactivo sólo bajo demanda.
-                 Google cobra por carga: un mapa interactivo en cada ficha
-                 multiplica la factura sin que nadie lo note. -->
-            <template v-if="p.ubicacionConocida && mapasDisponibles">
+            <!--
+              El mapa depende de que HAYA coordenadas, y de nada más.
+
+              Antes estaba detrás de `mapasDisponibles`, que era «el servidor
+              tiene key para geocodificar». Son dos cosas distintas: el iframe va
+              a `www.google.com/maps?…&output=embed`, que **no lleva key**
+              (verificado desde el contenedor: HTTP 200, sin `X-Frame-Options`).
+              Con la key mezclada, una propiedad con lat/lng cargadas a mano
+              mostraba «El mapa necesita la API key de Google» y escondía un mapa
+              que funcionaba.
+
+              El interactivo sigue bajo demanda: aunque esta URL no se factura,
+              cargar un mapa en cada ficha es peso que nadie pidió.
+            -->
+            <template v-if="p.ubicacionConocida && mapaEmbebido">
               <div v-if="!mapaVisible" class="mapa-placeholder">
                 <UiIcon nombre="mapa" :tam="24" />
                 <p class="mono coords">{{ p.lat!.toFixed(5) }}, {{ p.lng!.toFixed(5) }}</p>
@@ -178,23 +340,59 @@ onMounted(cargar);
               />
             </template>
 
+            <!-- Degradación: hay coordenadas pero el embebido está apagado.
+                 Esa URL no está documentada por Google —lo documentado es Maps
+                 Embed API, que sí lleva key—, así que es una dependencia sin
+                 contrato: el día que deje de andar se apaga `mapaEmbebido` en el
+                 backend y la ficha muestra las coordenadas y un enlace, en vez
+                 de un recuadro roto. -->
             <div v-else-if="p.ubicacionConocida" class="mapa-placeholder">
               <UiIcon nombre="mapa" :tam="24" />
               <p class="mono coords">{{ p.lat!.toFixed(5) }}, {{ p.lng!.toFixed(5) }}</p>
-              <p class="nota">Coordenadas cargadas a mano. El mapa necesita la API key de Google.</p>
+              <a
+                class="btn secondary sm"
+                :href="`https://www.google.com/maps?q=${p.lat},${p.lng}`"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Abrir en Google Maps
+              </a>
             </div>
 
             <div v-else class="mapa-placeholder">
               <UiIcon nombre="mapa" :tam="24" />
               <p class="nota">
                 Sin ubicación.
-                <template v-if="!mapasDisponibles">
-                  Falta configurar <code class="mono">GOOGLE_MAPS_API_KEY</code>; podés cargar
-                  latitud y longitud a mano desde Editar.
+                <template v-if="!geocodificacionDisponible">
+                  La ubicación automática no está configurada (falta
+                  <code class="mono">GOOGLE_MAPS_API_KEY</code>); podés cargar latitud y
+                  longitud a mano desde Editar y el mapa aparece igual.
                 </template>
-                <template v-else>No se pudo resolver la dirección.</template>
+                <template v-else>
+                  No se pudo resolver la dirección. Se puede cargar a mano desde Editar.
+                </template>
               </p>
             </div>
+
+            <!--
+              De dónde salió el punto. No es un detalle de sistema: decide qué
+              pasa con él. Una coordenada cargada a mano sobrevive a un cambio de
+              dirección y ninguna sincronización la pisa; una de Google se vuelve
+              a resolver sola. Sin decirlo, las dos reglas son magia.
+            -->
+            <p v-if="p.ubicacionConocida" class="nota origen">
+              <template v-if="p.geocodeFuente === 'manual'">
+                Coordenadas cargadas a mano{{ p.geocodeEl ? ` el ${fecha(p.geocodeEl)}` : '' }}.
+                No las pisa ninguna sincronización.
+              </template>
+              <template v-else-if="p.geocodeFuente === 'google'">
+                Ubicada por Google{{ p.geocodeEl ? ` el ${fecha(p.geocodeEl)}` : '' }} a partir de
+                la dirección.
+              </template>
+              <template v-else>
+                Sin registro de cómo se cargó: la propiedad es anterior a que se guardara.
+              </template>
+            </p>
           </section>
 
           <GaleriaFotos :propiedad-id="p.id" :habilitado="fotosDisponibles" />
@@ -241,6 +439,20 @@ onMounted(cargar);
 .ops li { padding: var(--s-md); background: var(--surface-2); border-radius: var(--r-md); }
 .op-cab { display: flex; gap: var(--s-xs); margin-bottom: var(--s-xs); }
 .precio { margin: 0; font-size: 17px; color: var(--ink); }
+.honorarios {
+  display: flex; align-items: flex-end; gap: var(--s-sm); flex-wrap: wrap;
+  margin-top: var(--s-sm); padding-top: var(--s-sm); border-top: 1px solid var(--line);
+}
+.hon-et { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); }
+.hon-total { font-size: 13px; color: var(--ink); }
+.hon-detalle { font-size: 11px; color: var(--muted); flex: 1; min-width: 12ch; }
+.mini { display: flex; flex-direction: column; gap: 2px; }
+.mini > span { font-size: 10px; color: var(--muted-2); }
+.pct {
+  width: 6ch; font: inherit; font-size: 12px; text-align: right;
+  padding: 2px var(--s-sm); border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm); background: var(--surface); color: var(--ink);
+}
 .expensas { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 
 .datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--s-md); margin: 0; }
@@ -256,6 +468,9 @@ onMounted(cargar);
 }
 .coords { margin: 0; font-size: 12px; color: var(--ink-2); }
 .nota { margin: 0; font-size: 12px; color: var(--muted); max-width: 40ch; }
+/* El origen de la coordenada es pie de dato, no un aviso: va debajo del mapa
+   y en el mismo gris que el resto de las notas. */
+.origen { max-width: none; }
 .mapa { width: 100%; height: 260px; border: 1px solid var(--line); border-radius: var(--r-md); }
 
 .titulares { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-sm); }
