@@ -309,8 +309,11 @@ describe('ContratoDetallePage · la preferencia y la apertura de cortesía', () 
     const w = montar();
     await flushPromises();
 
-    // Cuatro cerrados por defecto: garantes, comisión, documentos y seguimiento.
-    expect(w.find('.control').text()).toContain('Abrir los 4 bloques cerrados');
+    // Cinco cerrados por defecto: garantes, estado del inmueble, comisión,
+    // documentos y seguimiento. El número sube cuando se suma un bloque, y que
+    // este test lo cace es justamente para lo que está: el control de arriba
+    // promete una cantidad, y prometer cuatro cuando hay cinco lo deja mintiendo.
+    expect(w.find('.control').text()).toContain('Abrir los 5 bloques cerrados');
   });
 });
 

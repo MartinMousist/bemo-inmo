@@ -11,6 +11,7 @@ import BloqueColapsable from '../componentes/BloqueColapsable.vue';
 import PanelNotas from '../componentes/PanelNotas.vue';
 import PanelDocumentos from '../componentes/PanelDocumentos.vue';
 import GarantesContrato from '../componentes/GarantesContrato.vue';
+import ActasContrato from '../componentes/ActasContrato.vue';
 import ComisionContrato from '../componentes/ComisionContrato.vue';
 import { bloquesRecordados } from '../dominio/bloques';
 import {
@@ -141,6 +142,10 @@ const DEFECTO: Record<string, boolean> = {
   aumentos: true,     // Es lo que se mira y lo que se le explica al inquilino.
   cuotas: true,       // Es la razón por la que se entra a la ficha: cobrar.
   documentos: false,  // Se genera una vez, y es el bloque más caro de montar.
+  // Se llena dos veces en la vida del contrato —al entregar y al devolver— y en
+  // el medio no se toca. Pero cuando se abre, se abre con el inquilino
+  // enfrente: por eso está, y por eso arranca cerrado.
+  actas: false,
   seguimiento: false, // Se consulta cuando hay un problema.
 };
 
@@ -477,6 +482,22 @@ onMounted(cargar);
           :contrato-id="id" :direccion="c.propiedad.direccion" :marco="false"
           @cambio="refrescarFicha"
         />
+      </BloqueColapsable>
+
+      <!-- ── Estado del inmueble ──────────────────────────────────────────
+           Va pegado a los garantes porque las dos cosas se hacen el mismo día:
+           se firma, se entregan las llaves y se recorre la casa con el
+           teléfono. -->
+      <BloqueColapsable
+        id="actas" titulo="Estado del inmueble"
+        :abierto="abiertos.actas"
+        @update:abierto="bloques.fijar('actas', $event)"
+      >
+        <template #resumen>
+          <span class="apagado">Acta de entrega y de devolución</span>
+        </template>
+
+        <ActasContrato :contrato-id="id" @cambio="refrescarFicha" />
       </BloqueColapsable>
 
       <!-- ── 3 · Comisión ────────────────────────────────────────────────────

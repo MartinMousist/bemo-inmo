@@ -44,6 +44,10 @@ export function configurarApp(app: INestApplication): void {
   // legajo no se puede cargar. Es la trampa del `BODY_LIMIT` de 1 MB otra vez
   // —la que no se vio antes porque el test usaba un PNG de 2×2.
   app.use('/v1/garantes/:id/documentos', express.json({ limit: env.BODY_LIMIT_FOTOS }));
+  // Las fotos del acta son el caso más claro de todos: alguien recorriendo una
+  // casa con el teléfono saca doce fotos de 4 MB. Con el límite normal, el acta
+  // —que es la prueba— no se puede cargar.
+  app.use('/v1/actas/items/:itemId/fotos', express.json({ limit: env.BODY_LIMIT_FOTOS }));
   // La importación CSV manda texto plano, también más grande que lo normal.
   app.use('/v1/importar', express.json({ limit: env.BODY_LIMIT_IMPORTAR }));
 

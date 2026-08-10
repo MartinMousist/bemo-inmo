@@ -98,6 +98,8 @@ import {
 } from './portal/portal.controller';
 import { PortalService } from './portal/portal.service';
 import { InicioService } from './inicio/inicio.service';
+import { ActasController, ActasDeContratoController } from './actas/actas.controller';
+import { ActasService } from './actas/actas.service';
 import { CuentaController } from './cuenta/cuenta.controller';
 import { CuentaService } from './cuenta/cuenta.service';
 
@@ -131,6 +133,8 @@ import { CuentaService } from './cuenta/cuenta.service';
     NotasController,
     AccesosPropietarioController,
     PortalController,
+    ActasDeContratoController,
+    ActasController,
     CuentaController,
     EquipoController,
     PersonasController,
@@ -172,6 +176,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     ReclamosService,
     NotasService,
     PortalService,
+    ActasService,
     CuentaService,
     EquipoService,
     PersonasService,

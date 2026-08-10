@@ -6,6 +6,13 @@ import { useUi } from '../stores/ui';
 import { etiquetaRol, ROLES_INVITABLES } from '../dominio/roles';
 import { pct } from '../dominio/comisiones';
 
+/** Los estados de una membresía, escritos para leer. */
+const ETIQUETA_ESTADO: Record<string, string> = {
+  activa: 'Activa',
+  suspendida: 'Suspendida',
+  revocada: 'Dada de baja',
+};
+
 /**
  * El equipo, con el % de comisión de cada persona editable en la fila.
  *
@@ -226,7 +233,10 @@ onMounted(cargar);
           <tr v-for="m in miembros" :key="m.usuarioId">
             <td>
               <RouterLink :to="`/equipo/${m.usuarioId}`">{{ m.nombre }}</RouterLink>
-              <span v-if="m.estado !== 'activa'" class="baja">{{ m.estado }}</span>
+              <!-- La etiqueta y no `m.estado`: el resto de la fila dice «Titular»
+                   y «Administración», y acá salía «suspendida» en minúscula, que
+                   es el valor de la columna y no una palabra escrita para nadie. -->
+              <span v-if="m.estado !== 'activa'" class="baja">{{ ETIQUETA_ESTADO[m.estado] ?? m.estado }}</span>
             </td>
             <td class="mono secundaria">{{ m.email }}</td>
             <td><span class="chip">{{ etiquetaRol(m.rol) }}</span></td>
