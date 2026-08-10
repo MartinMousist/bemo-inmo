@@ -830,6 +830,25 @@ cron.
 
 ---
 
+### 15.7 · Terminar de separar los dos perfiles
+
+La etapa 13 dejó el tipo de cuenta funcionando: el alta pregunta, y un gestor no
+ve Leads, Ventas, Comisiones, Publicaciones ni Reservas. Pero **esconder cinco
+secciones no es adaptar el producto**, y lo que queda es lo que más se nota:
+
+- [ ] **El Inicio y el Tablero no miran el tipo de cuenta** — cero referencias,
+      verificado. Un gestor abre el tablero y ve embudo de conversión, ranking
+      de asesores y honorarios devengados de ventas: le sacamos las secciones y
+      le dejamos los KPIs de otro negocio. Sus números son otros: cobranza del
+      mes, morosidad, unidades vacías, liquidaciones sin cerrar.
+- [ ] **El vocabulario sigue siendo de inmobiliaria** fuera del alta.
+- [ ] **Los roles son los mismos cuatro para los dos tipos.** «Asesor» no
+      significa nada donde no se vende. Lo barato y correcto es **renombrar la
+      etiqueta según el tipo**, no agregar valores al CHECK: cada rol nuevo
+      multiplica la matriz de permisos que hoy está probada endpoint por
+      endpoint, y eso se paga en cada feature futura.
+- [ ] **Los planes son los mismos**: un gestor paga por módulos que no usa.
+
 ### Lo que NO va acá, y por qué
 
 - **Firma digital con validez plena.** Necesita certificador licenciado y es
