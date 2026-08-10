@@ -18,6 +18,7 @@ import {
   ETIQUETA_OPERACION,
   ETIQUETA_TIPO,
   etiquetaSituacion,
+  money,
   moneyCorto,
   numero,
   tonoSituacion,
@@ -41,6 +42,17 @@ interface Operacion {
    * distintas a la hora de cambiarlo.
    */
   comision: { puntas: Record<string, number>; total: number; propio: boolean } | null;
+  /**
+   * Quién cobra esta comisión, cuando ya está repartida.
+   *
+   * Vacío mientras la operación no cerró. Un porcentaje sin dueño es la
+   * pregunta que la pantalla dejaba sin contestar: se veía «6 %» y no de quién
+   * era, que es justo lo que se mira cuando se abre el listado.
+   */
+  beneficiarios: Array<{
+    nombre: string; tipo: string; punta: string | null;
+    porcentaje: number; monto: number; moneda: string; estado: string;
+  }>;
 }
 
 interface Propiedad {
@@ -103,6 +115,31 @@ function puntasDe(o: Operacion): Array<{ clave: string; etiqueta: string; valor:
         { clave: 'locataria', etiqueta: 'locataria', valor: p.locataria ?? 0 },
         { clave: 'locadora', etiqueta: 'locadora', valor: p.locadora ?? 0 },
       ];
+}
+
+/** El desglose completo, para el `title` del total. Lo que dejó de estar fijo. */
+function detalleHonorarios(o: Operacion): string {
+  const puntas = puntasDe(o).map((x) => `${x.etiqueta} ${x.valor} %`).join(' + ');
+  return `${puntas} · ${o.comision?.propio ? 'propios de esta propiedad' : 'de la casa'}`;
+}
+
+/**
+ * Un nombre, y cuántos más hay.
+ *
+ * Con comisión compartida son tres o cuatro líneas —la externa, el captador, el
+ * cerrador— y ponerlas todas devuelve la celda al problema que esto vino a
+ * resolver. El nombre que se muestra es el de la parte MÁS grande, que es como
+ * viene ordenado del back.
+ */
+function quienCobra(o: Operacion): string {
+  const [primero, ...resto] = o.beneficiarios;
+  return resto.length ? `${primero.nombre} +${resto.length}` : primero.nombre;
+}
+
+function quienCobraCompleto(o: Operacion): string {
+  return o.beneficiarios
+    .map((b) => `${b.nombre}: ${money(b.monto, b.moneda)} (${b.estado})`)
+    .join(' · ');
 }
 
 function abrirComision(p: Propiedad, o: Operacion) {
@@ -407,19 +444,33 @@ onMounted(cargar);
                       </button>
                     </div>
 
+                    <!-- En reposo, dos datos y nada más: cuánto y de quién.
+                         Antes esta celda mostraba total, desglose por punta,
+                         origen y un botón, por cada operación — cuatro cosas
+                         por fila que en una tabla de 25 filas se leen como
+                         ruido. El desglose y el origen pasaron a la ficha, que
+                         es donde se los va a buscar; acá quedan a un clic. -->
                     <div v-else class="op">
-                      <span class="mono total">{{ pct(o.comision?.total ?? 0) }}</span>
-                      <span class="detalle">
-                        {{ puntasDe(o).map((x) => `${x.etiqueta} ${x.valor}`).join(' + ') }}
+                      <component
+                        :is="puedeEditarComision ? 'button' : 'span'"
+                        class="hon-total"
+                        :type="puedeEditarComision ? 'button' : undefined"
+                        :title="detalleHonorarios(o)"
+                        :aria-label="puedeEditarComision
+                          ? `Cambiar honorarios: ${detalleHonorarios(o)}`
+                          : detalleHonorarios(o)"
+                        @click="puedeEditarComision && abrirComision(p, o)">
+                        <span class="mono total">{{ pct(o.comision?.total ?? 0) }}</span>
+                        <!-- El punto marca que el número es de esta propiedad y
+                             no el de la casa. Va con `title` propio porque un
+                             signo solo no se lee. -->
+                        <span v-if="o.comision?.propio" class="propio"
+                              title="Honorarios propios de esta propiedad">•</span>
+                      </component>
+                      <span v-if="o.beneficiarios.length" class="dequien"
+                            :title="quienCobraCompleto(o)">
+                        {{ quienCobra(o) }}
                       </span>
-                      <span class="origen" :class="{ propio: o.comision?.propio }">
-                        {{ o.comision?.propio ? 'de esta propiedad' : 'de la casa' }}
-                      </span>
-                      <button
-                        v-if="puedeEditarComision" class="btn secondary sm" type="button"
-                        @click="abrirComision(p, o)">
-                        Cambiar
-                      </button>
                     </div>
                   </template>
                   <span v-if="!p.operaciones.length" class="muted">—</span>
@@ -462,11 +513,27 @@ td {
 .muted { color: var(--muted-2); font-size: 12px; }
 .captador { font-size: 12px; color: var(--ink-2); }
 .aviso-exportar { margin: 0; font-size: 12px; color: var(--muted); }
-.hon .op { flex-wrap: wrap; row-gap: var(--s-2xs); }
+/* La celda pasó a ser una columna: el total arriba, quién cobra abajo. En fila
+   los dos datos se leían como uno solo y «6 % Sofía Luna» se confunde con un
+   nombre que cobra el 6 %, que no es lo que dice. */
+.hon .op { flex-direction: column; align-items: flex-start; gap: 1px; }
 .total { font-size: 13px; color: var(--ink); }
-.detalle { font-size: 11px; color: var(--muted); }
-.origen { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-2); }
-.origen.propio { color: var(--accent-ink); }
+
+/* Botón sin aspecto de botón: es el número, que además se puede tocar. Un botón
+   real por fila en una tabla de 25 filas compite con la fila misma, que navega. */
+.hon-total {
+  display: inline-flex; align-items: baseline; gap: 3px;
+  padding: 0; border: 0; background: none; font: inherit;
+  color: inherit; text-align: left; border-radius: var(--r-sm);
+}
+button.hon-total { cursor: pointer; }
+button.hon-total:hover .total { text-decoration: underline; }
+button.hon-total:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.propio { font-size: 13px; line-height: 1; color: var(--accent-ink); }
+.dequien {
+  font-size: 11px; color: var(--muted);
+  max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .editor { display: flex; align-items: flex-end; gap: var(--s-sm); flex-wrap: wrap; }
 .mini { display: flex; flex-direction: column; gap: 2px; }
 .mini > span { font-size: 10px; color: var(--muted-2); }

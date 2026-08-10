@@ -354,4 +354,78 @@ describe('Ventas y comisiones', () => {
       expect(vecina.body.venta).toEqual({ compradora: 3, vendedora: 3 });
     });
   });
+  // ── De quién es la comisión, visto desde la propiedad ───────────────────────
+
+  describe('la ficha de la propiedad dice de quién es cada peso', () => {
+    it('sin reparto no inventa dueños', async () => {
+      const { propiedadId } = await crearVenta();
+
+      const prop = await http().get(`/v1/propiedades/${propiedadId}`)
+        .set(...como(inmo)).expect(200);
+
+      // El % existe —es el de la casa— pero todavía no tiene dueño. Mostrar uno
+      // acá sería adivinar el cerrador antes de que la operación cierre.
+      expect(prop.body.operaciones[0].comision.total).toBe(6);
+      expect(prop.body.operaciones[0].beneficiarios).toEqual([]);
+    });
+
+    it('hecho el reparto, la ficha nombra a cada uno y los montos cuadran', async () => {
+      const { venta, propiedadId } = await crearVenta(200000);
+
+      await http().post(`/v1/ventas/${venta.id}/reparto`).set(...como(inmo))
+        .send({
+          puntas: { compradora: 3, vendedora: 3 },
+          externas: { vendedora: { nombre: 'Colega SRL', porcentaje: 50 } },
+          repartoInterno: {
+            captador: { usuarioId: inmo.usuarios.agente, nombre: 'Asesor', porcentaje: 25 },
+          },
+        }).expect(201);
+
+      const prop = await http().get(`/v1/propiedades/${propiedadId}`)
+        .set(...como(inmo)).expect(200);
+      const b = prop.body.operaciones[0].beneficiarios as Array<{
+        nombre: string; tipo: string; monto: number;
+      }>;
+
+      expect(b.map((x) => x.nombre)).toContain('Colega SRL');
+      // La casa entra con nombre: sin ella el reparto no suma el total y la
+      // pantalla deja sin contestar «¿y el resto de quién es?».
+      expect(b.some((x) => x.tipo === 'casa' && x.nombre === 'La inmobiliaria')).toBe(true);
+
+      // El bruto de las dos puntas: 3% + 3% de 200.000. Que los beneficiarios
+      // sumen exactamente eso es lo que hace legítimo mostrarlos en una columna.
+      const suma = b.reduce((a, x) => a + x.monto, 0);
+      expect(Math.round(suma * 100) / 100).toBe(12000);
+
+      // Nada de nivel 1: el honorario bruto no es un beneficiario, y contarlo
+      // duplicaría el total.
+      expect(b.every((x) => x.tipo !== 'operacion')).toBe(true);
+    });
+
+    it('la ficha de una propiedad VENDIDA sigue mostrando su operación', async () => {
+      // El listado esconde las cerradas porque muestra lo que se ofrece; la
+      // ficha es el legajo. Escondiéndola, una unidad vendida abría con «sin
+      // operaciones» y sin una palabra del precio de cierre ni del reparto.
+      const { venta, propiedadId } = await crearVenta();
+      // El flujo es en_curso → boleto → escriturada, y no se saltea: recién al
+      // escriturar la operación pasa a cerrada, que es el caso que se prueba.
+      await http().patch(`/v1/ventas/${venta.id}/estado`).set(...como(inmo))
+        .send({ estado: 'boleto' }).expect(200);
+      await http().patch(`/v1/ventas/${venta.id}/estado`).set(...como(inmo))
+        .send({ estado: 'escriturada' }).expect(200);
+
+      const prop = await http().get(`/v1/propiedades/${propiedadId}`)
+        .set(...como(inmo)).expect(200);
+      expect(prop.body.operaciones).toHaveLength(1);
+      expect(prop.body.operaciones[0].estado).toBe('cerrada');
+    });
+
+    it('cero fuga: la vecina no ve el reparto ajeno', async () => {
+      const { venta, propiedadId } = await crearVenta();
+      await http().post(`/v1/ventas/${venta.id}/reparto`).set(...como(inmo))
+        .send({ puntas: { compradora: 3, vendedora: 3 } }).expect(201);
+
+      await http().get(`/v1/propiedades/${propiedadId}`).set(...como(otra)).expect(404);
+    });
+  });
 });

@@ -26,6 +26,11 @@ interface Operacion {
   expensas: number | null; expensasMoneda: string; estado: string;
   /** Los honorarios de ESTA operación. `propio: false` = los de la casa. */
   comision: { puntas: Record<string, number>; total: number; propio: boolean } | null;
+  /** El reparto ya hecho: quién cobra qué. Vacío hasta que la operación cierra. */
+  beneficiarios: Array<{
+    nombre: string; tipo: string; punta: string | null;
+    porcentaje: number; monto: number; moneda: string; estado: string;
+  }>;
 }
 interface Propiedad {
   id: string; etiqueta: string; direccion: string; tipo: string;
@@ -120,6 +125,41 @@ async function agregarOperacion() {
  * se bloquea si hay algo cobrado.
  */
 const puedeEditarComision = computed(() => auth.rol === 'owner' || auth.rol === 'admin');
+
+/**
+ * Qué porción del total se lleva esta línea.
+ *
+ * NO se muestra el `porcentaje` que viene en la fila: el reparto es en cascada
+ * y cada nivel se calcula sobre una base distinta. En una venta compartida real
+ * las filas dicen 40 %, 70 % y 30 % —40 % del bruto para la otra inmobiliaria,
+ * y 70/30 de lo que queda—, y puestos en una columna se leen como si sumaran
+ * 140 %. Los montos, en cambio, suman exactamente el bruto de la punta, así que
+ * la proporción se saca de ahí y el total da 100.
+ */
+function parteDelTotal(o: Operacion, b: Operacion['beneficiarios'][number]): number {
+  const total = o.beneficiarios
+    .filter((x) => x.moneda === b.moneda)
+    .reduce((a, x) => a + x.monto, 0);
+  return total ? (b.monto / total) * 100 : 0;
+}
+
+/** ¿Queda alguna operación cuyo reparto todavía no se hizo? */
+const faltaRepartir = computed(
+  () => (p.value?.operaciones ?? []).some((o) => !o.beneficiarios.length),
+);
+
+/**
+ * El estado de una comisión, en color.
+ *
+ * `cobrada` en verde y `proyectada` en neutro y no al revés: lo proyectado es
+ * una expectativa, y pintarlo como un logro hace que un reparto sin cobrar se
+ * lea como plata que ya entró.
+ */
+function tonoComision(estado: string): 'ok' | 'warn' | 'neutro' {
+  if (estado === 'cobrada') return 'ok';
+  if (estado === 'devengada') return 'warn';
+  return 'neutro';
+}
 const editandoComision = ref<string | null>(null);
 const borradorComision = ref({ a: '', b: '' });
 const guardandoComision = ref(false);
@@ -273,16 +313,41 @@ onMounted(cargar);
                     </button>
                   </template>
                 </div>
+
+                <!-- De quién es la comisión.
+                     El porcentaje de arriba dice cuánto cobra la inmobiliaria;
+                     esto dice quién se lo lleva, que es otra pregunta y la que
+                     genera las discusiones. Aparece recién cuando la operación
+                     cerró y el reparto existe: antes, lo único cierto es el
+                     captador, y de eso habla el párrafo del final. -->
+                <ul v-if="o.beneficiarios.length" class="reparto">
+                  <li v-for="(b, i) in o.beneficiarios" :key="i">
+                    <span class="quien">
+                      {{ b.nombre }}
+                      <span v-if="b.tipo === 'inmobiliaria_externa'" class="externa">
+                        otra inmobiliaria
+                      </span>
+                    </span>
+                    <span class="parte mono">{{ money(b.monto, b.moneda) }}</span>
+                    <span class="pct-parte mono">{{ pct(parteDelTotal(o, b)) }}</span>
+                    <StatusChip :texto="b.estado" :tono="tonoComision(b.estado)" />
+                  </li>
+                </ul>
               </li>
             </ul>
             <p v-else class="vacio">
               Sin operaciones. Una propiedad puede estar en venta y en alquiler a la vez.
             </p>
 
+            <!-- La explicación del captador es sobre lo que VA a pasar, así que
+                 sólo tiene sentido si queda alguna operación por repartir. Con
+                 todo cerrado y el reparto arriba en pantalla, prometer que ese
+                 nombre «pre-llena el reparto» contradice lo que se está viendo. -->
             <p class="vacio">
               <template v-if="p.agenteCaptador">
-                Captó <strong>{{ p.agenteCaptador.nombre }}</strong>: es quien pre-llena el
-                reparto de la comisión, como valor por defecto editable.
+                Captó <strong>{{ p.agenteCaptador.nombre }}</strong
+                ><template v-if="faltaRepartir">: es quien pre-llena el
+                reparto de la comisión, como valor por defecto editable</template>.
               </template>
               <template v-else>
                 <strong>Sin captador cargado.</strong> Se carga desde Editar, y es lo que
@@ -448,6 +513,22 @@ onMounted(cargar);
 .hon-et { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); }
 .hon-total { font-size: 13px; color: var(--ink); }
 .hon-detalle { font-size: 11px; color: var(--muted); flex: 1; min-width: 12ch; }
+
+/* El reparto: una línea por persona, el monto alineado a la derecha para que
+   dos importes se puedan comparar de un vistazo sin leerlos. */
+.reparto { list-style: none; margin: var(--s-sm) 0 0; padding: 0; }
+.reparto li {
+  display: flex; align-items: center; gap: var(--s-sm);
+  padding: var(--s-2xs) 0; font-size: 13px;
+}
+.reparto li + li { border-top: 1px dashed var(--line); }
+.quien { flex: 1; min-width: 0; color: var(--ink); }
+.externa {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted-2); margin-left: var(--s-xs);
+}
+.parte { font-variant-numeric: tabular-nums; }
+.pct-parte { font-size: 11px; color: var(--muted); min-width: 5ch; text-align: right; }
 .mini { display: flex; flex-direction: column; gap: 2px; }
 .mini > span { font-size: 10px; color: var(--muted-2); }
 .pct {

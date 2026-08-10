@@ -58,6 +58,9 @@ const grupos = [
       { a: '/contratos', icono: 'documento', texto: 'Contratos' },
       { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
       { a: '/caja', icono: 'sena', texto: 'Caja' },
+      // Al lado de Caja porque es la misma pregunta desde el otro lado: Caja es
+      // lo que el sistema dice que entró, Conciliación es lo que el banco dice.
+      { a: '/conciliacion', icono: 'moneda', texto: 'Conciliación' },
       // Reclamos y gastos van en Alquileres y no en un grupo propio: son el día
       // a día de administrar, y quien los usa ya está mirando esta columna.
       { a: '/reclamos', icono: 'campana', texto: 'Reclamos' },

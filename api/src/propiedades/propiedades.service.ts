@@ -67,6 +67,26 @@ export interface Operacion {
     total: number;
     propio: boolean;
   } | null;
+  /**
+   * Quién cobra, cuando ya está definido.
+   *
+   * Vacío mientras la operación no cerró: ahí el porcentaje es de la casa y
+   * todavía no tiene dueño. El captador de la propiedad se sabe siempre, pero
+   * NO se mete acá inventándole un monto — se muestra aparte y con esa palabra.
+   */
+  beneficiarios: Beneficiario[];
+}
+
+/** Una línea del reparto ya hecho: una persona (o una inmobiliaria) y su parte. */
+export interface Beneficiario {
+  nombre: string;
+  tipo: 'agente' | 'inmobiliaria_externa';
+  /** La punta que cobra, o `null` si la línea no cuelga de una punta. */
+  punta: string | null;
+  porcentaje: number;
+  monto: number;
+  moneda: string;
+  estado: string;
 }
 
 export interface Propiedad {
@@ -749,7 +769,11 @@ export class PropiedadesService {
 
   private async leer(ej: Ejecutor, id: string): Promise<Propiedad> {
     const { rows } = await ej.query<FilaPropiedad>(
-      `${SELECT_PROPIEDAD} WHERE p.id = $1`,
+      // Con las cerradas: la ficha es el legajo de la propiedad, no la vitrina.
+      // Escondiéndolas, una unidad VENDIDA abría con «Sin operaciones» y sin una
+      // palabra sobre el precio de cierre ni sobre el reparto de la comisión —
+      // justo el dato que se va a buscar cuando ya se cerró.
+      `${SELECT_PROPIEDAD_FICHA} WHERE p.id = $1`,
       [id],
     );
     if (!rows.length) throw AppError.notFound('No se encontró esa propiedad.');
@@ -827,6 +851,42 @@ const selectPropiedad = (incluirCerradas = false): string => `
         'estado', o.estado, 'exclusividadHasta', o.exclusividad_hasta,
         'fechaPublicacion', o.fecha_publicacion,
         'comisionConfig', o.comision_config,
+        -- De QUIÉN es la comisión, cuando ya hay alguien asignado.
+        --
+        -- El porcentaje de la operación dice cuánto cobra la inmobiliaria; no
+        -- dice quién se lo lleva. Eso recién existe cuando la operación se
+        -- cierra y se arma el reparto: ahí la tabla comision tiene una fila por
+        -- beneficiario. Antes de eso lo único que se sabe es el captador, y la
+        -- pantalla lo dice con esas palabras en vez de inventar un cerrador.
+        --
+        -- Va en la misma subconsulta que las operaciones a propósito: resuelto
+        -- aparte serían dos consultas por propiedad y el listado pagina de a 25.
+        'beneficiarios', (
+          SELECT json_agg(json_build_object(
+              -- La casa no tiene fila en usuario ni nombre guardado: sin este
+              -- CASE la línea salía como «Sin nombre», que es lo que menos
+              -- ayuda justo en la que se lleva la parte más grande.
+              'nombre', CASE WHEN cm.beneficiario_tipo = 'casa' THEN 'La inmobiliaria'
+                             ELSE coalesce(u.nombre, cm.beneficiario_nombre, 'Sin nombre') END,
+              'tipo', cm.beneficiario_tipo,
+              'punta', cm.punta,
+              'porcentaje', cm.porcentaje,
+              'monto', cm.monto,
+              'moneda', cm.moneda,
+              'estado', cm.estado)
+            ORDER BY cm.monto DESC)
+           FROM comision cm
+           LEFT JOIN usuario u ON u.id = cm.beneficiario_id
+          -- La casa entra: sin ella el reparto suma 70 % y deja la pregunta
+          -- «¿y el otro 30?» sin contestar, que es justo la que se hace quien
+          -- mira esto. Queda afuera el nivel 'operacion', que no es un
+          -- beneficiario sino el honorario bruto del que salen los demás.
+          WHERE cm.beneficiario_tipo IN ('agente', 'inmobiliaria_externa', 'casa')
+            AND cm.estado <> 'anulada'
+            AND (cm.venta_id IN (SELECT v.id FROM operacion_venta v
+                                  WHERE v.operacion_id = o.id)
+              OR cm.contrato_id IN (SELECT c.id FROM contrato_alquiler c
+                                     WHERE c.operacion_id = o.id))),
         'contratoHasta', (
           SELECT max(c.fecha_fin) FROM contrato_alquiler c
            WHERE c.propiedad_id = p.id AND c.estado = 'vigente'))
@@ -844,6 +904,7 @@ const selectPropiedad = (incluirCerradas = false): string => `
   LEFT JOIN usuario cap ON cap.id = p.agente_captador_id`;
 
 const SELECT_PROPIEDAD = selectPropiedad();
+const SELECT_PROPIEDAD_FICHA = selectPropiedad(true);
 
 function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
   const direccion = [
@@ -908,6 +969,17 @@ function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
         (o.comisionConfig as Partial<ConfigComisiones>) ?? {},
         config,
       ),
+      // `?? []` porque sin filas el `json_agg` devuelve NULL, no un array vacío:
+      // el front recorre esto siempre y un `null` lo rompería.
+      beneficiarios: ((o.beneficiarios as Array<Record<string, unknown>>) ?? []).map((b) => ({
+        nombre: String(b.nombre),
+        tipo: b.tipo as Beneficiario['tipo'],
+        punta: (b.punta as string) ?? null,
+        porcentaje: Number(b.porcentaje),
+        monto: Number(b.monto),
+        moneda: String(b.moneda),
+        estado: String(b.estado),
+      })),
     })),
     titulares: (f.titulares ?? []).map((t) => ({
       personaId: String(t.personaId),

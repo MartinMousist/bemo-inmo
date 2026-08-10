@@ -3,6 +3,7 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": true
+    "_comment": "deleteOutDir en false porque en dev `dist` es un punto de montaje (ver docker-compose.yml): borrarlo entero da EBUSY y la API no arranca. Con `dist` fuera del bind mount ya no aparecen las carpetas duplicadas de iCloud que era lo que el borrado tapaba, y tsc pisa archivo por archivo igual. Un archivo viejo sólo sobrevive si se renombra un módulo; ahí, `docker compose exec api rm -rf dist`.",
+    "deleteOutDir": false
   }
 }

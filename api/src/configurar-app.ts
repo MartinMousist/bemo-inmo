@@ -50,6 +50,9 @@ export function configurarApp(app: INestApplication): void {
   app.use('/v1/actas/items/:itemId/fotos', express.json({ limit: env.BODY_LIMIT_FOTOS }));
   // La importación CSV manda texto plano, también más grande que lo normal.
   app.use('/v1/importar', express.json({ limit: env.BODY_LIMIT_IMPORTAR }));
+  // El extracto del banco es lo mismo: un resumen de un mes son miles de filas
+  // de texto, y con el límite normal el archivo no entra.
+  app.use('/v1/conciliacion/extractos', express.json({ limit: env.BODY_LIMIT_IMPORTAR }));
 
   app.use(express.json({ limit: env.BODY_LIMIT }));
   app.use(express.urlencoded({ extended: true, limit: env.BODY_LIMIT }));

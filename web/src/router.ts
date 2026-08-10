@@ -77,6 +77,7 @@ const router = createRouter({
     },
     { path: '/liquidaciones', component: () => import('./paginas/LiquidacionesPage.vue') },
     { path: '/caja', component: () => import('./paginas/CajaPage.vue') },
+    { path: '/conciliacion', component: () => import('./paginas/ConciliacionPage.vue') },
     { path: '/movimientos', component: () => import('./paginas/AuditoriaPage.vue') },
     { path: '/indices', component: () => import('./paginas/IndicesPage.vue') },
     { path: '/ventas', component: () => import('./paginas/VentasPage.vue') },

@@ -95,6 +95,20 @@ services:
     volumes:
       - ./api:/app
       - /app/node_modules # volumen anónimo: preserva el node_modules de la imagen
+      # `dist` FUERA del bind mount, por la misma razón que node_modules.
+      #
+      # Este repositorio vive bajo ~/Documents, que iCloud sincroniza. Cuando
+      # `nest --watch` reescribe `dist` mientras iCloud está leyéndolo, iCloud
+      # resuelve el conflicto duplicando carpetas: aparecen `actas 2`,
+      # `auditoria 2`, una por módulo. En el próximo rebuild, tsc intenta
+      # `rmdir dist/auditoria 2`, encuentra la carpeta con archivos y muere con
+      # ENOTEMPTY en bucle. La API queda en crash loop y desde afuera se ve como
+      # «no puedo iniciar sesión» — que fue exactamente el síntoma reportado.
+      #
+      # Con el volumen anónimo, el build vive dentro del contenedor y iCloud no
+      # lo ve. `dist` es artefacto de build y está en .gitignore: no se pierde
+      # nada. Si algún día hay que inspeccionarlo, `docker compose exec api ls dist`.
+      - /app/dist
     depends_on:
       db:
         condition: service_healthy

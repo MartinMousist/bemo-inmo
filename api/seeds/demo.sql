@@ -11,7 +11,8 @@
 --
 -- 1. **Idempotente.** Todo lleva UUID fijo y `ON CONFLICT DO NOTHING`. Las
 --    filas generadas (períodos, cobros) derivan su id de un `md5()` de su
---    padre, así que volver a correrlo no duplica nada. `SEED_ON_BOOT` lo
+--    padre —con los nibbles de versión y variante forzados, ver más abajo por
+--    qué—, así que volver a correrlo no duplica nada. `SEED_ON_BOOT` lo
 --    ejecuta en cada arranque de dev.
 --
 -- 2. **Fechas relativas a `current_date`.** Un seed con fechas fijas envejece:
@@ -572,7 +573,21 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO periodo_alquiler (id, tenant_id, contrato_id, periodo, vence_el, monto_alquiler, expensas, otros, total, moneda, estado)
 SELECT
-  md5(c.id::text || m::text)::uuid,
+  -- `md5(...)::uuid` a secas produce 128 bits válidos para Postgres pero que NO
+  -- son un UUID v4: los nibbles de versión y variante salen de lo que dio el
+  -- hash. Postgres los guarda igual —el tipo `uuid` no mira la versión—, así
+  -- que el problema no aparece hasta que ese id sale por la API y entra por un
+  -- DTO con `@IsUUID()`, que sí la mira. Ahí el back contesta «el campo no es
+  -- válido» sobre un id que él mismo emitió.
+  --
+  -- Encontrado imputando un movimiento en la conciliación: 212 de las 232
+  -- cuotas de la demo eran inimputables. En los tests no se veía porque ahí las
+  -- cuotas las crea `gen_random_uuid()`.
+  --
+  -- Se conserva el determinismo —que es lo que hace idempotente al seed— y se
+  -- fuerzan los dos nibbles: '4' en la posición 13 (versión) y '8' en la 17
+  -- (variante RFC 4122).
+  overlay(overlay(md5(c.id::text || m::text) placing '4' from 13) placing '8' from 17)::uuid,
   c.tenant_id,
   c.id,
   m::date,
@@ -649,7 +664,8 @@ UPDATE periodo_alquiler
 
 INSERT INTO cobro (id, tenant_id, periodo_id, monto, moneda, fecha, medio, comprobante, registrado_por, imputacion)
 SELECT
-  md5(p.id::text || 'cobro')::uuid,
+  -- v4 bien formado, igual que los períodos de arriba. Ver el comentario largo.
+  overlay(overlay(md5(p.id::text || 'cobro') placing '4' from 13) placing '8' from 17)::uuid,
   p.tenant_id,
   p.id,
   p.total,
@@ -668,7 +684,7 @@ ON CONFLICT (id) DO NOTHING;
 -- El pago parcial: la mitad justa, para que el saldo se vea distinto del total.
 INSERT INTO cobro (id, tenant_id, periodo_id, monto, moneda, fecha, medio, comprobante, registrado_por, imputacion)
 SELECT
-  md5(p.id::text || 'parcial')::uuid,
+  overlay(overlay(md5(p.id::text || 'parcial') placing '4' from 13) placing '8' from 17)::uuid,
   p.tenant_id, p.id,
   round(p.total / 2, 2),
   p.moneda,
