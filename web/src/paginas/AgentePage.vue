@@ -115,7 +115,7 @@ onMounted(cargar);
     <template v-else-if="p">
       <PageHeader
         :titulo="p.nombre"
-        :bajada="`${etiquetaRol(p.rol)}${p.sucursal ? ' · ' + p.sucursal : ''} · ${p.email}`"
+        :bajada="`${etiquetaRol(p.rol, auth.tipoCuenta)}${p.sucursal ? ' · ' + p.sucursal : ''} · ${p.email}`"
       >
         <template #acciones>
           <RouterLink class="btn secondary" to="/equipo">Volver al equipo</RouterLink>

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import type { Rol } from '../auth/tokens.service';
+import { leerCuenta } from '../cuenta/cuenta.service';
+import { panelesDeInicio } from '../cuenta/perfil.motor';
 
 /**
  * La pantalla de inicio.
@@ -49,6 +51,16 @@ export interface Inicio {
     propiedades: number;
     disponibles: number;
     contratosVigentes: number;
+    /**
+     * Unidades EN ALQUILER que hoy no están alquiladas. `null` cuando la cuenta
+     * también vende y el dato no le dice nada por sí solo.
+     *
+     * No es lo mismo que `disponibles`, que mezcla lo que está en venta con lo
+     * que está para alquilar. Para quien vive de administrar, una unidad vacía
+     * es un mes que no cobra, y estaba sumada adentro de un número que no lo
+     * decía.
+     */
+    unidadesVacias: number | null;
   };
   /** `null` para quien no ve plata. Nunca ceros: un cero es un número falso. */
   mes: {
@@ -110,6 +122,7 @@ export interface Inicio {
      */
     periodoMasViejo: string | null;
   } | null;
+  /** `null` para una cuenta sin Leads: sin embudo, la lista sería siempre vacía. */
   oportunidadesFrias: {
     total: number;
     dias: number;
@@ -120,7 +133,7 @@ export interface Inicio {
       estado: string;
       origen: string;
     }>;
-  };
+  } | null;
 }
 
 /** Cuántos ítems trae cada lista. Lo demás se ve en su pantalla. */
@@ -137,6 +150,11 @@ export class InicioService {
     const vePlata = ROLES_PLATA.includes(rol);
 
     return this.db.withTenant(tenantId, async (ej) => {
+      // Qué paneles le corresponden a esta cuenta. Va acá adentro para usar la
+      // misma conexión que tiene fijado el tenant.
+      const cuenta = await leerCuenta(ej, tenantId);
+      const paneles = panelesDeInicio({ tipo: cuenta.tipo, activos: cuenta.activos });
+
       // Las consultas no dependen entre sí, pero comparten la MISMA conexión
       // —es la que tiene fijado el tenant para RLS— así que van en serie. Son
       // consultas indexadas contra una sola inmobiliaria, no un problema.
@@ -146,33 +164,41 @@ export class InicioService {
       // tenía que estar.
       return {
         vePlata,
-        cartera: await this.cartera(ej),
+        cartera: await this.cartera(ej, paneles.unidadesVacias),
         mes: vePlata ? await this.mes(ej) : null,
         vencenEstaSemana: await this.vencenEstaSemana(ej),
         ajustesPorConfirmar: await this.ajustesPorConfirmar(ej),
         impagas: vePlata ? await this.impagas(ej) : null,
         liquidacionesBorrador: vePlata ? await this.liquidacionesBorrador(ej) : null,
-        oportunidadesFrias: await this.oportunidadesFrias(ej),
+        oportunidadesFrias: paneles.oportunidadesFrias
+          ? await this.oportunidadesFrias(ej)
+          : null,
       };
     });
   }
 
-  private async cartera(ej: Ejecutor): Promise<Inicio['cartera']> {
+  private async cartera(ej: Ejecutor, conVacias: boolean): Promise<Inicio['cartera']> {
     const { rows } = await ej.query<{
-      propiedades: string; disponibles: string; contratos: string;
+      propiedades: string; disponibles: string; contratos: string; vacias: string;
     }>(
       `SELECT
          (SELECT count(*) FROM propiedad)::text AS propiedades,
          (SELECT count(DISTINCT o.propiedad_id) FROM operacion o
            WHERE o.estado = 'disponible')::text AS disponibles,
          (SELECT count(*) FROM contrato_alquiler
-           WHERE estado = 'vigente')::text AS contratos`,
+           WHERE estado = 'vigente')::text AS contratos,
+         -- Sólo las de ALQUILER: una unidad en venta y sin vender no es una
+         -- unidad vacía, es stock. Mezclarlas fue justo lo que hizo que este
+         -- número no existiera hasta ahora.
+         (SELECT count(DISTINCT o.propiedad_id) FROM operacion o
+           WHERE o.tipo = 'alquiler' AND o.estado = 'disponible')::text AS vacias`,
     );
 
     return {
       propiedades: Number(rows[0].propiedades),
       disponibles: Number(rows[0].disponibles),
       contratosVigentes: Number(rows[0].contratos),
+      unidadesVacias: conVacias ? Number(rows[0].vacias) : null,
     };
   }
 

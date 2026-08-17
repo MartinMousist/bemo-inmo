@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import type { Rol } from '../auth/tokens.service';
+import { leerCuenta } from '../cuenta/cuenta.service';
+import { panelesDelTablero, type PanelesTablero } from '../cuenta/perfil.motor';
 
 /**
  * El tablero.
@@ -84,25 +86,31 @@ export interface Tablero {
   };
 
   negocio: {
-    /** El ingreso REAL de la inmobiliaria: honorarios de alquiler + de venta. */
+    /** El ingreso REAL de la casa: honorarios de alquiler + de venta. */
     honorariosDevengados: Importe[];
     honorariosBase: Importe[];
-    comisionesPorCobrar: Importe[];
+    /**
+     * Las dos piezas que son de VENTA. `null` en una cuenta sin comisiones: ahí
+     * la consulta devuelve cero filas y el cero no significa «no cobré», sino
+     * «acá no se mide eso» — que son cosas distintas y sólo una es cierta.
+     */
+    comisionesPorCobrar: Importe[] | null;
     porAgente: Array<{
       agenteId: string | null;
       nombre: string;
       operaciones: number;
       importes: Importe[];
-    }>;
+    }> | null;
   } | null;
 
+  /** `null` sin el módulo Leads: sin embudo no hay etapas que graficar. */
   embudo: {
     etapas: Array<{ estado: string; total: number }>;
     porOrigen: Array<{ origen: string; total: number; ganadas: number }>;
     motivosPerdida: Array<{ motivo: string; total: number }>;
     /** Horas hasta el primer movimiento. El KPI que más correlaciona con cierre. */
     primeraRespuestaHoras: number | null;
-  };
+  } | null;
 }
 
 const TRAMOS = [
@@ -120,6 +128,9 @@ export class TableroService {
     const vePlata = ROLES_PLATA.includes(rol);
 
     return this.db.withTenant(tenantId, async (ej) => {
+      const cuenta = await leerCuenta(ej, tenantId);
+      const paneles = panelesDelTablero({ tipo: cuenta.tipo, activos: cuenta.activos });
+
       // El período pedido, o el mes en curso. Se normaliza al día 1: un
       // `periodo` es un mes, no una fecha, y compararlo contra el día 17 de
       // algo devolvería medio mes.
@@ -137,8 +148,8 @@ export class TableroService {
         vePlata,
         cobranza: vePlata ? await this.cobranza(ej, mes, base) : null,
         cartera: await this.cartera(ej, mes, base),
-        negocio: vePlata ? await this.negocio(ej, mes, base) : null,
-        embudo: await this.embudo(ej, mes),
+        negocio: vePlata ? await this.negocio(ej, mes, base, paneles) : null,
+        embudo: paneles.embudo ? await this.embudo(ej, mes) : null,
       };
     });
   }
@@ -362,6 +373,7 @@ export class TableroService {
     ej: Ejecutor,
     mes: string,
     base: string,
+    paneles: PanelesTablero,
   ): Promise<NonNullable<Tablero['negocio']>> {
     // Honorarios devengados: los de VENTA salen de `comision` nivel 1, y los de
     // ALQUILER de la liquidación, que es donde efectivamente se le descuentan
@@ -382,15 +394,20 @@ export class TableroService {
     const { rows: hon } = await ej.query<{ moneda: string; monto: string }>(sql, [mes]);
     const { rows: honBase } = await ej.query<{ moneda: string; monto: string }>(sql, [base]);
 
-    const { rows: porCobrar } = await ej.query<{ moneda: string; monto: string }>(
-      `SELECT moneda, sum(monto)::text AS monto FROM comision
-        WHERE nivel = 1 AND estado = 'devengada'
-        GROUP BY moneda ORDER BY moneda`,
-    );
+    // Las dos consultas de comisiones no corren sin el módulo: lo que no se
+    // muestra no se calcula, mismo criterio que `vePlata` más arriba.
+    const { rows: porCobrar } = paneles.comisionesPorCobrar
+      ? await ej.query<{ moneda: string; monto: string }>(
+          `SELECT moneda, sum(monto)::text AS monto FROM comision
+            WHERE nivel = 1 AND estado = 'devengada'
+            GROUP BY moneda ORDER BY moneda`,
+        )
+      : { rows: [] };
 
     // Ranking por asesor: el nivel 3 del motor de comisiones ya lo calcula
     // operación por operación y hasta acá nadie lo sumaba.
-    const { rows: agentes } = await ej.query<{
+    const { rows: agentes } = paneles.rankingPorAgente
+      ? await ej.query<{
       agente_id: string | null; nombre: string; operaciones: string; moneda: string; monto: string;
     }>(
       `SELECT c.beneficiario_id AS agente_id,
@@ -405,9 +422,10 @@ export class TableroService {
         GROUP BY c.beneficiario_id, u.nombre, c.moneda
         ORDER BY sum(c.monto) DESC`,
       [mes],
-    );
+    )
+      : { rows: [] };
 
-    const porAgente: NonNullable<Tablero['negocio']>['porAgente'] = [];
+    const porAgente: NonNullable<NonNullable<Tablero['negocio']>['porAgente']> = [];
     for (const a of agentes) {
       const ya = porAgente.find((x) => x.agenteId === a.agente_id);
       if (ya) {
@@ -425,8 +443,8 @@ export class TableroService {
     return {
       honorariosDevengados: aImportes(hon),
       honorariosBase: aImportes(honBase),
-      comisionesPorCobrar: aImportes(porCobrar),
-      porAgente,
+      comisionesPorCobrar: paneles.comisionesPorCobrar ? aImportes(porCobrar) : null,
+      porAgente: paneles.rankingPorAgente ? porAgente : null,
     };
   }
 

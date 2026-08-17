@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
+import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
@@ -10,6 +11,7 @@ import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { fecha, money } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
+import { laCasa } from '../dominio/vocabulario';
 
 /**
  * Gastos.
@@ -51,6 +53,8 @@ interface Gasto {
   liquidacionId: string | null;
   registradoPor: string | null;
 }
+
+const auth = useAuth();
 
 const TIPO: Record<string, string> = {
   reparacion: 'Reparación', impuesto: 'Impuesto', expensas: 'Expensas',
@@ -303,7 +307,7 @@ async function anular(g: Gasto) {
           No entra en la liquidación: se le cobra al inquilino.
         </template>
         <template v-else>
-          Lo absorbe la inmobiliaria. No entra en ninguna liquidación.
+          Lo absorbe {{ laCasa(auth.tipoCuenta) }}. No entra en ninguna liquidación.
         </template>
       </p>
       <div class="pie">

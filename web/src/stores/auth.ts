@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { api, fijarToken, renovar } from '../api/cliente';
+import type { TipoCuenta } from '../dominio/roles';
 
 export type Rol = 'owner' | 'admin' | 'agente' | 'contable';
 
@@ -28,6 +29,16 @@ export const useAuth = defineStore('auth', () => {
    */
   const modulos = ref<string[] | null>(null);
 
+  /**
+   * Inmobiliaria o gestión de alquileres.
+   *
+   * Lo consume el vocabulario —«Asesor» no significa nada donde no se vende— y
+   * viene del mismo `GET /cuenta` que los módulos, sin un pedido de más.
+   * `null` mientras no se sabe: ahí se usa el vocabulario de inmobiliaria, que
+   * es el que ya estaba.
+   */
+  const tipoCuenta = ref<TipoCuenta | null>(null);
+
   const autenticado = computed(() => usuario.value !== null);
 
   /** Mientras no se sabe, se asume que sí: esconder de más es peor que de menos. */
@@ -37,12 +48,14 @@ export const useAuth = defineStore('auth', () => {
 
   async function cargarCuenta(): Promise<void> {
     try {
-      const c = await api<{ activos: string[] }>('/cuenta');
+      const c = await api<{ activos: string[]; tipo: TipoCuenta }>('/cuenta');
       modulos.value = c.activos;
+      tipoCuenta.value = c.tipo;
     } catch {
       // Si falla, se deja `null` y se ve todo. Una barra lateral vacía por un
       // error de red es peor que una con una entrada de más.
       modulos.value = null;
+      tipoCuenta.value = null;
     }
   }
 
@@ -60,6 +73,7 @@ export const useAuth = defineStore('auth', () => {
     tenant.value = null;
     rol.value = null;
     modulos.value = null;
+    tipoCuenta.value = null;
   }
 
   /**
@@ -133,6 +147,7 @@ export const useAuth = defineStore('auth', () => {
     listo,
     autenticado,
     modulos,
+    tipoCuenta,
     tieneModulo,
     cargarCuenta,
     restaurar,

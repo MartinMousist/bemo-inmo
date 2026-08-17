@@ -73,7 +73,7 @@ async function salir() {
       @click="abierto = !abierto"
     >
       <span class="avatar">{{ iniciales }}</span>
-      <span class="rol">{{ etiquetaRol(auth.rol) }}</span>
+      <span class="rol">{{ etiquetaRol(auth.rol, auth.tipoCuenta) }}</span>
       <UiIcon nombre="chevron" :tam="14" />
     </button>
 

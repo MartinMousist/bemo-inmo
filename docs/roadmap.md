@@ -746,18 +746,20 @@ playbook, esquivado con el mismo criterio con el que ya se decidió no indexar
 
 ---
 
-## Etapa 15 — Lo que le falta a un sistema de este estilo ⏳ POR EMPEZAR
+## Etapa 15 — Lo que le falta a un sistema de este estilo ⏳ EN CURSO
 
 > Seis huecos, ordenados por **lo que duele dividido por lo que cuesta**. Cada
 > uno se apoya en piezas que ya están construidas y probadas: ninguno arranca de
 > cero, y esa es la razón por la que están en este orden y no en otro.
 
-### 15.1 · Acta de entrega con fotos ← *empezar por acá*
+### 15.1 · Acta de entrega con fotos ✅ CERRADA
 
-- [ ] Ambiente por ambiente, con foto y observación, al ENTREGAR y al DEVOLVER.
-- [ ] La vista comparativa lado a lado: así estaba, así volvió.
-- [ ] Firmada por las dos partes, con su fecha, e inmutable una vez firmada —
-      la misma regla del ajuste confirmado.
+- [x] Ambiente por ambiente, con foto y observación, al ENTREGAR y al DEVOLVER.
+- [x] La vista comparativa lado a lado: así estaba, así volvió. El cruce es por
+      nombre de ambiente normalizado; uno que sólo aparece en la devolución sale
+      `sin-comparacion` y **nunca** `empeoro`.
+- [x] Firmada por las dos partes, con su fecha, e inmutable una vez firmada —
+      la misma regla del ajuste confirmado, por trigger con SQLSTATE BE002.
 
 **Por qué primero**: es la fuente número uno de conflicto de un alquiler. Al
 devolver el depósito nadie se acuerda de cómo estaba la cocina hace tres años, y
@@ -770,14 +772,17 @@ casilleros de `GarantesContrato.vue`, y el contrato al que colgarla.
 **Hecho cuando**: se devuelve una unidad y las dos fotos del mismo ambiente se
 ven una al lado de la otra sin buscar nada.
 
-### 15.2 · Conciliación bancaria
+### 15.2 · Conciliación bancaria ✅ CERRADA
 
-- [ ] Importar el extracto del banco y proponer el match con las cuotas por
-      monto, fecha y referencia.
-- [ ] Lo que no matchea queda a la vista: un movimiento sin imputar es plata de
+- [x] Importar el extracto del banco y proponer el match con las cuotas por
+      monto, fecha y referencia. El cruce es un PUNTAJE, no un booleano, y la
+      contraparte pesa más que el importe: identifica a la persona.
+- [x] Lo que no matchea queda a la vista: un movimiento sin imputar es plata de
       alguien que no está acreditada.
-- [ ] **Nada se imputa solo.** El sistema propone, una persona confirma. Un
-      cobro mal imputado se descubre a fin de mes, en la liquidación.
+- [x] **Nada se imputa solo.** El sistema propone, una persona confirma. Con
+      empate —cinco cuotas iguales del mismo inquilino— no se preselecciona
+      NADA y el cartel lo dice.
+- [x] La contraparte se aprende al imputar: el mes siguiente se reconoce sola.
 
 **Por qué**: donde se va el tiempo no es cargando contratos, es cruzando
 transferencias con inquilinos el 1 de cada mes. Hoy cada cobro se tipea a mano.
@@ -796,8 +801,8 @@ transferencias con inquilinos el 1 de cada mes. Hoy cada cobro se tipea a mano.
 el ciclo se rompe justo donde importa. Es la diferencia entre «me ayuda a
 administrar» y «es donde vive mi negocio».
 
-**Riesgo**: es la integración más pesada de las seis. No empezar hasta que 15.1
-y 15.2 estén cerradas.
+**Riesgo**: es la integración más pesada de las seis. La condición de arranque
+—15.1 y 15.2 cerradas— ya se cumple.
 
 ### 15.4 · Portal del inquilino
 
@@ -830,24 +835,31 @@ cron.
 
 ---
 
-### 15.7 · Terminar de separar los dos perfiles
+### 15.7 · Terminar de separar los dos perfiles ✅ CERRADA salvo planes
 
 La etapa 13 dejó el tipo de cuenta funcionando: el alta pregunta, y un gestor no
 ve Leads, Ventas, Comisiones, Publicaciones ni Reservas. Pero **esconder cinco
 secciones no es adaptar el producto**, y lo que queda es lo que más se nota:
 
-- [ ] **El Inicio y el Tablero no miran el tipo de cuenta** — cero referencias,
-      verificado. Un gestor abre el tablero y ve embudo de conversión, ranking
-      de asesores y honorarios devengados de ventas: le sacamos las secciones y
-      le dejamos los KPIs de otro negocio. Sus números son otros: cobranza del
-      mes, morosidad, unidades vacías, liquidaciones sin cerrar.
-- [ ] **El vocabulario sigue siendo de inmobiliaria** fuera del alta.
-- [ ] **Los roles son los mismos cuatro para los dos tipos.** «Asesor» no
-      significa nada donde no se vende. Lo barato y correcto es **renombrar la
-      etiqueta según el tipo**, no agregar valores al CHECK: cada rol nuevo
-      multiplica la matriz de permisos que hoy está probada endpoint por
-      endpoint, y eso se paga en cada feature futura.
-- [ ] **Los planes son los mismos**: un gestor paga por módulos que no usa.
+- [x] **El Inicio y el Tablero miran el perfil.** `perfil.motor.ts` decide qué
+      panel corresponde. Al gestor se le van embudo, ranking por asesor y
+      comisiones por cobrar; se le suma **unidades vacías**, que estaba sumado
+      adentro de «disponibles» junto con lo que está en venta. Los honorarios
+      NO se van: incluyen los de liquidación, que son su ingreso propio.
+- [x] **La decisión mira el MÓDULO, no el tipo.** Un gestor que prende Leads
+      recupera su embudo. Con la pregunta por el tipo, el interruptor de Ajustes
+      habría quedado decorativo.
+- [x] **Lo que no se muestra no se calcula**, mismo criterio que `vePlata`.
+- [x] **Vocabulario**: `dominio/vocabulario.ts` para las seis frases que
+      efectivamente alcanzan a las dos clases de cuenta. Las de Comisiones,
+      Ventas y Reparto quedan fuera a propósito: un gestor no ve esas pantallas.
+- [x] **«Asesor» → «Colaborador»** en cuentas de gestión. Es una ETIQUETA: en la
+      base siguen siendo los mismos cuatro valores del CHECK, con la misma
+      matriz de permisos probada endpoint por endpoint.
+- [ ] ⏳ **Los planes son los mismos**: un gestor paga por módulos que no usa.
+      *Bloqueado por una decisión de negocio, no por código*: `plan` no tiene
+      columna de precio y qué cobrarle a un gestor no se puede inventar. Ver
+      LandingPage: «los precios se definen con las primeras inmobiliarias».
 
 ### Lo que NO va acá, y por qué
 

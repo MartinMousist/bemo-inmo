@@ -87,7 +87,7 @@ onMounted(cargar);
 <template>
   <div class="stack">
     <PageHeader titulo="Índices"
-      bajada="Los valores son compartidos por todas las inmobiliarias. Una vez cargado, un período no se pisa.">
+      bajada="Los valores son compartidos por todas las cuentas. Una vez cargado, un período no se pisa.">
       <template #acciones>
         <button class="btn" type="button" @click="alta.abierta = !alta.abierta">Cargar valor</button>
       </template>

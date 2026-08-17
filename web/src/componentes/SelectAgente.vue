@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from 'vue';
 import { useAuth } from '../stores/auth';
 import { useEquipo } from '../stores/equipo';
 import { etiquetaRol } from '../dominio/roles';
+import { todoElEquipo } from '../dominio/vocabulario';
 import { AGENTE_SIN_ASIGNAR, AGENTE_TODOS, AGENTE_YO } from '../dominio/agente';
 
 /**
@@ -79,10 +80,10 @@ onMounted(() => void equipo.cargar());
     <label v-if="!props.soloPropias" class="campo suave">
       <span>{{ props.etiqueta }}</span>
       <select v-model="valor" :disabled="equipo.cargando && !equipo.cargado">
-        <option :value="AGENTE_TODOS">Toda la inmobiliaria</option>
+        <option :value="AGENTE_TODOS">{{ todoElEquipo(auth.tipoCuenta) }}</option>
         <option v-if="auth.usuario" :value="AGENTE_YO">{{ auth.usuario.nombre }} (yo)</option>
         <option v-for="m in otros" :key="m.usuarioId" :value="m.usuarioId">
-          {{ m.nombre }} · {{ etiquetaRol(m.rol) }}
+          {{ m.nombre }} · {{ etiquetaRol(m.rol, auth.tipoCuenta) }}
         </option>
         <option v-if="props.conSinAsignar" :value="AGENTE_SIN_ASIGNAR">Sin captador</option>
       </select>

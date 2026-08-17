@@ -198,7 +198,7 @@ onMounted(cargar);
         <input v-model="emailInvitado" type="email" required placeholder="correo@ejemplo.com" />
         <select v-model="rolInvitado">
           <option v-for="r in ROLES_INVITABLES" :key="r" :value="r">
-            {{ etiquetaRol(r) }}
+            {{ etiquetaRol(r, auth.tipoCuenta) }}
           </option>
         </select>
         <button class="btn" type="submit">Generar invitación</button>
@@ -239,7 +239,7 @@ onMounted(cargar);
               <span v-if="m.estado !== 'activa'" class="baja">{{ ETIQUETA_ESTADO[m.estado] ?? m.estado }}</span>
             </td>
             <td class="mono secundaria">{{ m.email }}</td>
-            <td><span class="chip">{{ etiquetaRol(m.rol) }}</span></td>
+            <td><span class="chip">{{ etiquetaRol(m.rol, auth.tipoCuenta) }}</span></td>
 
             <template v-if="editando === m.usuarioId">
               <td class="der">

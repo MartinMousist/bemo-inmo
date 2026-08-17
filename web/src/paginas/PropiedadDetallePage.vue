@@ -11,6 +11,7 @@ import UiSkeleton from '../componentes/UiSkeleton.vue';
 import UiIcon from '../componentes/UiIcon.vue';
 import GaleriaFotos from '../componentes/GaleriaFotos.vue';
 import EnlacePropietario from '../componentes/EnlacePropietario.vue';
+import { laCasa } from '../dominio/vocabulario';
 import {
   ETIQUETA_OPERACION,
   ETIQUETA_TIPO,
@@ -305,7 +306,7 @@ onMounted(cargar);
                     <span class="mono hon-total">{{ pct(o.comision?.total ?? 0) }}</span>
                     <span class="hon-detalle">
                       {{ puntasDe(o).map((x) => `${x.etiqueta} ${x.valor}`).join(' + ') }}
-                      · {{ o.comision?.propio ? 'de esta propiedad' : 'de la inmobiliaria' }}
+                      · {{ o.comision?.propio ? 'de esta propiedad' : 'de ' + laCasa(auth.tipoCuenta) }}
                     </span>
                     <button v-if="puedeEditarComision" class="btn secondary sm" type="button"
                             @click="abrirComision(o)">

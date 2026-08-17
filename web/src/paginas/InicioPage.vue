@@ -5,6 +5,7 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
 import { useAuth } from '../stores/auth';
+import { laCasa } from '../dominio/vocabulario';
 import {
   ETIQUETA_ESTADO_OPORTUNIDAD,
   fecha,
@@ -31,7 +32,11 @@ interface Importe { moneda: string; monto: number }
 
 interface Inicio {
   vePlata: boolean;
-  cartera: { propiedades: number; disponibles: number; contratosVigentes: number };
+  cartera: {
+    propiedades: number; disponibles: number; contratosVigentes: number;
+    /** `null` en una cuenta que también vende: ahí «vacía» no se lee sola. */
+    unidadesVacias: number | null;
+  };
   mes: { periodo: string; cobrado: Importe[]; porCobrar: Importe[] } | null;
   vencenEstaSemana: Array<{
     tipo: 'contrato' | 'cuota'; entidadId: string; contratoId: string; fecha: string;
@@ -54,6 +59,7 @@ interface Inicio {
     }>;
   } | null;
   liquidacionesBorrador: { total: number; neto: Importe[]; periodoMasViejo: string | null } | null;
+  /** `null` sin el módulo Leads. */
   oportunidadesFrias: {
     total: number; dias: number;
     items: Array<{ id: string; nombre: string; desdeHace: number; estado: string; origen: string }>;
@@ -150,6 +156,18 @@ onMounted(cargar);
           <span class="pie">alquileres activos</span>
         </RouterLink>
 
+        <!-- Sólo para quien no vende: una unidad vacía es un mes que no cobra.
+             Quien además vende ya tiene su cartera partida en el menú. -->
+        <RouterLink
+          v-if="d.cartera.unidadesVacias !== null"
+          class="cifra"
+          to="/propiedades/alquiler"
+        >
+          <span class="et">Unidades vacías</span>
+          <span class="n mono">{{ numero(d.cartera.unidadesVacias) }}</span>
+          <span class="pie">sin contrato vigente</span>
+        </RouterLink>
+
         <template v-if="d.mes">
           <RouterLink class="cifra" to="/liquidaciones">
             <span class="et">Cobrado en {{ fmtPeriodo(d.mes.periodo) }}</span>
@@ -181,7 +199,7 @@ onMounted(cargar);
         <div v-else class="cifra sin-permiso">
           <span class="et">Cobranzas</span>
           <span class="n mono vacio">—</span>
-          <span class="pie">Tu rol no accede a los montos de la inmobiliaria.</span>
+          <span class="pie">Tu rol no accede a los montos de {{ laCasa(auth.tipoCuenta) }}.</span>
         </div>
       </div>
 
@@ -328,7 +346,9 @@ onMounted(cargar);
         </section>
 
         <!-- ── Leads fríos ────────────────────────────────────── -->
-        <section class="card bloque compacto">
+        <!-- Sin el módulo no hay embudo, y una tarjeta que nunca tiene nada
+             enseña a ignorar la pantalla entera. -->
+        <section v-if="d.oportunidadesFrias" class="card bloque compacto">
           <header>
             <h2>Consultas sin mover</h2>
             <StatusChip

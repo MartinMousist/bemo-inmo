@@ -60,15 +60,19 @@ interface Tablero {
   negocio: {
     honorariosDevengados: Importe[];
     honorariosBase: Importe[];
-    comisionesPorCobrar: Importe[];
-    porAgente: Array<{ agenteId: string | null; nombre: string; operaciones: number; importes: Importe[] }>;
+    /** Las dos de VENTA: `null` en una cuenta sin el módulo Comisiones. */
+    comisionesPorCobrar: Importe[] | null;
+    porAgente: Array<{
+      agenteId: string | null; nombre: string; operaciones: number; importes: Importe[];
+    }> | null;
   } | null;
+  /** `null` sin el módulo Leads. */
   embudo: {
     etapas: Array<{ estado: string; total: number }>;
     porOrigen: Array<{ origen: string; total: number; ganadas: number }>;
     motivosPerdida: Array<{ motivo: string; total: number }>;
     primeraRespuestaHoras: number | null;
-  };
+  } | null;
 }
 
 const ETIQUETA_ETAPA: Record<string, string> = {
@@ -186,10 +190,10 @@ const agingMax = computed(() => {
   // mezclar escalas haría que la barra de USD se viera como un hilo.
   return Math.max(0, ...c.aging.map((a) => a.importes[0]?.monto ?? 0));
 });
-const embudoMax = computed(() => Math.max(1, ...(d.value?.embudo.etapas.map((e) => e.total) ?? [1])));
-const origenMax = computed(() => Math.max(1, ...(d.value?.embudo.porOrigen.map((o) => o.total) ?? [1])));
+const embudoMax = computed(() => Math.max(1, ...(d.value?.embudo?.etapas.map((e) => e.total) ?? [1])));
+const origenMax = computed(() => Math.max(1, ...(d.value?.embudo?.porOrigen.map((o) => o.total) ?? [1])));
 const agenteMax = computed(() =>
-  Math.max(1, ...(d.value?.negocio?.porAgente.map((a) => a.importes[0]?.monto ?? 0) ?? [1])),
+  Math.max(1, ...(d.value?.negocio?.porAgente?.map((a) => a.importes[0]?.monto ?? 0) ?? [1])),
 );
 
 /**
@@ -201,7 +205,7 @@ const agenteMax = computed(() =>
  * en una pantalla de indicadores es peor que no ponerlo: alguien lo va a leer.
  */
 const conversiones = computed(() => {
-  const e = d.value?.embudo.etapas ?? [];
+  const e = d.value?.embudo?.etapas ?? [];
   return e.map((etapa, i) => {
     const previa = i === 0 || etapa.estado === 'perdida' ? null : e[i - 1].total;
     return {
@@ -358,9 +362,11 @@ const conversiones = computed(() => {
 
       <!-- Honestidad de producto: en vez de esconder el bloque, se dice por qué
            no está. Es lo mismo que hace el inicio. -->
+      <!-- «y embudo» sólo si esta cuenta tiene embudo: prometer una sección
+           que no existe es peor que no nombrarla. -->
       <p v-else class="alert info">
-        Tu rol no accede a la cobranza ni a los honorarios de la inmobiliaria.
-        Lo que sigue —cartera y embudo— sí es tuyo.
+        Tu rol no accede a la cobranza ni a los honorarios.
+        Lo que sigue —cartera{{ d.embudo ? ' y embudo' : '' }}— sí es tuyo.
       </p>
 
       <!-- ── Cartera ───────────────────────────────────────────────────── -->
@@ -461,7 +467,10 @@ const conversiones = computed(() => {
             </p>
           </article>
 
-          <article class="kpi ancho">
+          <!-- Sin el módulo la consulta no corre y esto mostraría un «—» que se
+               lee como «no tengo comisiones por cobrar», cuando lo cierto es
+               que acá no se mide eso. -->
+          <article v-if="d.negocio.comisionesPorCobrar" class="kpi ancho">
             <span class="et">Comisiones por cobrar</span>
             <template v-if="d.negocio.comisionesPorCobrar.length">
               <span v-for="i in d.negocio.comisionesPorCobrar" :key="i.moneda" class="n mono">
@@ -473,7 +482,7 @@ const conversiones = computed(() => {
           </article>
         </div>
 
-        <div v-if="d.negocio.porAgente.length" class="card pad-sm">
+        <div v-if="d.negocio.porAgente?.length" class="card pad-sm">
           <h3>Por asesor · últimos 12 meses</h3>
           <div class="barras">
             <div v-for="a in d.negocio.porAgente" :key="a.agenteId ?? a.nombre" class="fila">
@@ -493,7 +502,7 @@ const conversiones = computed(() => {
       </section>
 
       <!-- ── Embudo ────────────────────────────────────────────────────── -->
-      <section class="bloque">
+      <section v-if="d.embudo" class="bloque">
         <h2>Embudo comercial</h2>
         <div class="dos">
           <div class="card pad-sm">

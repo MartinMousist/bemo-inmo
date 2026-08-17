@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/cliente';
 import { useUi } from '../stores/ui';
 import { useAuth } from '../stores/auth';
 import PageHeader from '../componentes/PageHeader.vue';
+import { laCasa } from '../dominio/vocabulario';
 
 /**
  * Alta de un contrato de alquiler — y, con él, su pre-contrato ya escrito.
@@ -247,7 +248,7 @@ async function guardar() {
         <label class="check">
           <input v-model="f.administrado" type="checkbox" />
           <span>
-            <strong>Administrado</strong> — la inmobiliaria cobra y liquida al propietario.
+            <strong>Administrado</strong> — {{ laCasa(auth.tipoCuenta) }} cobra y liquida al propietario.
             Sin tildar, es sólo intermediación y no genera cuotas.
           </span>
         </label>

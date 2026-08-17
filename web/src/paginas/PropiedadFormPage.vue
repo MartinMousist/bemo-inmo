@@ -226,7 +226,7 @@ async function guardar() {
           <select v-model="captadorId">
             <option value="">Sin captador</option>
             <option v-for="m in equipo.activos" :key="m.usuarioId" :value="m.usuarioId">
-              {{ m.nombre }} · {{ etiquetaRol(m.rol) }}
+              {{ m.nombre }} · {{ etiquetaRol(m.rol, auth.tipoCuenta) }}
             </option>
           </select>
           <!-- `<p>` y no `<span>`: dentro de `.campo`, un `span` hijo directo es
