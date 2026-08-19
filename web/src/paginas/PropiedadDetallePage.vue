@@ -263,6 +263,9 @@ onMounted(cargar);
     <template v-else-if="p">
       <PageHeader :titulo="p.direccion" :bajada="`${p.etiqueta} · ${ETIQUETA_TIPO[p.tipo] ?? p.tipo}`">
         <template #acciones>
+          <RouterLink class="btn secondary" :to="`/propiedades/${p.id}/ficha`">
+            Ficha para imprimir
+          </RouterLink>
           <RouterLink class="btn secondary" :to="`/propiedades/${p.id}/editar`">Editar</RouterLink>
         </template>
       </PageHeader>

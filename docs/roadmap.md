@@ -1012,12 +1012,21 @@ que esa etapa se destrabe. No se simula un envío que no ocurre.
 **Hecho cuando**: se agenda una visita desde un lead con fecha y hora, y
 aparece en la agenda del asesor que la tomó.
 
-### 16.6 · Ficha técnica en PDF
+### 16.6 · Ficha técnica en PDF ✅ CERRADA
 
-- [ ] Una plantilla más del motor que ya existe (etapa 5): superficie,
-      ambientes, orientación, urbanización, amenities y fotos de la propiedad.
-- [ ] Imprimir o "guardar como PDF" con los estilos de impresión de la etapa 8
-      — el mismo patrón que ya usa la liquidación, no una librería de PDF nueva.
+- [x] Hoja con membrete, las dos puntas con su moneda, superficie, ambientes,
+      orientación, disposición, calefacción, urbanización, amenities y fotos.
+- [x] «Guardar como PDF» lo hace el navegador, sin librería nueva: meter un
+      Chromium headless en el contenedor para resolver algo que el navegador ya
+      resuelve sería pagar caro dos veces. Por eso la pantalla **no promete un
+      PDF**, promete una hoja lista para imprimir.
+- [x] **Página aparte, no un botón en la ficha.** El `@media print` global
+      esconde `.btn` y `nav` pero imprime todo el resto: adentro de la ficha
+      saldrían impresos los honorarios, el reparto de comisiones y las notas
+      internas — justo lo que NO se le manda a un interesado.
+- [x] **Zona, nunca el número de puerta**, con el pie diciéndolo. Misma regla
+      que el generador de avisos de la etapa 6: la dirección exacta es para
+      quien ya llamó.
 
 **Por qué**: hoy ese folleto se arma a mano en otro programa, con datos que ya
 están cargados acá.

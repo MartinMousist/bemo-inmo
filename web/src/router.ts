@@ -42,6 +42,12 @@ const router = createRouter({
     { path: '/propiedades', component: () => import('./paginas/PropiedadesPage.vue') },
     { path: '/propiedades/nueva', component: () => import('./paginas/PropiedadFormPage.vue') },
     { path: '/propiedades/:id/editar', component: () => import('./paginas/PropiedadFormPage.vue') },
+    // Antes de `/:id`: si fuera después, «ficha» entraría como id de propiedad.
+    // Es la misma lección que ya dejaron escrita venta y alquiler.
+    {
+      path: '/propiedades/:id/ficha',
+      component: () => import('./paginas/PropiedadFichaPage.vue'),
+    },
     { path: '/propiedades/:id', component: () => import('./paginas/PropiedadDetallePage.vue') },
     { path: '/personas', component: () => import('./paginas/PersonasPage.vue') },
     { path: '/personas/nueva', component: () => import('./paginas/PersonaFormPage.vue') },
