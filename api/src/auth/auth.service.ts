@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import { DbService } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { TotpService } from './totp.service';
 import { TokensService, type Rol } from './tokens.service';
 
 const COSTO_BCRYPT = 12;
@@ -9,6 +10,19 @@ const COSTO_BCRYPT = 12;
 export interface Contexto {
   ip?: string;
   userAgent?: string;
+}
+
+/**
+ * Lo que devuelve el login cuando la contraseña estaba bien pero falta el
+ * código. NO es una sesión: no trae tokens ni datos del usuario.
+ */
+export interface Desafio2fa {
+  requiereSegundoFactor: true;
+  desafio: string;
+}
+
+export function esDesafio(x: Sesion | Desafio2fa): x is Desafio2fa {
+  return 'requiereSegundoFactor' in x;
 }
 
 export interface Sesion {
@@ -26,6 +40,7 @@ export class AuthService {
   constructor(
     private readonly db: DbService,
     private readonly tokens: TokensService,
+    private readonly totp: TotpService,
   ) {}
 
   async registrar(
@@ -89,7 +104,11 @@ export class AuthService {
     return this.emitirSesion(usuario_id, tenant_id, ctx);
   }
 
-  async login(email: string, password: string, ctx: Contexto): Promise<Sesion> {
+  async login(
+    email: string,
+    password: string,
+    ctx: Contexto,
+  ): Promise<Sesion | Desafio2fa> {
     const usuarios = await this.db.query<{
       id: string;
       password_hash: string;
@@ -140,8 +159,83 @@ export class AuthService {
     // Con una sola membresía se entra directo. El selector de inmobiliaria para
     // usuarios con varias llega cuando exista un caso real: hoy no lo hay.
     const elegida = membresias[0];
+
+    // Segundo factor. Va DESPUÉS de resolver la membresía para que el pase no
+    // se emita nunca a alguien que igual no habría podido entrar: sin esto,
+    // «contraseña correcta pero sin inmobiliaria» respondería un desafío y
+    // recién el segundo paso diría que no. Eso es un enumerador de cuentas
+    // válidas montado sobre el segundo factor.
+    const secreto = await this.totp.exigeSegundoFactor(usuario.id);
+    if (secreto) {
+      // Se audita como DENEGADO a propósito: la sesión no se emitió. Inventar
+      // un tercer resultado obligaría a revisar cada consulta de auditoría que
+      // hoy asume dos, y lo que pasó —no entró— ya lo dice «denegado».
+      await this.auditar(elegida.tenant_id, usuario.id, 'auth.login.2fa', 'denegado', ctx, {
+        motivo: 'falta_codigo',
+      });
+      return {
+        requiereSegundoFactor: true,
+        desafio: this.tokens.firmarDesafio2fa(usuario.id),
+      };
+    }
+
     await this.auditar(elegida.tenant_id, usuario.id, 'auth.login', 'permitido', ctx);
     return this.emitirSesion(usuario.id, elegida.tenant_id, ctx);
+  }
+
+  /**
+   * Segundo paso del login: el código.
+   *
+   * El pase que llega acá ya probó la contraseña, así que este endpoint NO
+   * vuelve a pedirla —y por eso el pase dura cinco minutos y se firma con una
+   * clave distinta de la de los tokens de acceso—.
+   */
+  async completarSegundoFactor(
+    desafio: string,
+    codigo: string,
+    ctx: Contexto,
+  ): Promise<Sesion> {
+    let usuarioId: string;
+    try {
+      usuarioId = this.tokens.verificarDesafio2fa(desafio);
+    } catch {
+      throw new AppError(
+        401,
+        ErrorCode.SESION_INVALIDA,
+        'El pase venció. Volvé a entrar con tu correo y contraseña.',
+        'Unauthorized',
+      );
+    }
+
+    const secreto = await this.totp.exigeSegundoFactor(usuarioId);
+    const membresias = await this.db.query<{ tenant_id: string }>(
+      'SELECT * FROM app_membresias_de_usuario($1)', [usuarioId],
+    );
+    const elegida = membresias[0];
+
+    if (!secreto || !elegida) {
+      // El segundo factor se apagó, o la membresía se dio de baja, entre el
+      // primer paso y el segundo. No se deja pasar: se vuelve a empezar.
+      throw new AppError(
+        401, ErrorCode.SESION_INVALIDA,
+        'Volvé a entrar con tu correo y contraseña.', 'Unauthorized',
+      );
+    }
+
+    if (!(await this.totp.validarCodigo(usuarioId, secreto, codigo))) {
+      await this.auditar(elegida.tenant_id, usuarioId, 'auth.login.2fa', 'denegado', ctx);
+      throw new AppError(
+        401,
+        ErrorCode.CODIGO_INVALIDO,
+        'Ese código no es correcto.',
+        'Unauthorized',
+      );
+    }
+
+    await this.auditar(elegida.tenant_id, usuarioId, 'auth.login', 'permitido', ctx, {
+      segundoFactor: true,
+    });
+    return this.emitirSesion(usuarioId, elegida.tenant_id, ctx);
   }
 
   /**

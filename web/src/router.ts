@@ -117,6 +117,9 @@ const router = createRouter({
     { path: '/comisiones', component: () => import('./paginas/ComisionesPage.vue') },
     { path: '/plan', component: () => import('./paginas/PlanPage.vue') },
     { path: '/cuenta', component: () => import('./paginas/CuentaPage.vue') },
+    // Sin restricción de rol: cada persona administra la seguridad de SU cuenta,
+    // y el asesor que entra desde el teléfono la necesita igual que el titular.
+    { path: '/seguridad', component: () => import('./paginas/SeguridadPage.vue') },
     { path: '/importar', component: () => import('./paginas/ImportarPage.vue') },
 
     { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },

@@ -37,6 +37,9 @@ const PATHS: Record<string, string> = {
   panel: 'M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1M9.5 4v16',
   grafico: 'M3 3v18h18M7 15l3-4 3 3 5-7',
   campana: 'M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 0 1-3.4 0',
+  // Candado cerrado: el cuerpo y el arco. Cerrado y no abierto —un candado
+  // abierto dice lo contrario de lo que hace esta pantalla—.
+  candado: 'M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1M8 11V7a4 4 0 0 1 8 0v4',
 
   // ── Los cinco de la tarjeta de propiedad ────────────────────────────────
   // Dibujados con las mismas reglas que los de arriba: viewBox 24, trazo 1.5,

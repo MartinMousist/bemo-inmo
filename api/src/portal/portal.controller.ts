@@ -5,8 +5,7 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
 import { CATEGORIAS_RECLAMO } from '../gastos/gastos.dto';
 import { PortalService } from './portal.service';
-import { LimiteIntentosGuard, POR_CUENTA, POR_IP } from '../auth/limite-intentos';
-import { UseGuards } from '@nestjs/common';
+import { LimiteEstricto, POR_CUENTA, POR_IP } from '../auth/limite-intentos';
 import { ActorActual, Publico, Roles, type Actor } from '../auth/decoradores';
 
 /**
@@ -70,7 +69,7 @@ export class AccesosPropietarioController {
  * adivinar en la práctica, pero probar sin costo tampoco tiene por qué ser
  * gratis. Se cuenta por IP; no hay cuenta que contar.
  */
-@UseGuards(LimiteIntentosGuard)
+@LimiteEstricto()
 @Controller('propietario')
 export class PortalController {
   constructor(private readonly portal: PortalService) {}
@@ -108,7 +107,7 @@ export class AccesosInquilinoController {
  * Mismo límite por IP que la del propietario, y por el mismo motivo: un token
  * de 32 bytes no se adivina, pero probar tampoco tiene por qué salir gratis.
  */
-@UseGuards(LimiteIntentosGuard)
+@LimiteEstricto()
 @Controller('inquilino')
 export class PortalInquilinoController {
   constructor(private readonly portal: PortalService) {}

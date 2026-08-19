@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { opcionesDeLimite } from './auth/limite-intentos';
+import { LimiteIntentosGuard, opcionesDeLimite } from './auth/limite-intentos';
 import { LimiteStoragePostgres } from './auth/limite-storage';
 import { DatabaseModule } from './database/database.module';
 import { DbService } from './database/db.service';
@@ -108,6 +108,8 @@ import { ConciliacionService } from './conciliacion/conciliacion.service';
 import { ActasController, ActasDeContratoController } from './actas/actas.controller';
 import { ActasService } from './actas/actas.service';
 import { CuentaController } from './cuenta/cuenta.controller';
+import { SeguridadController } from './cuenta/seguridad.controller';
+import { TotpService } from './auth/totp.service';
 import { CuentaService } from './cuenta/cuenta.service';
 
 @Module({
@@ -146,6 +148,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     ActasDeContratoController,
     ActasController,
     CuentaController,
+    SeguridadController,
     EquipoController,
     PersonasController,
     RolesPersonaController,
@@ -224,7 +227,12 @@ import { CuentaService } from './cuenta/cuenta.service';
     DocumentosService,
     // Guard GLOBAL: todo exige token salvo lo marcado con @Publico().
     // Si fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
+    TotpService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    // DESPUÉS del de autenticación, y el orden es la feature: así el contador
+    // general puede contar por usuario en vez de por IP, porque `req.actor` ya
+    // está resuelto cuando llega acá.
+    { provide: APP_GUARD, useClass: LimiteIntentosGuard },
   ],
   exports: [TokensService],
 })

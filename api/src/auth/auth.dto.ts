@@ -1,4 +1,6 @@
-import { IsEmail, IsIn, IsOptional, IsString, Length, MinLength } from 'class-validator';
+import {
+  IsEmail, IsIn, IsOptional, IsString, Length, MaxLength, MinLength,
+} from 'class-validator';
 
 // El ValidationPipe global corre con forbidNonWhitelisted: cualquier campo que
 // no esté acá hace fallar el request con 400. Un cliente que manda `rol: "owner"`
@@ -64,4 +66,20 @@ export class AceptarInvitacionDto {
   @IsString()
   @Length(2, 120)
   nombre!: string;
+}
+
+/**
+ * El segundo paso del login.
+ *
+ * `codigo` acepta hasta 24 caracteres: son 6 del teléfono, pero también un
+ * código de recuperación de 16 con sus tres guiones. Un `@Length(6)` acá dejaba
+ * afuera justo el camino de «perdí el teléfono», que es cuando más se necesita.
+ */
+export class SegundoFactorDto {
+  @IsString() @MaxLength(500) desafio!: string;
+  @IsString() @MinLength(6) @MaxLength(24) codigo!: string;
+}
+
+export class CodigoTotpDto {
+  @IsString() @MinLength(6) @MaxLength(24) codigo!: string;
 }

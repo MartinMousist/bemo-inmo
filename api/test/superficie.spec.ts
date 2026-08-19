@@ -114,13 +114,17 @@ describe('Superficie expuesta', () => {
    * token. Doce rutas, cada una con su motivo; la trece tiene que costar
    * escribirla acá.
    */
-  it('las rutas públicas son exactamente estas doce', () => {
+  it('las rutas públicas son exactamente estas trece', () => {
     const publicas = rutas.filter((r) => r.publico).map((r) => `${r.verbo} ${r.camino}`).sort();
 
     expect(publicas).toEqual([
       // Alta de una inmobiliaria y entrada al sistema.
       'POST /auth/registrar',
       'POST /auth/login',
+      // El segundo paso del login. Público por necesidad —todavía no hay
+      // sesión— y por eso vive en el controlador marcado como estricto: seis
+      // dígitos sin tope de intentos se prueban enteros en una tarde.
+      'POST /auth/2fa',
       'POST /auth/refresh',
       'POST /auth/logout',
       'POST /auth/invitacion/aceptar',

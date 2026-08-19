@@ -3,6 +3,7 @@ import type { ThrottlerStorage } from '@nestjs/throttler';
 import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
 import { DbService } from '../database/db.service';
 import { loadEnv } from '../config/env';
+import { GENERAL, POR_INMOBILIARIA } from './limite-intentos';
 
 /**
  * El contador del límite de intentos, en Postgres.
@@ -52,10 +53,19 @@ export class LimiteStoragePostgres implements ThrottlerStorage, OnModuleDestroy 
     ttl: number,
     limite: number,
     duracionBloqueo: number,
-    // Parte del contrato de `ThrottlerStorage`. No se usa: el nombre del
-    // contador ya viene dentro de `clave`, que la genera el guard.
-    _nombre?: string,
+    nombre?: string,
   ): Promise<ThrottlerStorageRecord> {
+    // El contador general va SIEMPRE en memoria, aunque el resto vaya a la
+    // base. Corre en cada request de la app: mandarlo a Postgres sería una
+    // escritura extra por request para proteger de algo que no la necesita
+    // exacta. Con N réplicas el techo efectivo es N × 300 por minuto, que sigue
+    // siendo un techo —y es el orden de magnitud lo que importa acá, no el
+    // número—. Los de credenciales sí van a la base: ahí el conteo compartido
+    // ES el control.
+    if (nombre === GENERAL || nombre === POR_INMOBILIARIA) {
+      return this.incrementarEnMemoria(clave, ttl, limite, duracionBloqueo);
+    }
+
     return this.enBase
       ? this.incrementarEnBase(clave, ttl, limite, duracionBloqueo)
       : this.incrementarEnMemoria(clave, ttl, limite, duracionBloqueo);

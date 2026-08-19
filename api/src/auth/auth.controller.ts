@@ -1,24 +1,31 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { loadEnv } from '../config/env';
 import { AppError, ErrorCode } from '../common/app-error';
-import { AuthService, type Contexto, type Sesion } from './auth.service';
+import { AuthService, esDesafio, type Contexto, type Sesion } from './auth.service';
 import { ActorActual, Publico, type Actor } from './decoradores';
-import { LimiteIntentosGuard, POR_CUENTA, POR_IP, SinLimite } from './limite-intentos';
+import { LimiteEstricto, POR_CUENTA, POR_IP, SinLimite } from './limite-intentos';
 import {
   AceptarInvitacionDto,
   LoginDto,
   RegistrarDto,
+  SegundoFactorDto,
 } from './auth.dto';
 
 const COOKIE_REFRESH = 'bemo_inmo_rt';
 
 /**
- * El límite de intentos se aplica a este controlador y a ninguno más: son las
- * únicas rutas donde un desconocido puede probar credenciales.
+ * Los contadores ESTRICTOS —los de dos dígitos— se aplican a este controlador y
+ * a los portales, que son las únicas rutas donde un desconocido puede probar
+ * credenciales o adivinar un token.
+ *
+ * Ya no hace falta `@UseGuards`: el guard es global desde la etapa 17.4, y
+ * dejarlo puesto contaría cada intento dos veces —el tope real se partiría al
+ * medio sin que nada lo dijera—. Lo que queda es la MARCA de que acá van los
+ * topes estrictos.
  */
-@UseGuards(LimiteIntentosGuard)
+@LimiteEstricto()
 @Controller('auth')
 export class AuthController {
   private readonly env = loadEnv();
@@ -43,7 +50,30 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    return this.responder(await this.auth.login(dto.email, dto.password, ctx(req)), res);
+    const r = await this.auth.login(dto.email, dto.password, ctx(req));
+    // Con segundo factor todavía NO hay sesión: no se pone la cookie de refresh
+    // ni se devuelve token. Sale el pase y nada más.
+    return esDesafio(r) ? r : this.responder(r, res);
+  }
+
+  /**
+   * El código, después de la contraseña.
+   *
+   * Lleva los mismos contadores estrictos que el login —el controlador entero
+   * está marcado— porque seis dígitos son un millón de combinaciones: sin tope
+   * de intentos, el segundo factor se prueba a fuerza bruta en una tarde.
+   */
+  @Publico()
+  @Post('2fa')
+  async segundoFactor(
+    @Body() dto: SegundoFactorDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.responder(
+      await this.auth.completarSegundoFactor(dto.desafio, dto.codigo, ctx(req)),
+      res,
+    );
   }
 
   // El refresh no lleva email: no hay cuenta que contar, sólo IP. Y va holgado

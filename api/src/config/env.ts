@@ -52,6 +52,20 @@ const schema = z.object({
    */
   JWT_SECRET: z.string().min(32, 'debe tener al menos 32 caracteres'),
 
+  /**
+   * El secreto ANTERIOR, mientras dura una rotación.
+   *
+   * Sin esto, cambiar `JWT_SECRET` desloguea a todo el mundo en el acto: cada
+   * access token vivo deja de verificar de golpe. Eso hace que rotar duela, y
+   * un secreto que duele rotar no se rota nunca —que es el estado en el que
+   * está la mayoría de los sistemas que tuvieron una filtración—.
+   *
+   * Se firma SIEMPRE con el nuevo; el viejo sólo verifica. Se saca cuando pasó
+   * el `ACCESS_TTL_MIN`, que es lo que tardan en morirse solos los últimos
+   * tokens firmados con él.
+   */
+  JWT_SECRET_ANTERIOR: z.string().min(32, 'debe tener al menos 32 caracteres').optional(),
+
   /** Access token corto: si se filtra, la ventana de daño es chica. */
   ACCESS_TTL_MIN: z.coerce.number().int().positive().max(60).default(15),
   /** Refresh largo, pero rota en cada uso. */
@@ -100,6 +114,29 @@ const schema = z.object({
    * es un oráculo para adivinar tokens.
    */
   RATE_LIMIT_REFRESH_IP: z.coerce.number().int().positive().default(60),
+
+  /**
+   * El techo de uso normal de la app, por usuario y por minuto.
+   *
+   * No protege contraseñas —de eso se ocupan los contadores de `/auth`— sino
+   * del token robado que se usa para bajarse la base entera a máquina. 300 por
+   * minuto es holgado para una persona: una pantalla pesada dispara unos veinte
+   * requests y nadie abre quince por minuto sostenidamente.
+   */
+  RATE_LIMIT_GENERAL: z.coerce.number().int().positive().default(300),
+  RATE_LIMIT_GENERAL_VENTANA_MIN: z.coerce.number().int().positive().default(1),
+
+  /**
+   * Las llamadas a un tercero, por inmobiliaria y por minuto.
+   *
+   * El caso es la Central de Deudores del BCRA: nos limita a NOSOTROS, por la
+   * IP del servidor, así que la cuota es una sola y la comparten todas las
+   * inmobiliarias del despliegue. Sin un tope por inmobiliaria, una que
+   * consulte en lote deja a las demás sin poder verificar un garante —y el
+   * error que ven no es suyo ni lo pueden resolver—.
+   */
+  RATE_LIMIT_TERCEROS: z.coerce.number().int().positive().default(30),
+  RATE_LIMIT_TERCEROS_VENTANA_MIN: z.coerce.number().int().positive().default(1),
 
   /**
    * Opcional a propósito. Sin key la app funciona igual: no geocodifica, no
@@ -163,6 +200,16 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       : e.NODE_ENV === 'production',
     isProduction: e.NODE_ENV === 'production',
   };
+
+  // Una rotación mal hecha: el mismo valor en los dos lados no rota nada y deja
+  // creyendo que sí. Se corta en cualquier entorno, porque el error es el
+  // mismo en dev que en producción.
+  if (cached.JWT_SECRET_ANTERIOR && cached.JWT_SECRET_ANTERIOR === cached.JWT_SECRET) {
+    throw new Error(
+      'JWT_SECRET_ANTERIOR es igual a JWT_SECRET: eso no rota nada. ' +
+        'Poné el secreto viejo, o sacá la variable si la rotación ya terminó.',
+    );
+  }
 
   if (cached.isProduction) {
     if (cached.SEED_ON_BOOT) {

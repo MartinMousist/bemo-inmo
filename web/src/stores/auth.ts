@@ -98,11 +98,32 @@ export const useAuth = defineStore('auth', () => {
     listo.value = true;
   }
 
-  async function login(email: string, password: string): Promise<void> {
+  /**
+   * Entrar.
+   *
+   * Devuelve `null` cuando la sesión quedó abierta, o el PASE cuando la cuenta
+   * tiene segundo factor y falta el código. Se devuelve en vez de guardarse en
+   * el store a propósito: es un dato de la pantalla de login —vive lo que dura
+   * ese formulario— y meterlo acá lo dejaría dando vueltas después de entrar.
+   */
+  async function login(email: string, password: string): Promise<string | null> {
+    const r = await api<Sesion | { requiereSegundoFactor: true; desafio: string }>(
+      '/auth/login',
+      { method: 'POST', body: JSON.stringify({ email, password }) },
+    );
+
+    if ('requiereSegundoFactor' in r) return r.desafio;
+
+    guardar(r);
+    return null;
+  }
+
+  /** El segundo paso: el código del teléfono, o uno de recuperación. */
+  async function completarSegundoFactor(desafio: string, codigo: string): Promise<void> {
     guardar(
-      await api<Sesion>('/auth/login', {
+      await api<Sesion>('/auth/2fa', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ desafio, codigo }),
       }),
     );
   }
@@ -152,6 +173,7 @@ export const useAuth = defineStore('auth', () => {
     cargarCuenta,
     restaurar,
     login,
+    completarSegundoFactor,
     registrar,
     logout,
     limpiar,

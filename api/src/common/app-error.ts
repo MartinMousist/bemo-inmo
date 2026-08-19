@@ -56,6 +56,11 @@ export const ErrorCode = {
   // prueba ids que ese id existe del otro lado. Ver migración 035.
   REFERENCIA_INVALIDA: 'REFERENCIA_INVALIDA',
 
+  // Segundo factor: el código no es el que corresponde. Estable para que el
+  // front pueda dejar el foco en el campo y no rearmar la pantalla.
+  CODIGO_INVALIDO: 'CODIGO_INVALIDO',
+  SEGUNDO_FACTOR_REQUERIDO: 'SEGUNDO_FACTOR_REQUERIDO',
+
   // Archivos
   ALMACENAMIENTO_NO_CONFIGURADO: 'ALMACENAMIENTO_NO_CONFIGURADO',
   ARCHIVO_DEMASIADO_GRANDE: 'ARCHIVO_DEMASIADO_GRANDE',

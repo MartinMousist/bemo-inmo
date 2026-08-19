@@ -89,6 +89,7 @@ const grupos = [
       { a: '/importar', icono: 'mas', texto: 'Importar' },
       { a: '/movimientos', icono: 'grafico', texto: 'Movimientos' },
       { a: '/cuenta', icono: 'panel', texto: 'Tu cuenta' },
+      { a: '/seguridad', icono: 'candado', texto: 'Seguridad' },
       { a: '/plan', icono: 'documento', texto: 'Tu plan' },
     ],
   },

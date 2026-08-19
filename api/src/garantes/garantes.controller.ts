@@ -4,6 +4,7 @@ import {
 import { GarantesService } from './garantes.service';
 import { CrearGaranteDto, EditarGaranteDto, SubirDocumentoDto } from './garantes.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
+import { LimiteDeTercero } from '../auth/limite-intentos';
 import { AppError, ErrorCode } from '../common/app-error';
 
 /**
@@ -76,6 +77,7 @@ export class GaranteController {
    */
   @Post(':id/bcra')
   @Roles('owner', 'admin', 'agente')
+  @LimiteDeTercero()
   consultarBcra(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.garantes.consultarBcra(a.tenantId, id, a.usuarioId);
   }

@@ -1,4 +1,4 @@
-import { Injectable, type ExecutionContext } from '@nestjs/common';
+import { Injectable, SetMetadata, type ExecutionContext } from '@nestjs/common';
 import {
   SkipThrottle,
   ThrottlerGuard,
@@ -36,6 +36,63 @@ import { loadEnv } from '../config/env';
 export const POR_IP = 'ip';
 export const POR_CUENTA = 'cuenta';
 
+/**
+ * El tercer contador, y el único que corre sobre TODA la app.
+ *
+ * Los dos de arriba protegen contraseñas y por eso tienen topes de dos dígitos.
+ * Este protege otra cosa: **el token que ya es válido**. Alguien con una sesión
+ * robada —o un asesor que se va con su cuenta todavía activa— podía recorrer
+ * `/propiedades?pagina=1..N` a la velocidad de la máquina y llevarse la cartera
+ * entera, y no había nada que lo notara.
+ *
+ * Se cuenta por USUARIO y no por IP: una inmobiliaria entera sale por la misma
+ * conexión, y contar por IP le pondría a las diez personas de la oficina el
+ * tope de una.
+ */
+export const GENERAL = 'general';
+
+/**
+ * El cuarto contador: lo que sale hacia afuera, contado por INMOBILIARIA.
+ *
+ * Por inmobiliaria y no por usuario porque el recurso escaso no es nuestro:
+ * el BCRA limita por la IP del servidor, así que la cuota es una y la comparten
+ * todos los inquilinos del despliegue. El tope por usuario no serviría —cinco
+ * asesores de la misma agencia la queman igual— y uno global tampoco: dejaría
+ * que una agencia deje sin servicio a las otras, que es exactamente lo que un
+ * sistema multi-inmobiliaria no puede permitir.
+ */
+export const POR_INMOBILIARIA = 'inmobiliaria';
+
+/** Marca las rutas donde corren los contadores estrictos de `/auth`. */
+export const LIMITE_ESTRICTO = 'auth:limite-estricto';
+
+/**
+ * Aplica los contadores de credenciales a un controlador o a una ruta.
+ *
+ * Hace falta porque el guard pasó a ser GLOBAL: sin esta marca, los topes de
+ * login —diez por cuarto de hora— se aplicarían a cada request de la app y la
+ * dejarían inusable a los treinta segundos de trabajo normal.
+ */
+export const LimiteEstricto = () => SetMetadata(LIMITE_ESTRICTO, true);
+
+/** Marca una ruta que llama a un servicio de afuera. */
+export const LIMITE_TERCERO = 'auth:limite-tercero';
+export const LimiteDeTercero = () => SetMetadata(LIMITE_TERCERO, true);
+
+function esRutaDeTercero(ctx: ExecutionContext): boolean {
+  return Boolean(
+    Reflect.getMetadata(LIMITE_TERCERO, ctx.getHandler()) ??
+      Reflect.getMetadata(LIMITE_TERCERO, ctx.getClass()),
+  );
+}
+
+function esRutaEstricta(ctx: ExecutionContext): boolean {
+  return Boolean(
+    Reflect.getMetadata(LIMITE_ESTRICTO, ctx.getHandler()) ??
+      Reflect.getMetadata(LIMITE_ESTRICTO, ctx.getClass()),
+  );
+}
+
 const enMs = (minutos: number) => minutos * 60_000;
 
 /**
@@ -50,12 +107,43 @@ export const opcionesDeLimite: ThrottlerModuleOptions = {
       ttl: () => enMs(loadEnv().RATE_LIMIT_VENTANA_MIN),
       limit: () => loadEnv().RATE_LIMIT_LOGIN_IP,
       getTracker: (req) => `ip:${req.ip ?? 'desconocida'}`,
+      skipIf: (ctx) => !esRutaEstricta(ctx),
     },
     {
       name: POR_CUENTA,
       ttl: () => enMs(loadEnv().RATE_LIMIT_VENTANA_MIN),
       limit: () => loadEnv().RATE_LIMIT_LOGIN_CUENTA,
       getTracker: (req) => trackerDeCuenta(req),
+      skipIf: (ctx) => !esRutaEstricta(ctx),
+    },
+    {
+      name: GENERAL,
+      ttl: () => enMs(loadEnv().RATE_LIMIT_GENERAL_VENTANA_MIN),
+      limit: () => loadEnv().RATE_LIMIT_GENERAL,
+      // El guard global corre DESPUÉS del de autenticación, así que acá el
+      // actor ya está resuelto. Sin sesión —portales, feed, health— se cae a la
+      // IP, que es lo único que hay.
+      getTracker: (req) => {
+        const actor = (req as { actor?: { usuarioId?: string } }).actor;
+        return actor?.usuarioId
+          ? `usuario:${actor.usuarioId}`
+          : `anon:${(req as { ip?: string }).ip ?? 'desconocida'}`;
+      },
+      // En `/auth` ya cuentan los otros dos. Sumar éste haría que un ataque de
+      // contraseñas consuma también el cupo de trabajo del usuario legítimo.
+      skipIf: (ctx) => esRutaEstricta(ctx),
+    },
+    {
+      name: POR_INMOBILIARIA,
+      ttl: () => enMs(loadEnv().RATE_LIMIT_TERCEROS_VENTANA_MIN),
+      limit: () => loadEnv().RATE_LIMIT_TERCEROS,
+      getTracker: (req) => {
+        const actor = (req as { actor?: { tenantId?: string } }).actor;
+        return actor?.tenantId
+          ? `inmobiliaria:${actor.tenantId}`
+          : `anon:${(req as { ip?: string }).ip ?? 'desconocida'}`;
+      },
+      skipIf: (ctx) => !esRutaDeTercero(ctx),
     },
   ],
 };

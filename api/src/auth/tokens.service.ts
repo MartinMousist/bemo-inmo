@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { loadEnv } from '../config/env';
 
@@ -24,14 +24,82 @@ export class TokensService {
     });
   }
 
+  /**
+   * Verifica contra el secreto actual y, si hay rotación en curso, contra el
+   * anterior.
+   *
+   * El orden importa: primero el nuevo, que es con el que están firmados casi
+   * todos. El viejo se prueba sólo cuando el nuevo falló, así que en régimen
+   * normal —sin `JWT_SECRET_ANTERIOR`— esto es exactamente lo que era.
+   *
+   * Un token inválido falla contra los dos y sale el mismo error de siempre: no
+   * se distingue «firmado con el viejo» de «basura», porque hacia afuera es la
+   * misma respuesta.
+   */
   verificarAccess(token: string): Claims {
-    // `algorithms` explícito: sin esto un atacante puede firmar con "none" o
-    // degradar el algoritmo y el token se acepta igual.
-    const payload = jwt.verify(token, this.env.JWT_SECRET, {
-      algorithms: ['HS256'],
+    const secretos = [this.env.JWT_SECRET, this.env.JWT_SECRET_ANTERIOR].filter(
+      (s): s is string => Boolean(s),
+    );
+
+    let ultimoError: unknown;
+    for (const secreto of secretos) {
+      try {
+        // `algorithms` explícito: sin esto un atacante puede firmar con "none" o
+        // degradar el algoritmo y el token se acepta igual.
+        const payload = jwt.verify(token, secreto, { algorithms: ['HS256'] });
+        if (typeof payload === 'string') throw new Error('payload inesperado');
+        return { sub: payload.sub as string, tid: payload.tid, rol: payload.rol };
+      } catch (err) {
+        ultimoError = err;
+      }
+    }
+    throw ultimoError;
+  }
+
+  /**
+   * El pase intermedio entre «la contraseña estaba bien» y «mandá el código».
+   *
+   * ── Por qué NO es un access token con un claim adentro ──
+   *
+   * Se firma con una clave DERIVADA del secreto, no con el secreto. Así un
+   * desafío no puede verificar como token de acceso ni al revés: no depende de
+   * que alguien se acuerde de mirar un campo `typ`, que es la clase de chequeo
+   * que se pierde en el próximo refactor. Las dos claves salen del mismo
+   * `JWT_SECRET`, así que rotar sigue siendo cambiar una variable.
+   *
+   * Cinco minutos: es lo que tarda alguien en abrir la app del teléfono, no lo
+   * que tarda en irse a almorzar.
+   */
+  firmarDesafio2fa(usuarioId: string): string {
+    return jwt.sign({ sub: usuarioId }, this.claveDesafio(this.env.JWT_SECRET), {
+      expiresIn: '5m',
+      algorithm: 'HS256',
     });
-    if (typeof payload === 'string') throw new Error('payload inesperado');
-    return { sub: payload.sub as string, tid: payload.tid, rol: payload.rol };
+  }
+
+  /** Devuelve el id del usuario, o tira si el pase no vale o venció. */
+  verificarDesafio2fa(token: string): string {
+    const secretos = [this.env.JWT_SECRET, this.env.JWT_SECRET_ANTERIOR].filter(
+      (s): s is string => Boolean(s),
+    );
+
+    let ultimoError: unknown;
+    for (const secreto of secretos) {
+      try {
+        const payload = jwt.verify(token, this.claveDesafio(secreto), {
+          algorithms: ['HS256'],
+        });
+        if (typeof payload === 'string') throw new Error('payload inesperado');
+        return payload.sub as string;
+      } catch (err) {
+        ultimoError = err;
+      }
+    }
+    throw ultimoError;
+  }
+
+  private claveDesafio(secreto: string): string {
+    return createHmac('sha256', secreto).update('desafio-2fa').digest('hex');
   }
 
   /**

@@ -1212,24 +1212,58 @@ política de retención y sin forma de borrarlo.
       en ningún lado—; el otro es express/body-parser transitivo. Migración
       mayor sobre 955 tests: va sola, no adentro de un `audit fix --force`.
 
-### 17.4 · Superficie de la aplicación
+### 17.4 · Superficie de la aplicación ✅ CERRADA
 
-- [ ] **CSP estricta.** `helmet` pone sus defaults; falta la política propia,
-      que es lo que convierte un XSS almacenado en nada.
-- [ ] **Rate limit más allá del login.** Hoy `limite-intentos` cubre `/auth`;
-      el resto de la API no tiene techo. La consulta al BCRA es la más obvia:
-      es una llamada a un tercero con rate limit por IP.
-- [ ] **Segundo factor para el titular**, que es quien puede cambiar el tipo de
-      cuenta, los planes y las comisiones de todos.
-- [ ] Rotación de `JWT_SECRET` sin tirar a todos los usuarios abajo.
+- [x] **CSP estricta.** *La nota anterior estaba vencida*: decía que faltaba, y
+      existe desde la etapa 14 —entró con el editor de plantillas, que es lo que
+      guarda HTML—. Está en `web/Caddyfile`, se hornea en la imagen
+      (`web/Dockerfile:25`) y `script-src 'self'` va sin `unsafe-inline` ni
+      `unsafe-eval`. **Cuarta nota de estado de este archivo que envejeció hasta
+      volverse mentira** —después del CI y de las dos de la 17.3—.
+- [x] **Rate limit más allá del login.** Dos contadores nuevos sobre el guard,
+      que ahora es global: `general`, 300 por minuto **por usuario** —no por IP:
+      una inmobiliaria entera sale por la misma conexión y el cupo de una oficina
+      no puede ser el de una persona—, y `inmobiliaria`, 30 por minuto para lo
+      que llama a un tercero. El BCRA nos limita a NOSOTROS por la IP del
+      servidor: sin tope por inmobiliaria, una que consulte en lote deja a las
+      demás sin poder verificar un garante.
+      Los dos van en memoria aunque el de credenciales vaya a la base: son un
+      techo, no un control exacto, y no valen una escritura por request.
+- [x] **Segundo factor (TOTP)** para cualquier rol, no sólo el titular — el
+      asesor que entra desde el teléfono tiene el mismo problema. Motor puro
+      (`totp.motor.ts`) verificado contra **los seis vectores del RFC 6238**, sin
+      dependencia nueva. Login en dos pasos con un pase de cinco minutos firmado
+      con una clave DERIVADA del secreto, así que un pase no puede pasar por
+      token de acceso *por construcción* y no por acordarse de mirar un campo.
+      Ocho códigos de recuperación de 80 bits: con 40, quien se lleve un dump
+      recorre el espacio entero.
+      **Obligarlo sigue siendo una política aparte**, y va después de que el
+      titular se enrole: al revés se queda afuera de su propia cuenta.
+- [x] Rotación de `JWT_SECRET` sin tirar a nadie abajo: `JWT_SECRET_ANTERIOR`
+      sólo verifica, nunca firma. Un secreto que duele rotar no se rota nunca.
 
-### 17.5 · Que el aislamiento se pruebe contra un atacante, no contra un test
+### 17.5 · Que el aislamiento se pruebe contra un atacante, no contra un test ✅ CERRADA
 
-- [ ] `fuga.spec.ts` prueba que una inmobiliaria no ve a la otra. Falta el
-      caso hostil: IDs de otro tenant en el cuerpo de un PATCH, en un filtro,
-      en un `ORDER BY`, en un import CSV.
-- [ ] **Un test que falle si alguien agrega un endpoint sin `@Roles`** — hoy el
-      guard es default-deny para autenticar, pero el rol es opt-in.
+- [x] **Encontró un agujero real, y no era el que se esperaba.** Los chequeos de
+      integridad referencial de Postgres **pasan por encima de RLS** —está
+      documentado, es a propósito— así que `FOREIGN KEY (agente_id) REFERENCES
+      usuario(id)` aceptaba el id de un asesor de otra inmobiliaria. Seis
+      endpoints contestaban 201 con un id ajeno; medido, no supuesto.
+      No era fuga: leer seguía bloqueado y el JOIN devolvía NULL. Era corrupción
+      silenciosa —un lead colgado de alguien que de este lado no existe
+      desaparece de todas las pantallas y sigue en la base— y, en el reparto de
+      una venta, plata asignada a un beneficiario fantasma.
+      Se arregla en la base (migración 035): las 58 claves foráneas entre tablas
+      con tenant pasan a ser **compuestas con `tenant_id`**, y las cuatro
+      columnas que apuntan a `usuario` van por disparador contra `membresia`.
+      Estructuralmente imposible, sin código que se pueda olvidar.
+- [x] **Un test que falle si alguien agrega un endpoint sin `@Roles`**
+      (`superficie.spec.ts`). No es un inventario de las 199 rutas: 70 no llevan
+      `@Roles` y casi todas son GET, y una lista de 70 líneas se actualiza en
+      automático sin leerla. Son dos reglas que duelen si se rompen: **toda ruta
+      que escribe declara sus roles**, y **la lista de rutas públicas es
+      cerrada**. Verificado que falla: sacándole el `@Roles` a un POST, lo nombra.
+      Ya cobró una pieza: `POST /auth/2fa` tuvo que declararse.
 
 **Gate de 17.1 — CERRADO.** Verificado por HTTP contra el bucket real, no
 mirando el string de la clave: la foto de una propiedad da **200** sin sesión
