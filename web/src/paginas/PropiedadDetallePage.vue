@@ -13,6 +13,9 @@ import GaleriaFotos from '../componentes/GaleriaFotos.vue';
 import EnlacePropietario from '../componentes/EnlacePropietario.vue';
 import { laCasa } from '../dominio/vocabulario';
 import {
+  etiquetaCalefaccion, etiquetaDisposicion, etiquetaOrientacion, etiquetaUrbanizacion,
+} from '../dominio/catalogos-propiedad';
+import {
   ETIQUETA_OPERACION,
   ETIQUETA_TIPO,
   etiquetaSituacion,
@@ -42,6 +45,12 @@ interface Propiedad {
   supTotal: number | null; supCubierta: number | null;
   ambientes: number | null; dormitorios: number | null; banos: number | null; cocheras: number | null;
   antiguedad: number | null; descripcion: string | null;
+  // Migración 027: se cargaban en el formulario y ninguna ficha los mostraba
+  // — el mismo error #3 del playbook que ya documenta el resto del repo.
+  plantas: number | null; toilettes: number | null;
+  orientacion: string | null; disposicion: string | null; calefaccion: string | null;
+  // Migración 028: dónde está, no sólo qué es.
+  tipoUrbanizacion: string | null; nombreComplejo: string | null;
   agenteCaptador: { id: string; nombre: string } | null;
   operaciones: Operacion[];
   titulares: Array<{ personaId: string; nombre: string; porcentaje: number }>;
@@ -367,7 +376,25 @@ onMounted(cargar);
               <div><dt>Baños</dt><dd class="mono">{{ numero(p.banos) }}</dd></div>
               <div><dt>Cocheras</dt><dd class="mono">{{ numero(p.cocheras) }}</dd></div>
               <div><dt>Antigüedad</dt><dd class="mono">{{ numero(p.antiguedad, ' años') }}</dd></div>
+              <!-- Migración 027: sólo se muestran los que tienen valor. Un
+                   terreno sin plantas no es un dato faltante, es un dato que
+                   no le corresponde — mismo criterio que dominio/atributos.ts. -->
+              <div v-if="p.plantas !== null"><dt>Plantas</dt><dd class="mono">{{ numero(p.plantas) }}</dd></div>
+              <div v-if="p.toilettes !== null"><dt>Toilettes</dt><dd class="mono">{{ numero(p.toilettes) }}</dd></div>
+              <div v-if="p.orientacion"><dt>Orientación</dt><dd>{{ etiquetaOrientacion(p.orientacion) }}</dd></div>
+              <div v-if="p.disposicion"><dt>Disposición</dt><dd>{{ etiquetaDisposicion(p.disposicion) }}</dd></div>
+              <div v-if="p.calefaccion"><dt>Calefacción</dt><dd>{{ etiquetaCalefaccion(p.calefaccion) }}</dd></div>
             </dl>
+
+            <!-- Migración 028: dónde está. Aparte del `dl` porque «Barrio
+                 privado · Chacras Park» es una frase, no un par dato/valor
+                 más — y es lo primero que alguien busca cuando ya sabe el
+                 complejo, no algo para escanear entre m² y antigüedad. -->
+            <p v-if="p.tipoUrbanizacion && p.tipoUrbanizacion !== 'abierto'" class="urbanizacion">
+              {{ etiquetaUrbanizacion(p.tipoUrbanizacion) }}
+              <template v-if="p.nombreComplejo"> · {{ p.nombreComplejo }}</template>
+            </p>
+
             <p v-if="p.descripcion" class="desc">{{ p.descripcion }}</p>
           </section>
         </div>
@@ -543,6 +570,12 @@ onMounted(cargar);
 .datos dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-2); }
 .datos dd { margin: 2px 0 0; color: var(--ink); }
 .desc { margin: 0; color: var(--ink-2); font-size: 13px; white-space: pre-wrap; }
+.urbanizacion {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
 
 .mapa-placeholder {
   display: flex; flex-direction: column; align-items: center; gap: var(--s-sm);

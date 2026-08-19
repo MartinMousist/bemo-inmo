@@ -124,7 +124,19 @@ export interface Propiedad {
   banos: number | null;
   cocheras: number | null;
   antiguedad: number | null;
+  /** Cantidad de plantas de la UNIDAD (un dúplex son 2). Migración 027. */
+  plantas: number | null;
+  /** Baños sin ducha ni bañera, aparte de `banos`. Migración 027. */
+  toilettes: number | null;
   orientacion: string | null;
+  /** `'frente' | 'contrafrente' | 'lateral' | 'interno'`. Migración 027. */
+  disposicion: string | null;
+  /** `'central' | 'individual' | 'radiadores' | ...`. Migración 027. */
+  calefaccion: string | null;
+  /** `'abierto' | 'barrio_privado' | 'country' | 'condominio'`. Migración 028. */
+  tipoUrbanizacion: string | null;
+  /** El complejo, cuando se sabe cuál — «Chacras Park». Migración 028. */
+  nombreComplejo: string | null;
   estadoConservacion: string | null;
   amenities: string[];
   descripcion: string | null;
@@ -164,16 +176,38 @@ export class PropiedadesService {
   async listar(tenantId: string, f: FiltroPropiedadesDto): Promise<Pagina<Propiedad>> {
     return this.db.withTenant(tenantId, async (ej) => {
       const q = f.q ? `%${f.q.trim()}%` : null;
-      const params = [q, f.tipo ?? null, f.operacion ?? null, f.estado ?? null,
-                      f.incluirCerradas ?? false,
-                      f.agenteId ?? null, f.sinCaptador ?? false];
+      const params = [
+        q, f.tipo ?? null, f.operacion ?? null, f.estado ?? null,
+        f.incluirCerradas ?? false,
+        f.agenteId ?? null, f.sinCaptador ?? false,
+        // Rangos: cada Min/Max entra como su propio parámetro, y el `donde`
+        // sólo lo aplica si no es NULL. `null` en vez de `undefined` porque el
+        // driver no acepta `undefined` como valor de un parámetro posicional.
+        f.ambientesMin ?? null, f.ambientesMax ?? null,
+        f.dormitoriosMin ?? null, f.dormitoriosMax ?? null,
+        f.banosMin ?? null, f.banosMax ?? null,
+        f.toilettesMin ?? null, f.toilettesMax ?? null,
+        f.cocherasMin ?? null, f.cocherasMax ?? null,
+        f.plantasMin ?? null, f.plantasMax ?? null,
+        f.antiguedadMax ?? null,
+        f.supTotalMin ?? null, f.supTotalMax ?? null,
+        f.supCubiertaMin ?? null, f.supCubiertaMax ?? null,
+        // Multi-select: `null` y no `[]` cuando no vino, por la misma razón que
+        // los rangos — `p.orientacion = ANY(NULL::text[])` es NULL (no matchea
+        // nada) y necesita el `OR $N::text[] IS NULL` de abajo para no filtrar.
+        f.orientacion ?? null,
+        f.disposicion ?? null,
+        f.calefaccion ?? null,
+        f.amenities ?? null,
+        f.tipoUrbanizacion ?? null,
+      ];
 
       // El MISMO `donde` para el conteo y para la página. Si el filtro entrara
       // en uno solo, el pager diría «57» y la tabla mostraría 9, que es peor
       // que no filtrar: el usuario no sabe cuál de los dos números es el suyo.
       const donde = `
         WHERE ($1::text IS NULL
-               OR p.calle ILIKE $1 OR p.localidad ILIKE $1
+               OR p.calle ILIKE $1 OR p.localidad ILIKE $1 OR p.nombre_complejo ILIKE $1
                OR p.codigo::text = trim(both '%' from $1))
           AND ($2::text IS NULL OR p.tipo = $2)
           AND ($3::text IS NULL OR EXISTS (
@@ -183,7 +217,30 @@ export class PropiedadesService {
           AND ($4::text IS NULL OR EXISTS (
                 SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id AND o.estado = $4))
           AND ($6::uuid IS NULL OR p.agente_captador_id = $6)
-          AND (NOT $7::boolean OR p.agente_captador_id IS NULL)`;
+          AND (NOT $7::boolean OR p.agente_captador_id IS NULL)
+          AND ($8::int IS NULL OR p.ambientes >= $8)
+          AND ($9::int IS NULL OR p.ambientes <= $9)
+          AND ($10::int IS NULL OR p.dormitorios >= $10)
+          AND ($11::int IS NULL OR p.dormitorios <= $11)
+          AND ($12::int IS NULL OR p.banos >= $12)
+          AND ($13::int IS NULL OR p.banos <= $13)
+          AND ($14::int IS NULL OR p.toilettes >= $14)
+          AND ($15::int IS NULL OR p.toilettes <= $15)
+          AND ($16::int IS NULL OR p.cocheras >= $16)
+          AND ($17::int IS NULL OR p.cocheras <= $17)
+          AND ($18::int IS NULL OR p.plantas >= $18)
+          AND ($19::int IS NULL OR p.plantas <= $19)
+          AND ($20::int IS NULL OR p.antiguedad <= $20)
+          AND ($21::numeric IS NULL OR p.sup_total >= $21)
+          AND ($22::numeric IS NULL OR p.sup_total <= $22)
+          AND ($23::numeric IS NULL OR p.sup_cubierta >= $23)
+          AND ($24::numeric IS NULL OR p.sup_cubierta <= $24)
+          AND ($25::text[] IS NULL OR p.orientacion = ANY($25))
+          AND ($26::text[] IS NULL OR p.disposicion = ANY($26))
+          AND ($27::text[] IS NULL OR p.calefaccion = ANY($27))
+          -- @> y no &&: "tiene TODOS estos amenities", no "tiene alguno".
+          AND ($28::text[] IS NULL OR p.amenities @> $28)
+          AND ($29::text[] IS NULL OR p.tipo_urbanizacion = ANY($29))`;
 
       const { rows: conteo } = await ej.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM propiedad p ${donde}`,
@@ -212,7 +269,7 @@ export class PropiedadesService {
            f.orden,
            f.dir,
          )}
-         LIMIT $8 OFFSET $9`,
+         LIMIT $30 OFFSET $31`,
         [...params, f.porPagina, offset(f)],
       );
 
@@ -246,10 +303,14 @@ export class PropiedadesService {
            tenant_id, codigo, calle, numero, piso, depto, localidad, provincia, cp,
            lat, lng, geocode_fuente, geocode_el,
            tipo, sup_total, sup_cubierta, ambientes, dormitorios, banos, cocheras,
-           antiguedad, orientacion, estado_conservacion, amenities,
+           antiguedad, plantas, toilettes,
+           orientacion, disposicion, calefaccion, tipo_urbanizacion, nombre_complejo,
+           estado_conservacion, amenities,
            descripcion, notas_internas, agente_captador_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-                 $19,$20,$21,$22,$23,$24,$25,$26,$27)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                 $9,$10,$11,$12,$13,$14,$15,$16,
+                 $17,$18,$19,$20,$21,$22,$23,$24,
+                 $25,$26,$27,$28,$29,$30,$31,$32,$33)
          RETURNING id`,
         [
           tenantId, cod[0].codigo,
@@ -259,7 +320,10 @@ export class PropiedadesService {
           dto.tipo, dto.supTotal ?? null, dto.supCubierta ?? null,
           dto.ambientes ?? null, dto.dormitorios ?? null, dto.banos ?? null,
           dto.cocheras ?? null, dto.antiguedad ?? null,
-          dto.orientacion ?? null, dto.estadoConservacion ?? null,
+          dto.plantas ?? null, dto.toilettes ?? null,
+          dto.orientacion ?? null, dto.disposicion ?? null, dto.calefaccion ?? null,
+          dto.tipoUrbanizacion ?? null, dto.nombreComplejo ?? null,
+          dto.estadoConservacion ?? null,
           dto.amenities ?? [],
           dto.descripcion ?? null, dto.notasInternas ?? null,
           dto.agenteCaptadorId ?? null,
@@ -306,11 +370,17 @@ export class PropiedadesService {
            banos = coalesce($19, banos),
            cocheras = coalesce($20, cocheras),
            antiguedad = coalesce($21, antiguedad),
-           orientacion = coalesce($22, orientacion),
-           estado_conservacion = coalesce($23, estado_conservacion),
-           amenities = coalesce($24, amenities),
-           descripcion = coalesce($25, descripcion),
-           notas_internas = coalesce($26, notas_internas),
+           plantas = coalesce($22, plantas),
+           toilettes = coalesce($23, toilettes),
+           orientacion = coalesce($24, orientacion),
+           disposicion = coalesce($25, disposicion),
+           calefaccion = coalesce($26, calefaccion),
+           tipo_urbanizacion = coalesce($27, tipo_urbanizacion),
+           nombre_complejo = coalesce($28, nombre_complejo),
+           estado_conservacion = coalesce($29, estado_conservacion),
+           amenities = coalesce($30, amenities),
+           descripcion = coalesce($31, descripcion),
+           notas_internas = coalesce($32, notas_internas),
            -- El captador es la EXCEPCIÓN al coalesce, con el mismo patrón que
            -- lat/lng: un null explícito acá significa «desasignar», no «no vino».
            --
@@ -324,7 +394,7 @@ export class PropiedadesService {
            -- Lo que distingue los dos casos es undefined (el campo no vino en el
            -- PATCH) contra null (vino vacío), y por eso el booleano viaja aparte
            -- en $27 en vez de deducirse del valor.
-           agente_captador_id = CASE WHEN $27::boolean THEN $28 ELSE agente_captador_id END
+           agente_captador_id = CASE WHEN $33::boolean THEN $34 ELSE agente_captador_id END
          WHERE id = $1`,
         [
           id, dto.calle ?? null, dto.numero ?? null, dto.piso ?? null, dto.depto ?? null,
@@ -335,7 +405,10 @@ export class PropiedadesService {
           dto.tipo ?? null, dto.supTotal ?? null, dto.supCubierta ?? null,
           dto.ambientes ?? null, dto.dormitorios ?? null, dto.banos ?? null,
           dto.cocheras ?? null, dto.antiguedad ?? null,
-          dto.orientacion ?? null, dto.estadoConservacion ?? null,
+          dto.plantas ?? null, dto.toilettes ?? null,
+          dto.orientacion ?? null, dto.disposicion ?? null, dto.calefaccion ?? null,
+          dto.tipoUrbanizacion ?? null, dto.nombreComplejo ?? null,
+          dto.estadoConservacion ?? null,
           dto.amenities ?? null,
           dto.descripcion ?? null, dto.notasInternas ?? null,
           dto.agenteCaptadorId !== undefined, dto.agenteCaptadorId ?? null,
@@ -806,7 +879,13 @@ interface FilaPropiedad {
   banos: number | null;
   cocheras: number | null;
   antiguedad: number | null;
+  plantas: number | null;
+  toilettes: number | null;
   orientacion: string | null;
+  disposicion: string | null;
+  calefaccion: string | null;
+  tipo_urbanizacion: string | null;
+  nombre_complejo: string | null;
   estado_conservacion: string | null;
   amenities: string[];
   descripcion: string | null;
@@ -940,7 +1019,13 @@ function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
     banos: f.banos,
     cocheras: f.cocheras,
     antiguedad: f.antiguedad,
+    plantas: f.plantas,
+    toilettes: f.toilettes,
     orientacion: f.orientacion,
+    disposicion: f.disposicion,
+    calefaccion: f.calefaccion,
+    tipoUrbanizacion: f.tipo_urbanizacion,
+    nombreComplejo: f.nombre_complejo,
     estadoConservacion: f.estado_conservacion,
     amenities: f.amenities ?? [],
     descripcion: f.descripcion,

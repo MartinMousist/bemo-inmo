@@ -26,6 +26,9 @@ import {
 import { hayFiltroDeAgente, paramsDeAgente } from '../dominio/agente';
 import { filtrosRecordados } from '../dominio/filtros';
 import { guardarVista, leerVista, type Vista } from '../dominio/vista';
+import {
+  AMENITIES_AGRUPADOS, CALEFACCIONES, DISPOSICIONES, ORIENTACIONES, URBANIZACIONES,
+} from '../dominio/catalogos-propiedad';
 
 interface Operacion {
   id: string;
@@ -208,11 +211,74 @@ const error = ref('');
  * guardar el uuid haría que la segunda persona abra Propiedades filtrada por la
  * primera y vea una lista vacía sin entender por qué. Ver `dominio/agente.ts`.
  */
-const { valores: filtros } = filtrosRecordados('propiedades', { agente: '' });
+/**
+ * Los filtros de la migración 027, todos como STRING —incluidos los rangos y
+ * los multi-select— porque `filtrosRecordados` sólo persiste
+ * `Record<string, string | boolean>`, y porque un `<input>` vacío ya es `''`:
+ * forzarlo a `number | undefined` acá sólo para volver a stringificarlo al
+ * armar la URL no ahorra nada.
+ *
+ * Los multi-select (`orientacion`, `disposicion`, `calefaccion`, `amenities`)
+ * se guardan como CSV — `"pileta,seguridad"` — que es exactamente lo que
+ * `listaDesdeQuery()` del back ya sabe leer en un querystring.
+ */
+const { valores: filtros } = filtrosRecordados('propiedades', {
+  agente: '',
+  ambientesMin: '', ambientesMax: '',
+  dormitoriosMin: '', dormitoriosMax: '',
+  banosMin: '', banosMax: '',
+  toilettesMin: '', toilettesMax: '',
+  cocherasMin: '', cocherasMax: '',
+  plantasMin: '', plantasMax: '',
+  antiguedadMax: '',
+  supTotalMin: '', supTotalMax: '',
+  supCubiertaMin: '', supCubiertaMax: '',
+  orientacion: '', disposicion: '', calefaccion: '', amenities: '',
+  tipoUrbanizacion: '',
+});
+
+/** Las claves de rango/multi-select, en el orden en que se mandan a la API. */
+const CAMPOS_RANGO = [
+  'ambientesMin', 'ambientesMax', 'dormitoriosMin', 'dormitoriosMax',
+  'banosMin', 'banosMax', 'toilettesMin', 'toilettesMax',
+  'cocherasMin', 'cocherasMax', 'plantasMin', 'plantasMax', 'antiguedadMax',
+  'supTotalMin', 'supTotalMax', 'supCubiertaMin', 'supCubiertaMax',
+] as const;
+const CAMPOS_MULTI = [
+  'orientacion', 'disposicion', 'calefaccion', 'amenities', 'tipoUrbanizacion',
+] as const;
+
+const hayMasFiltros = computed(
+  () => CAMPOS_RANGO.some((k) => filtros.value[k] !== '')
+    || CAMPOS_MULTI.some((k) => filtros.value[k] !== ''),
+);
 
 const hayFiltro = computed(
-  () => !!q.value || !!filtroOperacion.value || hayFiltroDeAgente(filtros.value.agente),
+  () => !!q.value || !!filtroOperacion.value
+    || hayFiltroDeAgente(filtros.value.agente) || hayMasFiltros.value,
 );
+
+/**
+ * Toggle de un valor dentro de un CSV guardado en `filtros`.
+ *
+ * Los checkboxes de orientación/disposición/calefacción/amenities no tienen un
+ * `v-model` directo a un array —el filtro guardado es un string, no una lista,
+ * por la restricción de `filtrosRecordados` de arriba— así que arman y
+ * desarman el CSV a mano.
+ */
+function tieneEnCsv(csv: string, clave: string): boolean {
+  return csv.split(',').includes(clave);
+}
+function alternarEnCsv(campo: typeof CAMPOS_MULTI[number], clave: string): void {
+  const actual = filtros.value[campo] ? filtros.value[campo].split(',') : [];
+  const sin = actual.filter((c) => c !== clave);
+  filtros.value[campo] = (sin.length === actual.length ? [...actual, clave] : sin).join(',');
+}
+
+function limpiarMasFiltros(): void {
+  for (const k of CAMPOS_RANGO) filtros.value[k] = '';
+  for (const k of CAMPOS_MULTI) filtros.value[k] = '';
+}
 
 async function cargar() {
   cargando.value = true;
@@ -226,6 +292,12 @@ async function cargar() {
     if (filtroOperacion.value) params.set('operacion', filtroOperacion.value);
     for (const [k, v] of Object.entries(paramsDeAgente(filtros.value.agente, auth.usuario?.id ?? null))) {
       if (v !== undefined) params.set(k, v);
+    }
+    for (const k of CAMPOS_RANGO) {
+      if (filtros.value[k] !== '') params.set(k, filtros.value[k]);
+    }
+    for (const k of CAMPOS_MULTI) {
+      if (filtros.value[k] !== '') params.set(k, filtros.value[k]);
     }
 
     const r = await api<{ items: Propiedad[]; total: number; paginas: number }>(
@@ -306,6 +378,140 @@ onMounted(cargar);
       <SelectAgente v-model="filtros.agente" etiqueta="Captó" con-sin-asignar />
     </div>
 
+    <!-- Todo lo que la migración 027 sumó: rangos numéricos y multi-select.
+         Colapsado por default —siete atributos más veintitantos amenities son
+         ruido en la pantalla que se abre siempre, y esta es la que se abre
+         siempre—. El resumen dice cuántos están activos para que no haga falta
+         desplegar el panel sólo para saber si hay algo filtrando. -->
+    <details class="ajuste mas-filtros">
+      <summary>
+        Más filtros
+        <StatusChip v-if="hayMasFiltros" texto="activos" tono="acento" />
+      </summary>
+
+      <div class="stack">
+        <div class="grid-rangos">
+          <label class="rango"><span>Ambientes</span>
+            <input v-model="filtros.ambientesMin" inputmode="numeric" placeholder="Desde" />
+            <input v-model="filtros.ambientesMax" inputmode="numeric" placeholder="Hasta" />
+          </label>
+          <label class="rango"><span>Dormitorios</span>
+            <input v-model="filtros.dormitoriosMin" inputmode="numeric" placeholder="Desde" />
+            <input v-model="filtros.dormitoriosMax" inputmode="numeric" placeholder="Hasta" />
+          </label>
+          <label class="rango"><span>Baños</span>
+            <input v-model="filtros.banosMin" inputmode="numeric" placeholder="Desde" />
+            <input v-model="filtros.banosMax" inputmode="numeric" placeholder="Hasta" />
+          </label>
+          <label class="rango"><span>Toilettes</span>
+            <input v-model="filtros.toilettesMin" inputmode="numeric" placeholder="Desde" />
+            <input v-model="filtros.toilettesMax" inputmode="numeric" placeholder="Hasta" />
+          </label>
+          <label class="rango"><span>Cocheras</span>
+            <input v-model="filtros.cocherasMin" inputmode="numeric" placeholder="Desde" />
+            <input v-model="filtros.cocherasMax" inputmode="numeric" placeholder="Hasta" />
+          </label>
+          <label class="rango"><span>Plantas</span>
+            <input v-model="filtros.plantasMin" inputmode="numeric" placeholder="Desde" />
+            <input v-model="filtros.plantasMax" inputmode="numeric" placeholder="Hasta" />
+          </label>
+          <label class="rango"><span>Sup. total (m²)</span>
+            <input v-model="filtros.supTotalMin" inputmode="decimal" placeholder="Desde" />
+            <input v-model="filtros.supTotalMax" inputmode="decimal" placeholder="Hasta" />
+          </label>
+          <label class="rango"><span>Sup. cubierta (m²)</span>
+            <input v-model="filtros.supCubiertaMin" inputmode="decimal" placeholder="Desde" />
+            <input v-model="filtros.supCubiertaMax" inputmode="decimal" placeholder="Hasta" />
+          </label>
+          <!-- Sólo el máximo: acá se busca «hasta X años», no un rango exacto. -->
+          <label class="rango rango-simple"><span>Antigüedad (hasta, años)</span>
+            <input v-model="filtros.antiguedadMax" inputmode="numeric" placeholder="Años" />
+          </label>
+        </div>
+
+        <div class="grupo-multi">
+          <h3>Orientación</h3>
+          <div class="chips-check">
+            <label v-for="o in ORIENTACIONES" :key="o.clave" class="chip-check">
+              <input
+                type="checkbox"
+                :checked="tieneEnCsv(filtros.orientacion, o.clave)"
+                @change="alternarEnCsv('orientacion', o.clave)"
+              />
+              <span>{{ o.etiqueta }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grupo-multi">
+          <h3>Disposición</h3>
+          <div class="chips-check">
+            <label v-for="d in DISPOSICIONES" :key="d.clave" class="chip-check">
+              <input
+                type="checkbox"
+                :checked="tieneEnCsv(filtros.disposicion, d.clave)"
+                @change="alternarEnCsv('disposicion', d.clave)"
+              />
+              <span>{{ d.etiqueta }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grupo-multi">
+          <h3>Calefacción</h3>
+          <div class="chips-check">
+            <label v-for="c in CALEFACCIONES" :key="c.clave" class="chip-check">
+              <input
+                type="checkbox"
+                :checked="tieneEnCsv(filtros.calefaccion, c.clave)"
+                @change="alternarEnCsv('calefaccion', c.clave)"
+              />
+              <span>{{ c.etiqueta }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grupo-multi">
+          <h3>Urbanización</h3>
+          <div class="chips-check">
+            <label v-for="u in URBANIZACIONES" :key="u.clave" class="chip-check">
+              <input
+                type="checkbox"
+                :checked="tieneEnCsv(filtros.tipoUrbanizacion, u.clave)"
+                @change="alternarEnCsv('tipoUrbanizacion', u.clave)"
+              />
+              <span>{{ u.etiqueta }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Amenities: «tiene TODOS los que se marquen», no «tiene alguno» —
+             la misma regla `@>` del back. Marcar Pileta y Seguridad pide una
+             propiedad con las dos, no cualquiera de las dos. -->
+        <div class="grupo-multi">
+          <h3>Amenities</h3>
+          <div v-for="grupo in AMENITIES_AGRUPADOS" :key="grupo.categoria" class="subgrupo-amenities">
+            <p class="subtitulo">{{ grupo.categoria }}</p>
+            <div class="chips-check">
+              <label v-for="op in grupo.items" :key="op.clave" class="chip-check">
+                <input
+                  type="checkbox"
+                  :checked="tieneEnCsv(filtros.amenities, op.clave)"
+                  @change="alternarEnCsv('amenities', op.clave)"
+                />
+                <span>{{ op.etiqueta }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <button v-if="hayMasFiltros" class="btn secondary sm limpiar-mas"
+                type="button" @click="limpiarMasFiltros">
+          Limpiar estos filtros
+        </button>
+      </div>
+    </details>
+
     <!-- «Exportar» baja SIEMPRE la cartera completa: `GET /exportar/:recurso.csv`
          no toma ningún filtro. Con una lista filtrada al lado, quien apreta cree
          que se está bajando lo que ve. Se dice, en vez de sacar el botón: bajar
@@ -343,7 +549,7 @@ onMounted(cargar);
         </RouterLink>
         <button
           v-else class="btn secondary" type="button"
-          @click="q = ''; filtroOperacion = ''; filtros.agente = ''"
+          @click="q = ''; filtroOperacion = ''; filtros.agente = ''; limpiarMasFiltros()"
         >
           Quitar filtros
         </button>
@@ -571,5 +777,82 @@ button.hon-total:focus-visible { outline: 2px solid var(--acento); outline-offse
   font-size: 13px;
   color: var(--muted);
 }
+
+/* El panel «Más filtros»: mismo patrón `<details>` con flecha en el
+   `::before` que ya usa el resto del repo (ver PropiedadFormPage.vue), acá con
+   su propio `<style scoped>` porque `scoped` no cruza componentes. */
+.ajuste { margin: calc(var(--s-sm) * -1) 0 0; }
+.ajuste > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  color: var(--accent-ink);
+  font-size: 13px;
+  list-style: none;
+}
+.ajuste > summary::-webkit-details-marker { display: none; }
+.ajuste > summary::before { content: '▸ '; }
+.ajuste[open] > summary::before { content: '▾ '; }
+.ajuste > summary:focus-visible { outline: 0; box-shadow: var(--ring); border-radius: var(--r-sm); }
+.mas-filtros { padding: var(--s-md) 0; border-bottom: 1px solid var(--line); }
+.mas-filtros > .stack { margin-top: var(--s-md); gap: var(--s-lg); }
+
+.grid-rangos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-md);
+}
+/* El `<span>` de la etiqueta ocupa la fila entera y los dos `<input>` van cada
+   uno en su columna — así el label queda arriba y «Desde»/«Hasta» lado a lado,
+   sin envolver los inputs en un `<div>` aparte en el template. */
+.rango {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rango > span { grid-column: 1 / -1; color: var(--ink-2); }
+.rango-simple { grid-template-columns: 1fr; max-width: 200px; }
+.rango input {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px var(--s-sm);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.grupo-multi h3 {
+  margin: 0 0 var(--s-sm);
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.subgrupo-amenities + .subgrupo-amenities { margin-top: var(--s-sm); }
+.subtitulo { margin: 0 0 var(--s-2xs); font-size: 12px; color: var(--muted-2); }
+.chips-check { display: flex; flex-wrap: wrap; gap: var(--s-xs); }
+.chip-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--s-sm);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.chip-check:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.chip-check input { accent-color: var(--accent); }
+.limpiar-mas { align-self: flex-start; }
 
 </style>

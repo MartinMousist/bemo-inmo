@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import { ETIQUETA_TIPO } from '../dominio/formato';
+import {
+  AMENITIES_AGRUPADOS, CALEFACCIONES, DISPOSICIONES, ORIENTACIONES, URBANIZACIONES,
+} from '../dominio/catalogos-propiedad';
 import { etiquetaRol } from '../dominio/roles';
 import { useAuth } from '../stores/auth';
 import { useEquipo } from '../stores/equipo';
@@ -23,7 +26,21 @@ const form = reactive({
   ambientes: '', dormitorios: '', banos: '', cocheras: '',
   antiguedad: '', descripcion: '',
   lat: '', lng: '',
+  // Migración 027. `plantas`/`toilettes` en el mismo formato numérico-como-
+  // string que el resto del bloque de arriba; los tres selects van vacíos por
+  // default y `''` en un `<select>` es "no elegido", no una opción real.
+  plantas: '', toilettes: '',
+  orientacion: '', disposicion: '', calefaccion: '',
+  // Migración 028: dónde está, no sólo qué es.
+  tipoUrbanizacion: '', nombreComplejo: '',
 });
+
+/**
+ * Amenities: aparte del `form` por la misma razón que `captadorId` — la ficha
+ * trae un array y el `for…of` que puebla `form` en edición lo convertiría en
+ * el string `"pileta,sum"` con `String(v)`, que no es lo que un checkbox espera.
+ */
+const amenitiesSeleccionados = ref<string[]>([]);
 
 /**
  * Quién captó la propiedad.
@@ -65,6 +82,7 @@ onMounted(async () => {
       }
       const cap = p.agenteCaptador as { id: string } | null;
       captadorId.value = cap?.id ?? '';
+      amenitiesSeleccionados.value = Array.isArray(p.amenities) ? (p.amenities as string[]) : [];
       latCargada.value = form.lat;
       lngCargada.value = form.lng;
     } catch (e) {
@@ -129,6 +147,16 @@ async function guardar() {
       banos: numeroOpcional(form.banos),
       cocheras: numeroOpcional(form.cocheras),
       antiguedad: numeroOpcional(form.antiguedad),
+      plantas: numeroOpcional(form.plantas),
+      toilettes: numeroOpcional(form.toilettes),
+      orientacion: form.orientacion || undefined,
+      disposicion: form.disposicion || undefined,
+      calefaccion: form.calefaccion || undefined,
+      tipoUrbanizacion: form.tipoUrbanizacion || undefined,
+      nombreComplejo: form.nombreComplejo || undefined,
+      // Siempre se manda el array completo: es "estos son los amenities", no
+      // un PATCH campo-por-campo — la misma regla que ya vale para `titulares`.
+      amenities: amenitiesSeleccionados.value,
       descripcion: form.descripcion || undefined,
       ...ubicacionAMandar(),
       // `null` explícito y no `undefined`: en el PATCH significa DESASIGNAR.
@@ -255,11 +283,68 @@ async function guardar() {
           <label class="campo"><span>Baños</span><input v-model="form.banos" inputmode="numeric" /></label>
           <label class="campo"><span>Cocheras</span><input v-model="form.cocheras" inputmode="numeric" /></label>
           <label class="campo"><span>Antigüedad (años)</span><input v-model="form.antiguedad" inputmode="numeric" /></label>
+          <label class="campo"><span>Plantas</span><input v-model="form.plantas" inputmode="numeric" /></label>
+          <label class="campo"><span>Toilettes</span><input v-model="form.toilettes" inputmode="numeric" /></label>
+          <label class="campo">
+            <span>Orientación</span>
+            <select v-model="form.orientacion">
+              <option value="">Sin especificar</option>
+              <option v-for="o in ORIENTACIONES" :key="o.clave" :value="o.clave">{{ o.etiqueta }}</option>
+            </select>
+          </label>
+          <label class="campo">
+            <span>Disposición</span>
+            <select v-model="form.disposicion">
+              <option value="">Sin especificar</option>
+              <option v-for="d in DISPOSICIONES" :key="d.clave" :value="d.clave">{{ d.etiqueta }}</option>
+            </select>
+          </label>
+          <label class="campo">
+            <span>Calefacción</span>
+            <select v-model="form.calefaccion">
+              <option value="">Sin especificar</option>
+              <option v-for="c in CALEFACCIONES" :key="c.clave" :value="c.clave">{{ c.etiqueta }}</option>
+            </select>
+          </label>
+          <label class="campo">
+            <span>Tipo de urbanización</span>
+            <select v-model="form.tipoUrbanizacion">
+              <option value="">Sin especificar</option>
+              <option v-for="u in URBANIZACIONES" :key="u.clave" :value="u.clave">{{ u.etiqueta }}</option>
+            </select>
+          </label>
+          <!-- Sólo tiene sentido con un nombre de complejo real; en «Barrio
+               abierto» o sin especificar queda vacío y no estorba. -->
+          <label v-if="form.tipoUrbanizacion && form.tipoUrbanizacion !== 'abierto'" class="campo">
+            <span>Nombre del complejo</span>
+            <input v-model="form.nombreComplejo" maxlength="120" placeholder="Chacras Park" />
+          </label>
         </div>
         <label class="campo">
           <span>Descripción</span>
           <textarea v-model="form.descripcion" rows="4" maxlength="5000" />
         </label>
+      </section>
+
+      <!-- Amenities: primera vez que el front carga este dato. Existía desde
+           la migración 006 y ningún formulario lo escribía — la propiedad
+           quedaba con `amenities: []` para siempre salvo que entrara por el
+           seed o por importación CSV. -->
+      <section class="card stack">
+        <h2>Amenities</h2>
+        <div v-for="grupo in AMENITIES_AGRUPADOS" :key="grupo.categoria" class="grupo-amenities">
+          <h3>{{ grupo.categoria }}</h3>
+          <div class="checks">
+            <label v-for="op in grupo.items" :key="op.clave" class="check">
+              <input
+                type="checkbox"
+                :value="op.clave"
+                v-model="amenitiesSeleccionados"
+              />
+              <span>{{ op.etiqueta }}</span>
+            </label>
+          </div>
+        </div>
       </section>
 
       <p v-if="error" class="alert" role="alert">{{ error }}</p>
@@ -315,4 +400,26 @@ async function guardar() {
 .ajuste > .nota { margin: var(--s-sm) 0; }
 .ajuste > .grid { margin-top: var(--s-sm); }
 .acciones { padding-bottom: var(--s-xl); }
+
+.grupo-amenities + .grupo-amenities { margin-top: var(--s-md); }
+.grupo-amenities h3 {
+  margin: 0 0 var(--s-sm);
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s-xs) var(--s-md);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  font-size: 14px;
+  color: var(--ink);
+}
+.check input { accent-color: var(--accent); }
 </style>

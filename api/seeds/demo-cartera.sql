@@ -174,3 +174,19 @@ INSERT INTO oportunidad (id, tenant_id, persona_id, operacion_id, agente_id, ori
   ('0b100000-0000-4000-8000-000000000007','11111111-1111-4111-8111-111111111111','a1100000-0000-4000-8000-000000000007','c1000000-0000-4000-8000-000000000009','11000000-0000-4000-8000-000000000005','whatsapp',NULL,   'visita',    'alquiler',550000, 700000,'ARS','Familia con dos chicos. Le interesa la casa de Godoy Cruz por el patio.',now()-interval '4 days'),
   ('0b100000-0000-4000-8000-000000000008','11111111-1111-4111-8111-111111111111','a1100000-0000-4000-8000-000000000008','c1000000-0000-4000-8000-000000000004','11000000-0000-4000-8000-000000000006','web',NULL,        'nueva',     'venta',   200000, 260000,'USD','Consulta por el local de Guaymallén. Quiere poner una farmacia.',now()-interval '1 day')
 ON CONFLICT (id) DO NOTHING;
+
+
+-- ── Dónde están, no sólo qué son ─────────────────────────────────────────────
+-- Migración 028. Chacras de Coria es zona real de countries y barrios privados
+-- en el Gran Mendoza — de las que ya estaban sembradas ahí, se reparten en dos
+-- complejos ficticios para que el filtro por urbanización tenga algo real que
+-- mostrar y la búsqueda por nombre de complejo encuentre más de una unidad en
+-- el mismo lugar. El resto de la cartera queda `NULL`: es lo honesto para una
+-- propiedad de la que nunca se cargó el dato, no «barrio abierto» a la fuerza.
+UPDATE propiedad SET tipo_urbanizacion = 'country', nombre_complejo = 'Chacras Park'
+ WHERE id IN ('b1000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000003')
+   AND tenant_id = '11111111-1111-4111-8111-111111111111';
+
+UPDATE propiedad SET tipo_urbanizacion = 'barrio_privado', nombre_complejo = 'La Reserva de Chacras'
+ WHERE id IN ('b1000000-0000-4000-8000-000000000015', 'b0000000-0000-4000-8000-000000000013')
+   AND tenant_id = '11111111-1111-4111-8111-111111111111';
