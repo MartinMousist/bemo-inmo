@@ -886,11 +886,23 @@ secciones no es adaptar el producto**, y lo que queda es lo que más se nota:
 > Ninguno arranca de cero. Es la misma regla que ya ordena la etapa 15: **lo
 > caro ya está**, y por eso están en este orden y no en otro.
 
-### 16.1 · Precio y expensas en el filtro
+### 16.1 · Precio y expensas en el filtro ✅ CERRADA
 
-- [ ] Rango de precio, por moneda — ARS y USD no se comparan en el mismo campo,
-      misma regla que ya rige el resto del sistema.
-- [ ] Rango de expensas.
+- [x] Rango de precio **con su moneda**, que no es opcional: «de 100.000 a
+      150.000» no significa nada sin saber si son pesos o dólares, y en esta
+      cartera conviven un alquiler de ARS 380.000 con una venta de USD 118.000.
+- [x] Rango de expensas, con su propia moneda.
+- [x] El precio se busca en la operación que se está mirando —el mismo
+      `operacion` que ya filtra—. Sin eso, «venta hasta USD 150.000» traía una
+      casa de USD 400.000 porque su alquiler cuesta ARS 900.000, que
+      técnicamente es «menos de 150.000».
+- [x] Cuando hay rango de precio y no se eligió punta, **la pantalla lo dice**
+      en vez de adivinar: se busca en las dos y una casa puede entrar por el
+      precio de su alquiler.
+
+**Trampa de SQL que costó un test**: `A AND B OR C` agrupa como `(A AND B) OR C`.
+Sin el paréntesis alrededor de los dos `IS NULL`, un máximo sin mínimo
+desactivaba el filtro entero y traía la cartera completa.
 
 **Por qué**: es el filtro que más se usa en cualquier portal, y hoy Propiedades
 filtra por ambientes, amenities y una docena de atributos más — nunca por

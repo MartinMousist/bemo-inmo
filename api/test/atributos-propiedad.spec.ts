@@ -297,4 +297,76 @@ describe('Atributos de propiedad (migración 027)', () => {
       expect(r.body.total).toBe(0);
     });
   });
+
+  // ── Precio y expensas (16.1) ────────────────────────────────────────────────
+
+  describe('precio: el rango no significa nada sin su moneda', () => {
+    async function conOperacion(calle: string, op: Record<string, unknown>) {
+      const p = await crear(calle, { tipo: 'departamento' });
+      await http().post(`/v1/propiedades/${p.body.id}/operaciones`).set(...como(inmo))
+        .send({ estado: 'disponible', ...op }).expect(201);
+      return p.body.id;
+    }
+
+    beforeAll(async () => {
+      await conOperacion('Precio Barata', { tipo: 'venta', precio: 90000, moneda: 'USD' });
+      await conOperacion('Precio Media', { tipo: 'venta', precio: 140000, moneda: 'USD' });
+      await conOperacion('Precio Cara', { tipo: 'venta', precio: 400000, moneda: 'USD' });
+      // Misma cifra, OTRA moneda: es la que separa un filtro correcto de uno
+      // que suma peras con manzanas.
+      await conOperacion('Precio EnPesos', { tipo: 'venta', precio: 140000, moneda: 'ARS' });
+      await conOperacion('Precio ConExpensas', {
+        tipo: 'alquiler', precio: 500000, moneda: 'ARS',
+        expensas: 80000, expensasMoneda: 'ARS',
+      });
+    });
+
+    const calles = (r: { body: { items: Array<{ direccion: string }> } }) =>
+      r.body.items.map((p) => p.direccion);
+
+    it('el rango recorta por monto Y por moneda', async () => {
+      const r = await http()
+        .get('/v1/propiedades?operacion=venta&precioMoneda=USD&precioMin=100000&precioMax=200000')
+        .set(...como(inmo)).expect(200);
+      const c = calles(r);
+      expect(c.some((x) => x.includes('Precio Media'))).toBe(true);
+      expect(c.some((x) => x.includes('Precio Barata'))).toBe(false);
+      expect(c.some((x) => x.includes('Precio Cara'))).toBe(false);
+      // 140.000 pero en PESOS: mismo número, otra cosa.
+      expect(c.some((x) => x.includes('Precio EnPesos'))).toBe(false);
+    });
+
+    it('un máximo sin mínimo filtra igual', async () => {
+      // El paréntesis del `donde`: `A AND B OR C` agrupa como `(A AND B) OR C`,
+      // y sin él un máximo suelto desactivaba el filtro entero y traía todo.
+      const r = await http()
+        .get('/v1/propiedades?operacion=venta&precioMoneda=USD&precioMax=100000')
+        .set(...como(inmo)).expect(200);
+      const c = calles(r);
+      expect(c.some((x) => x.includes('Precio Barata'))).toBe(true);
+      expect(c.some((x) => x.includes('Precio Cara'))).toBe(false);
+    });
+
+    it('el precio se busca en la operación que se está mirando', async () => {
+      // Sin acotar por tipo, una casa entraría por el precio de su alquiler
+      // aunque su venta esté fuera de rango. Con `operacion=venta` no.
+      const r = await http()
+        .get('/v1/propiedades?operacion=venta&precioMoneda=ARS&precioMax=600000')
+        .set(...como(inmo)).expect(200);
+      expect(calles(r).some((x) => x.includes('Precio ConExpensas'))).toBe(false);
+    });
+
+    it('las expensas filtran por su propio rango y su propia moneda', async () => {
+      const r = await http()
+        .get('/v1/propiedades?expensasMoneda=ARS&expensasMin=50000&expensasMax=100000')
+        .set(...como(inmo)).expect(200);
+      expect(calles(r).some((x) => x.includes('Precio ConExpensas'))).toBe(true);
+      expect(calles(r).some((x) => x.includes('Precio Media'))).toBe(false);
+    });
+
+    it('una moneda que no existe es 400, no un filtro que no filtra', async () => {
+      await http().get('/v1/propiedades?precioMoneda=EUR&precioMin=1')
+        .set(...como(inmo)).expect(400);
+    });
+  });
 });

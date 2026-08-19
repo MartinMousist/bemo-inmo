@@ -243,6 +243,26 @@ export class FiltroPropiedadesDto extends FiltroConAgenteDto {
   @IsIn(URBANIZACIONES as unknown as string[], { each: true })
   tipoUrbanizacion?: string[];
 
+  // ── Precio y expensas ────────────────────────────────────────────────────
+  //
+  // **El rango de precio viaja con su moneda, y no es opcional cuando hay
+  // rango.** «De 100.000 a 150.000» no significa nada sin saber si son pesos o
+  // dólares: en esta cartera conviven un departamento de ARS 380.000 por mes y
+  // uno de USD 118.000 de venta, y un rango sin moneda los mezcla en la misma
+  // lista. Es la misma regla que ya rige el resto del sistema —«ningún monto
+  // sin su moneda»— aplicada al filtro.
+  //
+  // El precio vive en `operacion`, no en `propiedad`, y una propiedad puede
+  // tener DOS. El filtro se aplica sobre la operación que se está mirando —el
+  // mismo `operacion` que ya filtra— o compararía el precio de la otra punta.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) precioMin?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) precioMax?: number;
+  @IsOptional() @IsIn(MONEDAS as unknown as string[]) precioMoneda?: string;
+
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) expensasMin?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) expensasMax?: number;
+  @IsOptional() @IsIn(MONEDAS as unknown as string[]) expensasMoneda?: string;
+
   /**
    * «Tiene TODOS estos» (`@>` en el service), no «tiene alguno». Es la
    * pregunta que se hace quien filtra: pedir pileta y seguridad y recibir una

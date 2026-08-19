@@ -200,6 +200,8 @@ export class PropiedadesService {
         f.calefaccion ?? null,
         f.amenities ?? null,
         f.tipoUrbanizacion ?? null,
+        f.precioMin ?? null, f.precioMax ?? null, f.precioMoneda ?? null,
+        f.expensasMin ?? null, f.expensasMax ?? null, f.expensasMoneda ?? null,
       ];
 
       // El MISMO `donde` para el conteo y para la página. Si el filtro entrara
@@ -240,7 +242,31 @@ export class PropiedadesService {
           AND ($27::text[] IS NULL OR p.calefaccion = ANY($27))
           -- @> y no &&: "tiene TODOS estos amenities", no "tiene alguno".
           AND ($28::text[] IS NULL OR p.amenities @> $28)
-          AND ($29::text[] IS NULL OR p.tipo_urbanizacion = ANY($29))`;
+          AND ($29::text[] IS NULL OR p.tipo_urbanizacion = ANY($29))
+
+          -- Precio y expensas viven en \`operacion\`, no en \`propiedad\`, y una
+          -- propiedad puede tener DOS. El EXISTS se acota con el MISMO \`tipo\`
+          -- que ya filtra el listado ($3): sin eso, buscar «venta hasta USD
+          -- 150.000» traería una casa de USD 400.000 porque su alquiler cuesta
+          -- ARS 900.000, que técnicamente es «menos de 150.000».
+          --
+          -- El paréntesis alrededor de los dos IS NULL no es decorativo:
+          -- \`A AND B OR C\` en SQL agrupa como \`(A AND B) OR C\`, y sin él un
+          -- máximo sin mínimo desactivaba el filtro entero.
+          AND (($30::numeric IS NULL AND $31::numeric IS NULL) OR EXISTS (
+                SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id
+                  AND ($3::text IS NULL OR o.tipo = $3)
+                  AND ($5::boolean OR o.estado <> 'cerrada')
+                  AND ($32::text IS NULL OR o.moneda = $32)
+                  AND ($30::numeric IS NULL OR o.precio >= $30)
+                  AND ($31::numeric IS NULL OR o.precio <= $31)))
+          AND (($33::numeric IS NULL AND $34::numeric IS NULL) OR EXISTS (
+                SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id
+                  AND ($3::text IS NULL OR o.tipo = $3)
+                  AND ($5::boolean OR o.estado <> 'cerrada')
+                  AND ($35::text IS NULL OR o.expensas_moneda = $35)
+                  AND ($33::numeric IS NULL OR o.expensas >= $33)
+                  AND ($34::numeric IS NULL OR o.expensas <= $34)))`;
 
       const { rows: conteo } = await ej.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM propiedad p ${donde}`,
@@ -269,7 +295,7 @@ export class PropiedadesService {
            f.orden,
            f.dir,
          )}
-         LIMIT $30 OFFSET $31`,
+         LIMIT $36 OFFSET $37`,
         [...params, f.porPagina, offset(f)],
       );
 

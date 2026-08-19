@@ -235,6 +235,10 @@ const { valores: filtros } = filtrosRecordados('propiedades', {
   supCubiertaMin: '', supCubiertaMax: '',
   orientacion: '', disposicion: '', calefaccion: '', amenities: '',
   tipoUrbanizacion: '',
+  // El precio va SIEMPRE con su moneda: un rango sin moneda mezcla un alquiler
+  // de ARS 380.000 con una venta de USD 118.000 en la misma lista.
+  precioMin: '', precioMax: '', precioMoneda: 'USD',
+  expensasMin: '', expensasMax: '', expensasMoneda: 'ARS',
 });
 
 /** Las claves de rango/multi-select, en el orden en que se mandan a la API. */
@@ -243,7 +247,14 @@ const CAMPOS_RANGO = [
   'banosMin', 'banosMax', 'toilettesMin', 'toilettesMax',
   'cocherasMin', 'cocherasMax', 'plantasMin', 'plantasMax', 'antiguedadMax',
   'supTotalMin', 'supTotalMax', 'supCubiertaMin', 'supCubiertaMax',
+  'precioMin', 'precioMax', 'expensasMin', 'expensasMax',
 ] as const;
+
+// `precioMoneda` y `expensasMoneda` NO entran en ninguna de las dos listas de
+// arriba. Tienen un valor por defecto —USD para precio, ARS para expensas, que
+// es como se cotiza cada cosa en esta plaza—, así que «tiene valor» no
+// significa «está filtrando»: sin un rango cargado, la moneda sola no recorta
+// nada. Incluirlas dejaría el chip «activos» encendido para siempre.
 const CAMPOS_MULTI = [
   'orientacion', 'disposicion', 'calefaccion', 'amenities', 'tipoUrbanizacion',
 ] as const;
@@ -278,6 +289,9 @@ function alternarEnCsv(campo: typeof CAMPOS_MULTI[number], clave: string): void 
 function limpiarMasFiltros(): void {
   for (const k of CAMPOS_RANGO) filtros.value[k] = '';
   for (const k of CAMPOS_MULTI) filtros.value[k] = '';
+  // Las monedas vuelven a su default, no a vacío: `''` no es una moneda.
+  filtros.value.precioMoneda = 'USD';
+  filtros.value.expensasMoneda = 'ARS';
 }
 
 async function cargar() {
@@ -298,6 +312,14 @@ async function cargar() {
     }
     for (const k of CAMPOS_MULTI) {
       if (filtros.value[k] !== '') params.set(k, filtros.value[k]);
+    }
+    // La moneda acompaña a su rango: sola no filtra nada y mandarla sería
+    // ensuciar la URL con un parámetro que no cambia el resultado.
+    if (filtros.value.precioMin || filtros.value.precioMax) {
+      params.set('precioMoneda', filtros.value.precioMoneda);
+    }
+    if (filtros.value.expensasMin || filtros.value.expensasMax) {
+      params.set('expensasMoneda', filtros.value.expensasMoneda);
     }
 
     const r = await api<{ items: Propiedad[]; total: number; paginas: number }>(
@@ -428,6 +450,37 @@ onMounted(cargar);
             <input v-model="filtros.antiguedadMax" inputmode="numeric" placeholder="Años" />
           </label>
         </div>
+
+        <!-- Precio y expensas van aparte de la grilla de arriba porque llevan
+             un control más: la moneda. Un rango de precio sin moneda mezcla un
+             alquiler de ARS 380.000 con una venta de USD 118.000. -->
+        <div class="grid-rangos">
+          <div class="rango con-moneda">
+            <span>Precio</span>
+            <select v-model="filtros.precioMoneda" aria-label="Moneda del precio">
+              <option value="USD">USD</option>
+              <option value="ARS">ARS</option>
+            </select>
+            <input v-model="filtros.precioMin" inputmode="decimal" placeholder="Desde" />
+            <input v-model="filtros.precioMax" inputmode="decimal" placeholder="Hasta" />
+          </div>
+          <div class="rango con-moneda">
+            <span>Expensas</span>
+            <select v-model="filtros.expensasMoneda" aria-label="Moneda de las expensas">
+              <option value="ARS">ARS</option>
+              <option value="USD">USD</option>
+            </select>
+            <input v-model="filtros.expensasMin" inputmode="decimal" placeholder="Desde" />
+            <input v-model="filtros.expensasMax" inputmode="decimal" placeholder="Hasta" />
+          </div>
+        </div>
+
+        <!-- Se dice, en vez de adivinar: el precio vive en la operación, y una
+             propiedad puede estar en venta Y en alquiler a la vez. -->
+        <p v-if="(filtros.precioMin || filtros.precioMax) && !filtroOperacion" class="nota-precio">
+          Estás filtrando por precio sin elegir Venta o Alquiler: se busca en las dos
+          puntas, así que una casa puede entrar por el precio de su alquiler.
+        </p>
 
         <div class="grupo-multi">
           <h3>Orientación</h3>
@@ -854,5 +907,23 @@ button.hon-total:focus-visible { outline: 2px solid var(--acento); outline-offse
 }
 .chip-check input { accent-color: var(--accent); }
 .limpiar-mas { align-self: flex-start; }
+
+/* Cuatro columnas: la etiqueta ocupa la fila, después moneda + desde + hasta. */
+.rango.con-moneda { grid-template-columns: auto 1fr 1fr; }
+.rango.con-moneda select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px var(--s-xs);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+}
+.nota-precio {
+  margin: 0;
+  font-size: 12px;
+  color: var(--warning);
+  max-width: 70ch;
+}
 
 </style>
