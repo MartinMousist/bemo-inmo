@@ -153,6 +153,37 @@ function parteDelTotal(o: Operacion, b: Operacion['beneficiarios'][number]): num
   return total ? (b.monto / total) * 100 : 0;
 }
 
+/**
+ * La historia comercial de una operación, cargada BAJO DEMANDA.
+ *
+ * Una ficha tiene hasta dos operaciones y su historia son dos consultas más
+ * cada una. Traerlas siempre sería pagar cuatro consultas por una pantalla
+ * donde el bloque suele quedar cerrado. Se carga al abrirlo, una sola vez.
+ */
+interface Historial {
+  precios: Array<{ precio: number | null; moneda: string; desde: string }>;
+  consultas: Array<{ mes: string; total: number }>;
+}
+const historiales = ref<Record<string, Historial | 'cargando' | undefined>>({});
+
+async function abrirHistorial(operacionId: string) {
+  if (historiales.value[operacionId]) return;
+  historiales.value[operacionId] = 'cargando';
+  try {
+    historiales.value[operacionId] =
+      await api<Historial>(`/propiedades/${id}/operaciones/${operacionId}/historial`);
+  } catch {
+    // Sin `error.value`: que falle la historia no puede tapar la ficha entera.
+    // El bloque muestra que no se pudo y el resto sigue funcionando.
+    historiales.value[operacionId] = { precios: [], consultas: [] };
+  }
+}
+
+/** La primera fila del historial es el precio de arranque, no un «cambio». */
+function cambiosDePrecio(h: Historial): number {
+  return Math.max(0, h.precios.length - 1);
+}
+
 /** ¿Queda alguna operación cuyo reparto todavía no se hizo? */
 const faltaRepartir = computed(
   () => (p.value?.operaciones ?? []).some((o) => !o.beneficiarios.length),
@@ -343,6 +374,60 @@ onMounted(cargar);
                     <StatusChip :texto="b.estado" :tono="tonoComision(b.estado)" />
                   </li>
                 </ul>
+
+                <!-- La historia comercial. Cerrada por default y cargada al
+                     abrirla: es la pregunta de «¿se quemó en el mercado?», que
+                     no se hace en cada visita a la ficha. -->
+                <details class="historia" @toggle="abrirHistorial(o.id)">
+                  <summary>Historial de precio y consultas</summary>
+
+                  <p v-if="historiales[o.id] === 'cargando'" class="vacio">Cargando…</p>
+
+                  <template v-else-if="historiales[o.id] && historiales[o.id] !== 'cargando'">
+                    <div class="hist-bloque">
+                      <h4>Precio</h4>
+                      <ol class="linea-precio">
+                        <li v-for="(x, i) in (historiales[o.id] as Historial).precios" :key="i">
+                          <span class="mono cuando">{{ fecha(x.desde) }}</span>
+                          <span class="mono valor">
+                            {{ x.precio === null ? 'Sin precio' : money(x.precio, x.moneda) }}
+                          </span>
+                          <span v-if="i === 0" class="et-inicial">inicial</span>
+                        </li>
+                      </ol>
+                      <!-- Se dice con todas las letras: «un solo registro» no
+                           es «nunca cambió de precio». Antes de la migración 030
+                           el valor anterior se pisaba, y afirmar que no hubo
+                           cambios sería inventar una historia que no tenemos. -->
+                      <p v-if="cambiosDePrecio(historiales[o.id] as Historial) === 0" class="nota">
+                        Sin cambios registrados. El seguimiento arrancó con esta ficha:
+                        lo anterior no quedaba guardado.
+                      </p>
+                    </div>
+
+                    <div class="hist-bloque">
+                      <h4>Consultas por mes</h4>
+                      <ul v-if="(historiales[o.id] as Historial).consultas.length" class="consultas">
+                        <li v-for="c in (historiales[o.id] as Historial).consultas" :key="c.mes">
+                          <span class="mono cuando">{{ c.mes }}</span>
+                          <span class="barra" aria-hidden="true">
+                            <i :style="{ width: Math.min(100, c.total * 20) + '%' }" />
+                          </span>
+                          <span class="mono">{{ c.total }}</span>
+                        </li>
+                      </ul>
+                      <p v-else class="nota">
+                        Ninguna consulta entró por esta operación.
+                      </p>
+                      <!-- Honestidad: no hay portal propio, así que no se puede
+                           contar quién MIRÓ el aviso. Se cuenta el lead real. -->
+                      <p class="nota">
+                        Son los leads que entraron, no visitas al aviso: el sistema no
+                        tiene portal propio y no puede saber quién lo miró.
+                      </p>
+                    </div>
+                  </template>
+                </details>
               </li>
             </ul>
             <p v-else class="vacio">
@@ -570,6 +655,29 @@ onMounted(cargar);
 .datos dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-2); }
 .datos dd { margin: 2px 0 0; color: var(--ink); }
 .desc { margin: 0; color: var(--ink-2); font-size: 13px; white-space: pre-wrap; }
+.historia { margin-top: var(--s-sm); }
+.historia > summary {
+  cursor: pointer; font-size: 12px; color: var(--accent-ink); list-style: none;
+}
+.historia > summary::-webkit-details-marker { display: none; }
+.historia > summary::before { content: '▸ '; }
+.historia[open] > summary::before { content: '▾ '; }
+.hist-bloque { margin-top: var(--s-sm); }
+.hist-bloque h4 {
+  margin: 0 0 var(--s-2xs); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted-2); font-weight: 500;
+}
+.linea-precio, .consultas { list-style: none; margin: 0; padding: 0; }
+.linea-precio li, .consultas li {
+  display: flex; align-items: center; gap: var(--s-sm); font-size: 13px;
+  padding: 2px 0;
+}
+.cuando { color: var(--muted); font-size: 12px; min-width: 9ch; }
+.valor { color: var(--ink); }
+.et-inicial { font-size: 10px; color: var(--muted-2); text-transform: uppercase; }
+.barra { flex: 1; max-width: 160px; height: 6px; background: var(--surface-2); border-radius: 999px; }
+.barra i { display: block; height: 100%; background: var(--acento); border-radius: 999px; }
+
 .urbanizacion {
   margin: 0;
   font-size: 13px;

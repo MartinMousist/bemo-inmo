@@ -964,14 +964,27 @@ junta varias respuestas de `GET /propiedades/:id`, que ya trae todo lo que la
 **Hecho cuando**: se eligen tres propiedades desde el listado y se ven en
 columnas, sin volver a cargar cada ficha por separado.
 
-### 16.4 · Historial de precio y de consultas por publicación
+### 16.4 · Historial de precio y de consultas por publicación ✅ CERRADA
 
-- [ ] `precio_historial`: cada cambio de precio de una operación deja su propia
-      fila, con fecha. Sin esto, "bajó el precio dos veces en dos meses" es una
-      pregunta que hoy no se puede contestar.
-- [ ] Consultas por operación en el tiempo — **no es un contador nuevo**, es
-      agrupar por semana lo que `oportunidad.operacion_id` ya guarda desde la
-      etapa 3. Así se ve si una propiedad lleva seis meses publicada sin que
+- [x] `operacion_precio` (migración 030), escrita por **trigger** y no por el
+      servicio: el precio se toca desde la ficha, la edición, el importador CSV
+      y el seed, y registrarlo en la aplicación deja tres caminos afuera.
+- [x] Guardar el mismo precio NO ensucia la historia — si no, «bajó tres veces»
+      sería indistinguible de «apretaron Guardar tres veces». Cambiar la moneda
+      SÍ cuenta: USD 85.000 y ARS 85.000 no son el mismo precio.
+- [x] Las operaciones que ya existían arrancan su historia con su precio actual.
+      Sin ese backfill se leerían como «nunca cambió de precio», que es una
+      afirmación que no podemos hacer: lo cierto es que antes no se registraba,
+      y la pantalla lo dice con esas palabras.
+- [x] **No guarda quién lo cambió**, y está documentado por qué: el contexto de
+      sesión lleva sólo el tenant, así que un trigger no puede saberlo. Una
+      columna que siempre quedaría en NULL es peor que no tenerla.
+- [x] Consultas por operación agrupadas por mes — **no es un contador nuevo**,
+      es lo que `oportunidad.operacion_id` ya guarda desde la etapa 3. La
+      pantalla aclara que son **leads que entraron, no visitas al aviso**: sin
+      portal propio el sistema no puede saber quién lo miró, y un contador de
+      «vistas» inventado sería un número que nadie puede verificar en una
+      pantalla que existe para decidir si bajar un precio. Así se ve si una propiedad lleva seis meses publicada sin que
       nadie pregunte, sin inventar una métrica de "vistas" que este sistema no
       puede medir de verdad: no hay portal público propio (etapa 6 lo descarta
       a propósito), así que lo único real que se puede contar es el lead que

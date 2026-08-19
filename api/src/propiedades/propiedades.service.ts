@@ -310,6 +310,66 @@ export class PropiedadesService {
     });
   }
 
+  /**
+   * La historia comercial de una operación: qué precio tuvo y cuánto se la
+   * consultó.
+   *
+   * ── Las «consultas» son leads reales, no vistas ──
+   *
+   * No hay un contador de visitas y no se inventa uno: este sistema **no tiene
+   * portal público propio** —la etapa 6 lo descarta a propósito— así que no
+   * puede ver quién miró un aviso en zonaprop. Lo único que sabe de verdad es
+   * el lead que efectivamente entró, y eso ya está en `oportunidad`.
+   *
+   * Un contador de «vistas» inventado sería un número que nadie puede
+   * verificar en una pantalla que existe para decidir si bajar un precio.
+   */
+  async historial(
+    tenantId: string,
+    propiedadId: string,
+    operacionId: string,
+  ): Promise<{
+    precios: Array<{ precio: number | null; moneda: string; desde: string }>;
+    consultas: Array<{ mes: string; total: number }>;
+  }> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      // Se comprueba que la operación sea DE esta propiedad: sin esto, un id
+      // de operación ajena devolvería su historia con sólo acertar el uuid de
+      // una propiedad propia. RLS corta entre inmobiliarias, no adentro de una.
+      const { rows: existe } = await ej.query(
+        'SELECT 1 FROM operacion WHERE id = $1 AND propiedad_id = $2',
+        [operacionId, propiedadId],
+      );
+      if (!existe.length) throw AppError.notFound('No se encontró esa operación.');
+
+      const { rows: precios } = await ej.query<{
+        precio: string | null; moneda: string; desde: Date;
+      }>(
+        `SELECT precio, moneda, desde FROM operacion_precio
+          WHERE operacion_id = $1 ORDER BY desde`,
+        [operacionId],
+      );
+
+      const { rows: consultas } = await ej.query<{ mes: string; total: string }>(
+        `SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS mes,
+                count(*)::text AS total
+           FROM oportunidad
+          WHERE operacion_id = $1
+          GROUP BY 1 ORDER BY 1`,
+        [operacionId],
+      );
+
+      return {
+        precios: precios.map((p) => ({
+          precio: p.precio === null ? null : Number(p.precio),
+          moneda: p.moneda,
+          desde: p.desde.toISOString(),
+        })),
+        consultas: consultas.map((c) => ({ mes: c.mes, total: Number(c.total) })),
+      };
+    });
+  }
+
   async obtener(tenantId: string, id: string): Promise<Propiedad> {
     return this.db.withTenant(tenantId, (ej) => this.leer(ej, id));
   }

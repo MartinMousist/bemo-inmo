@@ -146,6 +146,22 @@ export class PropiedadesController {
    *
    * Mandar `{}` limpia el override y la operación vuelve a heredar.
    */
+  /**
+   * La historia comercial de una operación: precios y consultas.
+   *
+   * Sin `@Roles`: es la misma información que un asesor ya ve abriendo la
+   * ficha y mirando la operación, y es justo la que necesita para saber si
+   * conviene sugerir una baja de precio.
+   */
+  @Get(':id/operaciones/:operacionId/historial')
+  historial(
+    @ActorActual() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('operacionId', ParseUUIDPipe) operacionId: string,
+  ) {
+    return this.propiedades.historial(actor.tenantId, id, operacionId);
+  }
+
   @Patch(':id/operaciones/:operacionId/comisiones')
   @Roles('owner', 'admin')
   editarComisiones(
