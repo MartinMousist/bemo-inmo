@@ -278,7 +278,10 @@ onMounted(() => { void cargar(); void cargarConteos(); });
       <div v-else-if="items.length" class="table-wrap">
         <table>
           <thead>
-            <tr><th>Nombre</th><th>Documento</th><th>Contacto</th><th>Roles</th></tr>
+            <tr>
+              <th>Nombre</th><th>Documento</th><th>Contacto</th><th>Roles</th>
+              <th class="der"><span class="visually-hidden">Cuenta corriente</span></th>
+            </tr>
           </thead>
           <tbody>
             <tr v-for="p in items" :key="p.id">
@@ -296,6 +299,16 @@ onMounted(() => { void cargar(); void cargarConteos(); });
                   <StatusChip v-for="r in p.roles" :key="r" :texto="ETIQUETA_ROL[r] ?? r" tono="acento" />
                   <span v-if="!p.roles.length" class="muted">—</span>
                 </div>
+              </td>
+              <!-- Sólo a quien tiene una cuenta que mirar. Un enlace que lleva
+                   a «esta persona no tiene cuenta corriente» es un viaje en
+                   vano, y la lista ya sabe los roles. -->
+              <td class="der">
+                <RouterLink
+                  v-if="p.roles.includes('inquilino') || p.roles.includes('propietario')"
+                  class="btn enlace sm"
+                  :to="`/personas/${p.id}/cuenta`"
+                >Cuenta</RouterLink>
               </td>
             </tr>
           </tbody>

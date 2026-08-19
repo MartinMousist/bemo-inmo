@@ -11,12 +11,30 @@ import {
   Query,
 } from '@nestjs/common';
 import { PersonasService } from './personas.service';
+import { CuentaCorrienteService } from './cuenta-corriente.service';
 import { CrearPersonaDto, EditarPersonaDto, ListarPersonasDto } from './personas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
 @Controller('personas')
 export class PersonasController {
-  constructor(private readonly personas: PersonasService) {}
+  constructor(
+    private readonly personas: PersonasService,
+    private readonly cuenta: CuentaCorrienteService,
+  ) {}
+
+  /**
+   * La cuenta corriente de una persona.
+   *
+   * Con `@Roles`, a diferencia del resto de esta pantalla: acá se ve **cuánto
+   * debe alguien y cuánto se le debe**, que es la misma clase de dato que ya
+   * recorta Liquidaciones y Caja. Un asesor no necesita el saldo de un
+   * propietario para mostrar una propiedad.
+   */
+  @Get(':id/cuenta-corriente')
+  @Roles('owner', 'admin', 'contable')
+  cuentaCorriente(@ActorActual() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.cuenta.leer(actor.tenantId, id);
+  }
 
   @Get()
   listar(@ActorActual() actor: Actor, @Query() p: ListarPersonasDto) {

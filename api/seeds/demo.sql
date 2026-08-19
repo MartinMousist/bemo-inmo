@@ -679,6 +679,19 @@ FROM periodo_alquiler p
 WHERE p.estado = 'pagado'
   AND p.tenant_id IN ('11111111-1111-4111-8111-111111111111',
                       '22222222-2222-4222-8222-222222222222')
+  -- La idempotencia va por el PERÍODO, no por el id derivado.
+  --
+  -- El `ON CONFLICT (id)` no alcanzaba: el id sale de `md5(p.id || 'cobro')`,
+  -- así que depende del id del período. El día que esos ids cambiaron —la
+  -- migración a UUID v4 bien formados— el hash dio otra cosa, el conflicto no
+  -- se detectó y la corrida siguiente insertó un SEGUNDO cobro por cada cuota
+  -- ya paga: 207 de ellos, cada uno por el total. Ningún test lo vio; apareció
+  -- construyendo la cuenta corriente, que mostró saldos negativos.
+  --
+  -- Lo que se quiere decir es «esta cuota ya tiene su cobro», y eso es lo que
+  -- ahora se pregunta.
+  AND NOT EXISTS (
+    SELECT 1 FROM cobro c WHERE c.periodo_id = p.id AND c.imputacion = 'alquiler')
 ON CONFLICT (id) DO NOTHING;
 
 -- El pago parcial: la mitad justa, para que el saldo se vea distinto del total.
@@ -697,6 +710,9 @@ FROM periodo_alquiler p
 WHERE p.estado = 'parcial'
   AND p.tenant_id IN ('11111111-1111-4111-8111-111111111111',
                       '22222222-2222-4222-8222-222222222222')
+  -- Mismo motivo que arriba.
+  AND NOT EXISTS (
+    SELECT 1 FROM cobro c WHERE c.periodo_id = p.id AND c.imputacion = 'alquiler')
 ON CONFLICT (id) DO NOTHING;
 
 

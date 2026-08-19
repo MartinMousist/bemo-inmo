@@ -14,6 +14,7 @@ import { EquipoController } from './equipo/equipo.controller';
 import { EquipoService } from './equipo/equipo.service';
 import { PersonasController } from './personas/personas.controller';
 import { PersonasService } from './personas/personas.service';
+import { CuentaCorrienteService } from './personas/cuenta-corriente.service';
 import { RolesPersonaController } from './personas/roles.controller';
 import { InquilinosService } from './personas/inquilinos.service';
 import { PropietariosService } from './personas/propietarios.service';
@@ -184,6 +185,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     CuentaService,
     EquipoService,
     PersonasService,
+    CuentaCorrienteService,
     InquilinosService,
     PropietariosService,
     PropiedadesService,

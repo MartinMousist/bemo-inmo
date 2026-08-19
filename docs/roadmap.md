@@ -828,12 +828,29 @@ después no se puede explicar de dónde salió ese número.
 **Lo caro ya está**: la ingesta del BCRA funciona, es idempotente y tiene su
 cron.
 
-### 15.6 · Cuenta corriente por persona
+### 15.6 · Cuenta corriente por persona ✅ CERRADA
 
-- [ ] «¿Cuánto me debe este inquilino?» y «¿cuánto le debo a este propietario?»,
-      contestadas de un vistazo y con su detalle.
-- [ ] Derivada de cuotas, cobros, gastos y liquidaciones. **No es una tabla
-      nueva**: es la vista que suma lo que ya está.
+- [x] Las dos preguntas contestadas de un vistazo, con su detalle: debe y haber
+      intercalados por fecha, cada cuota con su propiedad y cada pago con su
+      comprobante.
+- [x] Derivada, sin tabla nueva. Una tabla de saldos sería un tercer lugar donde
+      vive el mismo número, y el día que alguien registre un cobro sin
+      actualizarla la pantalla mentiría con total convicción.
+- [x] **Los dos lados NO se netean.** Quien alquila una unidad y es dueño de
+      otra debe plata Y se le debe plata: compensarlas inventaría un acuerdo que
+      nadie firmó, y entre plata propia y plata de terceros.
+- [x] Quien no tiene el rol muestra `null`, no un saldo cero: un cero dice «está
+      al día», que no es lo mismo que «acá no corresponde la pregunta».
+- [x] Sólo cuenta lo YA VENCIDO. Un contrato largo emite cuotas por adelantado y
+      sumarlas todas haría que un inquilino nuevo aparezca debiendo una fortuna.
+- [x] Del propietario, sólo liquidaciones **cerradas**: un borrador se puede
+      rearmar, y prometerle una plata que puede cambiar es peor que no mostrarla.
+
+**Lo que encontró apenas se encendió**: 207 cuotas de la demo tenían el cobro
+DUPLICADO y el saldo daba negativo. La causa era del seed —el id del cobro salía
+de `md5(id_del_período)`, y al migrar los períodos a UUID v4 el `ON CONFLICT`
+dejó de reconocerlos—. Ningún test lo veía. Ahora la idempotencia pregunta por
+el período, que es lo que se quería decir.
 
 ---
 

@@ -45,6 +45,13 @@ const router = createRouter({
     { path: '/propiedades/:id', component: () => import('./paginas/PropiedadDetallePage.vue') },
     { path: '/personas', component: () => import('./paginas/PersonasPage.vue') },
     { path: '/personas/nueva', component: () => import('./paginas/PersonaFormPage.vue') },
+    // DESPUÉS del literal `/personas/nueva`, que es la lección que ya dejaron
+    // escrita venta y alquiler: con `/:id` declarado antes, «nueva» entraría
+    // como id y la pantalla pediría una persona que no existe.
+    {
+      path: '/personas/:id/cuenta',
+      component: () => import('./paginas/CuentaCorrientePage.vue'),
+    },
     // Las tres pantallas de personas por rol. Son listas, no fichas: si algún
     // día llevan `/:id`, va DECLARADO DESPUÉS del literal, que es la lección
     // que venta y alquiler ya dejaron escrita veinte líneas más arriba.
