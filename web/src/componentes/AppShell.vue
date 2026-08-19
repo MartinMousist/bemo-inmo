@@ -72,6 +72,9 @@ const grupos = [
     titulo: 'Comercial',
     items: [
       { a: '/leads', icono: 'embudo', texto: 'Leads', modulo: 'leads' },
+      // Con el módulo Leads: una visita cuelga de una oportunidad, así que en
+      // una cuenta sin embudo la agenda estaría siempre vacía.
+      { a: '/agenda', icono: 'calendario', texto: 'Agenda', modulo: 'leads' },
       { a: '/reservas', icono: 'sena', texto: 'Reservas', modulo: 'reservas' },
       { a: '/ventas', icono: 'grafico', texto: 'Ventas', modulo: 'ventas' },
       { a: '/publicaciones', icono: 'mapa', texto: 'Publicaciones', modulo: 'publicaciones' },

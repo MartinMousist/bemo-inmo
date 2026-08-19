@@ -249,6 +249,73 @@ export class OportunidadesService {
     });
   }
 
+  /**
+   * La agenda: qué visitas hay por delante.
+   *
+   * ── Por qué acá y no en una pantalla nueva de «turnos» ──
+   *
+   * Una visita YA es una fila de `visita`, colgada de una oportunidad, con su
+   * agente y su estado. Agendarla y editarla funcionan desde la ficha del lead
+   * desde la etapa 3. Lo único que faltaba era poder preguntar «¿qué tengo esta
+   * semana?», y eso es una consulta, no una entidad nueva.
+   *
+   * Sólo `agendada`: una visita realizada, cancelada o a la que el interesado
+   * no fue ya no es agenda, es historia — y la historia vive en la ficha del
+   * lead, que es donde se la busca.
+   */
+  async agenda(
+    tenantId: string,
+    filtro: { agenteId?: string; dias?: number },
+  ): Promise<Array<{
+    id: string;
+    fechaHora: string;
+    oportunidadId: string;
+    persona: string | null;
+    telefono: string | null;
+    propiedad: string | null;
+    agente: string | null;
+    agenteId: string | null;
+  }>> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{
+        id: string; fecha_hora: Date; oportunidad_id: string;
+        persona: string | null; telefono: string | null;
+        propiedad: string | null; agente: string | null; agente_id: string | null;
+      }>(
+        `SELECT v.id, v.fecha_hora, v.oportunidad_id,
+                nullif(trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')), '') AS persona,
+                pe.telefono,
+                nullif(trim(pr.calle || ' ' || coalesce(pr.numero,'')), '') AS propiedad,
+                u.nombre AS agente, v.agente_id
+           FROM visita v
+           JOIN oportunidad o ON o.id = v.oportunidad_id
+           LEFT JOIN persona pe ON pe.id = o.persona_id
+           LEFT JOIN operacion op ON op.id = v.operacion_id
+           LEFT JOIN propiedad pr ON pr.id = op.propiedad_id
+           LEFT JOIN usuario u ON u.id = v.agente_id
+          WHERE v.estado = 'agendada'
+            AND v.fecha_hora >= date_trunc('day', now())
+            AND v.fecha_hora < date_trunc('day', now()) + ($2::int || ' days')::interval
+            AND ($1::uuid IS NULL OR v.agente_id = $1)
+          ORDER BY v.fecha_hora`,
+        [filtro.agenteId ?? null, filtro.dias ?? 14],
+      );
+
+      return rows.map((r) => ({
+        id: r.id,
+        // `timestamptz`, no `date`: acá sí se puede pasar por `Date` — la
+        // trampa del día corrido es de las columnas `date`, que no llevan zona.
+        fechaHora: r.fecha_hora.toISOString(),
+        oportunidadId: r.oportunidad_id,
+        persona: r.persona,
+        telefono: r.telefono,
+        propiedad: r.propiedad,
+        agente: r.agente,
+        agenteId: r.agente_id,
+      }));
+    });
+  }
+
   async editarVisita(
     tenantId: string,
     oportunidadId: string,

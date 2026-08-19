@@ -1,11 +1,13 @@
 import { Type } from 'class-transformer';
 import {
-  IsIn,
   IsISO8601,
+  IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -91,4 +93,18 @@ export class CrearReservaDto {
 export class EditarReservaDto {
   @IsIn(['activa', 'convertida', 'caida', 'vencida']) estado!: string;
   @IsOptional() @IsString() @MaxLength(2000) notas?: string;
+}
+
+/**
+ * El filtro de la agenda.
+ *
+ * `agenteId` acepta el centinela `'yo'` además de un uuid — es el mismo que ya
+ * usan los listados por agente, y por eso NO lleva `@IsUUID()`: validarlo como
+ * uuid obligaría a inventar otra forma de decir «lo mío».
+ */
+export class AgendaDto {
+  @IsOptional() @IsString() @MaxLength(40) agenteId?: string;
+
+  /** Cuántos días hacia adelante. Dos semanas por defecto. */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(90) dias?: number;
 }

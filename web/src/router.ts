@@ -82,6 +82,7 @@ const router = createRouter({
     { path: '/oportunidades', redirect: '/leads' },
     { path: '/oportunidades/nueva', redirect: '/leads/nueva' },
     { path: '/reservas', component: () => import('./paginas/ReservasPage.vue') },
+    { path: '/agenda', component: () => import('./paginas/AgendaPage.vue') },
     { path: '/vencimientos', component: () => import('./paginas/VencimientosPage.vue') },
     { path: '/contratos', component: () => import('./paginas/ContratosPage.vue') },
     { path: '/contratos/nuevo', component: () => import('./paginas/ContratoFormPage.vue') },

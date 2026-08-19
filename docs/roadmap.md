@@ -1061,11 +1061,32 @@ nunca se movió desde que se cargó.
 **Hecho cuando**: la ficha de una operación muestra su curva de precio y sus
 consultas por mes, con las dos series derivadas de datos que ya existen.
 
-### 16.5 · Reserva de turnos para visitas
+### 16.5 · Reserva de turnos para visitas ✅ CERRADA
 
-- [ ] Turno con fecha y hora, atado a una oportunidad y a un asesor. Se ve en
-      su agenda.
-- [ ] El recordatorio automático usa el mismo despachador de la etapa 7.
+- [x] **La mitad ya estaba construida y no se notaba.** `visita` existe desde
+      la migración 006 con fecha, agente, estado y feedback, y agendar y editar
+      ya funcionaban desde la ficha del lead. Faltaban dos cosas: poder
+      preguntar «¿qué tengo esta semana?» y el aviso.
+- [x] `GET /oportunidades/agenda`, con filtro por asesor y rango de días. Sólo
+      las `agendada`: una realizada o cancelada ya no es agenda, es historia, y
+      la historia vive en la ficha del lead.
+- [x] Pantalla agrupada por día, con Hoy y Mañana por nombre. **No es un
+      calendario**: una grilla de mes con casilleros vacíos ocupa toda la
+      pantalla para decir «hay tres visitas», y la pregunta de un asesor a la
+      mañana es qué tiene hoy.
+- [x] El recordatorio: `visita_agendada` estaba en el CHECK de la 010 desde el
+      principio y **nadie lo emitía** — el mismo hueco que ya había tenido
+      `garantia_por_vencer`. Un día antes, no treinta: una visita se confirma
+      la víspera, y la bandeja que grita se aprende a ignorar.
+
+**Lo que sigue sin poder hacerse, y se dice en pantalla**: el aviso queda en la
+bandeja del sistema. Que le llegue solo al interesado depende del proveedor que
+la etapa 7 todavía no tiene. La pantalla lo aclara en vez de dejar creer que se
+mandó — misma decisión que el botón *Publicar* que no publicaba.
+
+*Trampa*: `@Get('agenda')` va declarado ANTES de `@Get(':id')`. Nest resuelve en
+orden, y al revés «agenda» entra como id y el `ParseUUIDPipe` contesta «uuid is
+expected». Pasó; hay test.
 
 **Riesgo, y es el mismo de siempre**: el envío real por email o WhatsApp sigue
 bloqueado en la etapa 7 —falta proveedor configurado y las plantillas de

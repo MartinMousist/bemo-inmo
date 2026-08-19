@@ -214,6 +214,47 @@ export class RecordatoriosService {
         );
       }
 
+      // ── Visitas agendadas ──
+      //
+      // El tipo `visita_agendada` estaba en el CHECK de la 010 desde el
+      // principio y **nadie lo emitía**. La tabla `visita` existe desde la 006
+      // y agendar ya funcionaba desde la ficha del lead: faltaba sólo esto.
+      //
+      // Sólo las AGENDADAS: una visita ya realizada, cancelada o a la que el
+      // interesado no fue no hay que recordarla. Y sólo hacia adelante, que es
+      // lo que hace `dispara >= current_date` en `insertar()`.
+      //
+      // El destinatario es el ASESOR, no el interesado: el envío al interesado
+      // depende del despachador que la etapa 7 todavía no tiene, y un
+      // recordatorio que la persona cree que se mandó y no salió es peor que no
+      // ofrecerlo. Cuando el canal exista, este mismo evento sale sin tocar
+      // nada más.
+      for (const dias of avisos.visita_agendada ?? []) {
+        sumar(
+          'visita_agendada',
+          await this.insertar(
+            ej,
+            tenantId,
+            `SELECT 'visita_agendada', 'visita', v.id,
+                    (v.fecha_hora::date - $2::int) AS dispara,
+                    'Visita · ' || coalesce(
+                      nullif(trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,'')), ''),
+                      'sin persona'),
+                    to_char(v.fecha_hora, 'DD/MM HH24:MI') ||
+                      coalesce(' · ' || trim(pr.calle || ' ' || coalesce(pr.numero,'')), ''),
+                    jsonb_build_object('diasAntes', $2, 'fechaHora', v.fecha_hora)
+               FROM visita v
+               JOIN oportunidad o ON o.id = v.oportunidad_id
+               LEFT JOIN persona pe ON pe.id = o.persona_id
+               LEFT JOIN operacion op ON op.id = v.operacion_id
+               LEFT JOIN propiedad pr ON pr.id = op.propiedad_id
+              WHERE v.estado = 'agendada'
+                AND (v.fecha_hora::date - $2::int) BETWEEN current_date AND current_date + 400`,
+            [tenantId, dias],
+          ),
+        );
+      }
+
       // ── Cuotas impagas ──
       // Acá los días van HACIA ADELANTE del vencimiento: se avisa el día que
       // vence y después a los 5 y 15 de mora.

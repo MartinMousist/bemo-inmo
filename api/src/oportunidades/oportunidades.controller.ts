@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { OportunidadesService } from './oportunidades.service';
 import {
+  AgendaDto,
   CrearOportunidadDto,
   CrearReservaDto,
   CrearVisitaDto,
@@ -27,6 +28,23 @@ export class OportunidadesController {
   @Get()
   listar(@ActorActual() actor: Actor, @Query() f: FiltroOportunidadesDto) {
     return this.oportunidades.listar(actor.tenantId, f, actor);
+  }
+
+  /**
+   * La agenda de visitas. Sin `@Roles`: es la pantalla de trabajo de un asesor.
+   *
+   * Va ANTES de `@Get(':id')` **y eso no es cosmético**: Nest resuelve en
+   * orden de declaración, así que con `:id` primero, `/agenda` entra como id y
+   * el `ParseUUIDPipe` contesta «uuid is expected». Es la misma lección que ya
+   * dejó escrita el router del front con `/propiedades/nueva`.
+   */
+  @Get('agenda')
+  agenda(@ActorActual() a: Actor, @Query() q: AgendaDto) {
+    return this.oportunidades.agenda(a.tenantId, {
+      // `yo` es el centinela que ya usa el resto del sistema para «lo mío».
+      agenteId: q.agenteId === 'yo' ? a.usuarioId : q.agenteId,
+      dias: q.dias,
+    });
   }
 
   @Get(':id')
