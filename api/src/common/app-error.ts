@@ -51,6 +51,11 @@ export const ErrorCode = {
   // El código es estable para que el front decida sin leer el texto.
   YA_RENDIDO: 'YA_RENDIDO',
 
+  // Una referencia que no es de esta inmobiliaria, o que no existe. Las dos
+  // cosas comparten código A PROPÓSITO: distinguirlas le confirmaría a quien
+  // prueba ids que ese id existe del otro lado. Ver migración 035.
+  REFERENCIA_INVALIDA: 'REFERENCIA_INVALIDA',
+
   // Archivos
   ALMACENAMIENTO_NO_CONFIGURADO: 'ALMACENAMIENTO_NO_CONFIGURADO',
   ARCHIVO_DEMASIADO_GRANDE: 'ARCHIVO_DEMASIADO_GRANDE',

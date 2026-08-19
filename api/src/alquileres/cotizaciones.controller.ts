@@ -45,7 +45,10 @@ export class CotizacionesController {
    * meterlos en la query los deja en el historial del navegador y en los logs
    * del proxy. Es una calculadora, no un recurso.
    */
+  // Todos los roles: convertir no escribe nada. El `@Roles` explícito está
+  // para que el test de superficie no tenga que adivinar la intención.
   @Post('convertir')
+  @Roles('owner', 'admin', 'agente', 'contable')
   convertir(@ActorActual() a: Actor, @Body() dto: ConvertirDto) {
     return this.cot.convertir(a.tenantId, dto.monto, dto.desde, dto.hasta, dto.tipo, dto.fecha);
   }

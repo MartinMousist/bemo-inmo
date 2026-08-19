@@ -126,6 +126,31 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       };
     }
 
+    // Una referencia a algo de otra inmobiliaria —o a algo que no existe—.
+    // Llegan por dos caminos que terminan igual: el disparador de agente
+    // (SQLSTATE 'BE003', migración 035) y la violación de clave foránea
+    // compuesta que levanta Postgres solo (23503, misma migración).
+    //
+    // El mismo mensaje para los dos casos es deliberado: decir «existe pero no
+    // es tuya» convertiría este endpoint en un oráculo para averiguar qué ids
+    // tiene la competencia.
+    if (esReferenciaAjena(exception)) {
+      // Se registra igual aunque sea 4xx. Un 23503 también puede ser un bug
+      // nuestro —una consulta que arma mal una referencia—, y sin log queda
+      // indistinguible de un cliente mandando cualquier cosa.
+      this.logger.warn(
+        `REFERENCIA_INVALIDA ${instance} — ${(exception as Error).message}`,
+      );
+      return {
+        type: 'about:blank',
+        title: 'Unprocessable Entity',
+        status: 422,
+        detail: 'Alguno de los datos referenciados no existe o no es de tu inmobiliaria.',
+        code: ErrorCode.REFERENCIA_INVALIDA,
+        instance,
+      };
+    }
+
     // Nada más llega acá: cualquier cosa inesperada es un 500 genérico hacia
     // afuera. El detalle real va al log, no al cliente.
     return {
@@ -156,6 +181,19 @@ function esInmutable(err: unknown): boolean {
     'code' in err &&
     (err as { code: unknown }).code === 'BE002'
   );
+}
+
+/**
+ * Referencia cruzada entre inmobiliarias, o inexistente.
+ *
+ * `BE003` lo levanta el disparador de agente; `23503` es la clave foránea
+ * compuesta `(tenant_id, x)` que agregó la migración 035 —y también un id que
+ * sencillamente no existe—.
+ */
+function esReferenciaAjena(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null || !('code' in err)) return false;
+  const code = (err as { code: unknown }).code;
+  return code === 'BE003' || code === '23503';
 }
 
 /** SQLSTATE propio del proyecto para topes de plan. Ver migración 012. */

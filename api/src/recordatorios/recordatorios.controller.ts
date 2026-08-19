@@ -28,7 +28,9 @@ export class RecordatoriosController {
     return this.rec.generar(a.tenantId);
   }
 
+  // Marcar visto es del que lo mira: cualquiera que reciba el aviso.
   @Post(':id/visto')
+  @Roles('owner', 'admin', 'agente', 'contable')
   visto(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.rec.marcarVisto(a.tenantId, id);
   }
