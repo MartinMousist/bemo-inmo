@@ -52,9 +52,9 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | | |
 |---|---|
 | Commits | 56 |
-| Migraciones | 31 (la última: `031_cotizacion.sql`) |
-| Tests | **998 de API** contra Postgres real + **194 de front**. Todo en verde |
-| Pantallas | 47 |
+| Migraciones | 34 (la última: `034_aviso_visita.sql`) |
+| Tests | **1020 de API** contra Postgres real + **194 de front**. Todo en verde |
+| Pantallas | 49 |
 | CI | ✅ **Verde en los cuatro jobs** — `api`, `web`, `secretos`, `dependencias` |
 
 ### Etapas
@@ -72,8 +72,8 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | 10–11 | Mejoras · Lo que se ve usando la app | ✅ | — |
 | 12 | Lo que pidió el dueño | ✅ salvo 12.3 | Avisar cuando falta el IPC del mes |
 | 13–14 | Garantes · Editor Word · Tipo de cuenta | ✅ | — |
-| 15 | Lo que le falta a un sistema así | ⏳ **en curso** | faltan **15.3** (ARCA, por trámite) y **15.4** (portal del inquilino) |
-| 16 | Lo que un portal te enseñó a esperar | ⏳ **en curso** | sólo falta **16.5** (turnos de visita) |
+| 15 | Lo que le falta a un sistema así | ⏳ **en curso** | sólo **15.3** (ARCA), que espera un trámite y no código |
+| 16 | Lo que un portal te enseñó a esperar | ✅ **CERRADA** | — |
 | 17 | Sellado de seguridad | ⏳ **en curso** | 17.1 y 17.3 cerradas; faltan 17.2, 17.4, 17.5 |
 | 18 | Inbox omnicanal | ⏳ por empezar | Todo. Ojo con la dependencia externa |
 
@@ -214,15 +214,26 @@ por inmobiliaria— y **la pantalla dice cuál es cuál** en vez de dejar que se
 asuma. Misma familia de decisión que el IPC manual y que el botón *Publicar* que
 no publicaba.
 
-### Sprint 3 — lo próximo
+### ✅ Sprint 3 — cerrado el 2026-08-19
 
-1. **15.4 · Portal del inquilino.** El del propietario es exactamente este
-   patrón: público, por token, con función SECURITY DEFINER. Sus cuotas, su
-   saldo y sus comprobantes, más un botón para reportar un desperfecto que entra
-   como reclamo con la propiedad ya identificada.
-2. **16.5 · Reserva de turnos para visitas.** El turno se agenda y aparece en la
-   agenda del asesor; el recordatorio automático sigue atado a que la etapa 7
-   consiga proveedor de email o WhatsApp. No se simula un envío que no ocurre.
+15.4 portal del inquilino · 16.5 agenda de visitas.
+
+**Los dos aprendizajes, que se repiten:**
+
+- **Reusar una pieza de seguridad exige mirar los DOS caminos.** El portal del
+  inquilino reusó la tabla y el token del propietario, y quedó faltando el
+  chequeo de rol en el camino VIEJO: un inquilino que cambiaba una palabra en su
+  URL veía las liquidaciones del dueño. Compilaba, los tests pasaban. Apareció
+  probándolo a mano.
+- **Antes de construir, buscar si ya está.** 16.5 parecía una entidad nueva y
+  era media feature ya construida: `visita` existe desde la 006 y
+  `visita_agendada` estaba en el CHECK desde la 010. Faltaban la consulta y el
+  emisor. Es el error #3 del playbook y ya pasó tres veces en este repo.
+
+### Lo próximo
+
+**Etapa 17 — el resto del sellado de seguridad**, que es lo único con trabajo de
+código pendiente además de la 18:
 
 ### Seguridad — lo que falta de la etapa 17
 
@@ -335,18 +346,16 @@ Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
 docs/roadmap.md.
 
-Estado (2026-08-19): 31 migraciones, 998 tests de API contra Postgres real y
+Estado (2026-08-19): 34 migraciones, 1020 tests de API contra Postgres real y
 194 de front, todo en verde. El CI corre y está verde en los cuatro jobs.
 Entrás con owner@andes.test / unaclavelarga1.
 
-Lo último que se cerró: los **Sprints 1 y 2 completos** —cuenta corriente,
-historial de precio, ficha para imprimir, cotización del día, búsqueda por
-radio y comparar propiedades—, más el sellado 17.1 (el bucket estaba de lectura
-pública con los DNI de los garantes adentro).
+Lo último que se cerró: los **tres sprints completos**. La etapa 16 quedó
+cerrada entera y de la 15 sólo falta ARCA, que espera un trámite y no código.
 
-Lo que sigue es el **Sprint 3** de CONTINUAR.md §5, y arranca por 15.4, el
-portal del inquilino: el del propietario ya es exactamente ese patrón —público,
-por token, con función SECURITY DEFINER—.
+Lo que sigue es el **resto de la etapa 17** (17.2 datos personales, 17.4 CSP y
+rate limit, 17.5 aislamiento hostil, y la migración Nest 10→11) y después la
+etapa 18, el inbox omnicanal.
 
 Antes de escribir código, verificá el estado real en vez de creerle a este
 documento: `git log --oneline -5`, `gh run list --limit 3` y
