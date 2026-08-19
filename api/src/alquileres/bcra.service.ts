@@ -26,6 +26,16 @@ const BASE = 'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias';
 export const VARIABLES: Record<string, number> = {
   uva: 31,
   icl: 40,
+  // Tipo de cambio. Verificado contra el catálogo real el 2026-08-19:
+  //    4 — Tipo de cambio minorista (promedio vendedor)
+  //    5 — Tipo de cambio mayorista de referencia
+  // Los dos devuelven serie diaria por el mismo endpoint que ICL y UVA.
+  //
+  // ⚠️ Son los OFICIALES. El tipo con el que efectivamente se vende una
+  // propiedad en dólares en este país no lo publica ninguna API, y por eso el
+  // sistema deja cargarlo a mano en vez de hacer pasar el oficial por él.
+  oficial_minorista: 4,
+  oficial_mayorista: 5,
 };
 
 export interface ValorDiario {

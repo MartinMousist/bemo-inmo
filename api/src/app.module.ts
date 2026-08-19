@@ -40,6 +40,8 @@ import { CicloService } from './alquileres/ciclo.service';
 import { AuditoriaController } from './auditoria/auditoria.controller';
 import { AuditoriaService } from './auditoria/auditoria.service';
 import { IndicesService } from './alquileres/indices.service';
+import { CotizacionesService } from './alquileres/cotizaciones.service';
+import { CotizacionesController } from './alquileres/cotizaciones.controller';
 import { IndicesCron } from './alquileres/indices.cron';
 import { BcraService } from './alquileres/bcra.service';
 import { LiquidacionesService } from './alquileres/liquidaciones.service';
@@ -151,6 +153,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     CuotasController,
     CobrosController,
     IndicesController,
+    CotizacionesController,
     LiquidacionesController,
     VentasController,
     ComisionesController,
@@ -196,6 +199,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     CicloService,
     AuditoriaService,
     IndicesService,
+    CotizacionesService,
     IndicesCron,
     BcraService,
     LiquidacionesService,

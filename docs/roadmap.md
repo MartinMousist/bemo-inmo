@@ -815,11 +815,34 @@ administrar» y «es donde vive mi negocio».
 **Lo caro ya está**: el portal del propietario es exactamente este patrón —
 público, por token, resuelto con función SECURITY DEFINER.
 
-### 15.5 · La cotización del día
+### 15.5 · La cotización del día ✅ CERRADA
 
-- [ ] Tipo de cambio con su fecha y su fuente, guardado como se guarda el valor
-      de un índice.
-- [ ] Toda conversión lleva su memoria de cálculo, igual que un ajuste.
+- [x] `cotizacion` (migración 031) con fecha, valor y fuente. **Diaria**, no
+      mensual: es la diferencia con `indice_valor`, porque un tipo de cambio
+      del 15 significa algo y el del 16 es otro número.
+- [x] Sincronización con el BCRA, variables **4** (minorista) y **5**
+      (mayorista), verificadas contra el catálogo real. Idempotente: el día ya
+      cargado no se pisa.
+- [x] Toda conversión trae su memoria: el resultado, la fórmula escrita y de
+      qué cotización salió. Y usa la vigente **a la fecha pedida**, no la de
+      hoy — convertir una operación de marzo con el dólar de agosto da un
+      número que no significa nada.
+- [x] Sin cotización para esa fecha **no estima**: falla diciendo que falta,
+      igual que el sistema no estima un índice que no se publicó.
+
+**La decisión que ordena todo el diseño**: las oficiales del BCRA son globales
+—dato público, sin dueño—, pero **el oficial NO es el tipo de cambio con el que
+se vende una propiedad en dólares en este país**, y ese no lo publica ninguna
+API. Entonces se puede cargar una cotización PROPIA, que es de esa inmobiliaria
+y RLS la aísla. La pantalla lo dice con todas las letras en vez de dejar que se
+asuma. Es la misma regla del IPC —automático donde hay fuente confiable, manual
+donde no, nunca inventado—, sólo que acá el valor manual además es una decisión
+comercial.
+
+*Detalle de Postgres*: el UNIQUE va en dos índices parciales y no en uno con
+`tenant_id` adentro, porque NULL nunca es igual a NULL y un
+`UNIQUE (tenant_id, tipo, fecha)` dejaría cargar el oficial del martes veinte
+veces.
 
 **Por qué**: hay operaciones en USD y liquidaciones en ARS, y **no hay un tipo
 de cambio en ninguna parte**. Alguien lo pone a mano o hace la cuenta aparte, y

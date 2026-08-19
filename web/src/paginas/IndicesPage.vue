@@ -5,7 +5,7 @@ import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiPager from '../componentes/UiPager.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
-import { periodo as fmtPeriodo } from '../dominio/formato';
+import { fecha as fmtFecha, money, periodo as fmtPeriodo } from '../dominio/formato';
 import { consulta, type Pagina } from '../dominio/pagina';
 
 interface Cobertura { tipo: string; ultimo: string | null; valores: number }
@@ -29,6 +29,68 @@ const error = ref('');
 const ok = ref('');
 
 const alta = reactive({ abierta: false, tipo: 'ipc', periodo: '', valor: '' });
+
+/**
+ * El tipo de cambio (migración 031).
+ *
+ * Vive acá y no en su propia pantalla porque es exactamente el mismo tipo de
+ * dato que un índice: un valor público con su fecha y su fuente, que se
+ * sincroniza solo y también se puede cargar a mano. Una pantalla aparte sería
+ * el mismo formulario dos veces.
+ *
+ * La diferencia que sí importa está en la etiqueta: **el oficial no es el tipo
+ * de cambio con el que se vende una propiedad en dólares en este país**, y eso
+ * se dice en vez de dejar que se asuma.
+ */
+interface Cotizacion {
+  tipo: string; fecha: string; valor: number; fuente: string; propia: boolean;
+}
+const NOMBRE_COTIZACION: Record<string, string> = {
+  oficial_minorista: 'Oficial minorista',
+  oficial_mayorista: 'Oficial mayorista',
+  propia: 'La que usás vos',
+};
+const cotizaciones = ref<Cotizacion[]>([]);
+const altaCot = reactive({ abierta: false, fecha: '', valor: '' });
+const sincronizando = ref(false);
+
+async function cargarCotizaciones() {
+  try {
+    const r = await api<{ ultimas: Cotizacion[] }>('/cotizaciones');
+    cotizaciones.value = r.ultimas;
+  } catch { /* la pantalla de índices no se cae porque falte el dólar */ }
+}
+
+async function sincronizarCotizaciones() {
+  sincronizando.value = true; error.value = ''; ok.value = '';
+  try {
+    const r = await api<Record<string, { cargadas: number; error?: string }>>(
+      '/cotizaciones/sincronizar', { method: 'POST', body: '{}' },
+    );
+    const nuevas = Object.values(r).reduce((a, x) => a + x.cargadas, 0);
+    const falló = Object.values(r).find((x) => x.error);
+    if (falló) error.value = falló.error as string;
+    else ok.value = nuevas ? `${nuevas} cotizaciones nuevas.` : 'Ya estaba al día.';
+    await cargarCotizaciones();
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo sincronizar.';
+  } finally { sincronizando.value = false; }
+}
+
+async function guardarCotizacion() {
+  error.value = ''; ok.value = '';
+  try {
+    await api('/cotizaciones/propia', {
+      method: 'POST',
+      body: JSON.stringify({ fecha: altaCot.fecha, valor: Number(altaCot.valor) }),
+    });
+    altaCot.abierta = false; altaCot.fecha = ''; altaCot.valor = '';
+    ok.value = 'Cotización guardada.';
+    await cargarCotizaciones();
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo guardar.';
+  }
+}
 
 async function cargar() {
   cargando.value = true; error.value = '';
@@ -81,7 +143,7 @@ function verTipo(t: string) {
   else void cargar();
 }
 
-onMounted(cargar);
+onMounted(() => { void cargar(); void cargarCotizaciones(); });
 </script>
 
 <template>
@@ -92,6 +154,55 @@ onMounted(cargar);
         <button class="btn" type="button" @click="alta.abierta = !alta.abierta">Cargar valor</button>
       </template>
     </PageHeader>
+
+    <!-- ── Tipo de cambio ──────────────────────────────────────────────── -->
+    <section class="card stack cambio">
+      <header class="cab">
+        <h2>Tipo de cambio</h2>
+        <div class="row">
+          <button class="btn secondary sm" type="button"
+                  :disabled="sincronizando" @click="sincronizarCotizaciones">
+            {{ sincronizando ? 'Sincronizando…' : 'Traer del BCRA' }}
+          </button>
+          <button class="btn secondary sm" type="button"
+                  @click="altaCot.abierta = !altaCot.abierta">
+            Cargar la mía
+          </button>
+        </div>
+      </header>
+
+      <div v-if="cotizaciones.length" class="cotiz">
+        <article v-for="c in cotizaciones" :key="c.tipo" class="tarjeta-cot">
+          <span class="nombre">{{ NOMBRE_COTIZACION[c.tipo] ?? c.tipo }}</span>
+          <strong class="mono">{{ money(c.valor, 'ARS') }}</strong>
+          <span class="pie mono">{{ fmtFecha(c.fecha) }} · {{ c.fuente }}</span>
+        </article>
+      </div>
+      <p v-else class="nota">
+        Todavía no hay ninguna cotización cargada. «Traer del BCRA» baja las oficiales.
+      </p>
+
+      <!-- Se dice con todas las letras. Un sistema que liquida plata de
+           terceros no puede dejar que se asuma que el oficial es el que se
+           usa para vender. -->
+      <p class="nota aviso-cambio">
+        Las oficiales son las que publica el BCRA. <strong>No son el tipo de cambio
+        con el que se vende una propiedad en dólares</strong>: ese no lo publica
+        ninguna fuente oficial, así que si lo usás, cargalo con «Cargar la mía».
+      </p>
+
+      <form v-if="altaCot.abierta" class="row alta-cot" @submit.prevent="guardarCotizacion">
+        <label class="campo">
+          <span>Fecha</span>
+          <input v-model="altaCot.fecha" type="date" required />
+        </label>
+        <label class="campo">
+          <span>ARS por dólar</span>
+          <input v-model="altaCot.valor" inputmode="decimal" required placeholder="1250,50" />
+        </label>
+        <button class="btn sm" type="submit">Guardar</button>
+      </form>
+    </section>
 
     <div class="cobertura">
       <button v-for="c in cobertura" :key="c.tipo" type="button" class="tarjeta"
@@ -157,6 +268,16 @@ onMounted(cargar);
 </template>
 
 <style scoped>
+.cambio .cab { display: flex; align-items: baseline; gap: var(--s-md); flex-wrap: wrap; }
+.cambio .cab h2 { margin: 0; margin-right: auto; font-size: 15px; }
+.cotiz { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--s-md); }
+.tarjeta-cot { display: flex; flex-direction: column; gap: 2px; }
+.tarjeta-cot .nombre { font-size: 12px; color: var(--muted); }
+.tarjeta-cot strong { font-size: 19px; }
+.tarjeta-cot .pie { font-size: 11px; color: var(--muted-2); }
+.aviso-cambio { max-width: 78ch; line-height: 1.6; }
+.alta-cot { align-items: flex-end; gap: var(--s-md); flex-wrap: wrap; }
+
 .cobertura { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-md); }
 .tarjeta { display: flex; flex-direction: column; gap: var(--s-xs); align-items: flex-start; padding: var(--s-lg); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); cursor: pointer; font: inherit; text-align: left; }
 .tarjeta.activa { border-color: var(--accent-line); background: var(--accent-tint); }
