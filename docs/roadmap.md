@@ -408,8 +408,9 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
       anterior —y los dos de ésta— se encontraron mirando el navegador a mano.
       Cubrir primero lo que ya tuvo un bug: `dominio/formato.ts` (tuvo uno de zona
       horaria), el refresh single-flight, el importador y la galería de fotos.
-- [ ] ⏳ **CI sin verificar**: el workflow existe y nunca corrió, porque no hay repo
-      remoto.
+- [ ] ⏳ **CI sin verificar**: el workflow existe desde el 04/08 y nunca corrió.
+      **El motivo que lo bloqueaba ya no existe**: hay repo remoto desde esta
+      sesión (`github.com/MartinMousist/bemo-inmo`). Pasa a la etapa 17.3.
 
 ### 10.5 · Producto — lo que pide quien ya lo usa
 
@@ -459,12 +460,11 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
 > `git show HEAD:`). B-02, B-03 y B-04 están en el árbol de trabajo, porque la capa
 > familia todavía no se commiteó — ver el aviso de abajo.
 >
-> ⚠️ **`web/src/styles/familia.css` no está en git.** 1301 líneas, la fuente de verdad
-> de la forma de los componentes, que `DESIGN.md` documenta como decisión del 04/08 y
-> que el repositorio no tiene. No la toca `.gitignore`: nunca se agregó. Lo mismo con
-> `web/src/directivas/revelar.ts` y `web/src/dominio/sidebar.ts`. Existen sólo en este
-> disco y sin copia. El CI queda en verde igual porque los tests de front no renderizan
-> estilos — que es el mismo agujero que dejó pasar B-01, visto desde otro ángulo.
+> ~~⚠️ **`web/src/styles/familia.css` no está en git.**~~ **RESUELTO.** Los tres
+> archivos —`familia.css`, `directivas/revelar.ts` y `dominio/sidebar.ts`— están
+> versionados (verificado con `git ls-files`). Queda en pie la observación de
+> fondo: **el CI seguiría en verde aunque no estuvieran**, porque los tests de
+> front no renderizan estilos. Es el mismo agujero que dejó pasar B-01.
 
 ### 11.1 · Los cinco defectos ✅ CERRADO
 
@@ -870,6 +870,305 @@ secciones no es adaptar el producto**, y lo que queda es lo que más se nota:
   de gestión. El feed XML ya le entrega la cartera a los portales que *sí* tienen
   ese tráfico, que es la jugada correcta.
 - **Gestión de consorcios.** Se parece y no lo es. Es una vertical entera.
+
+---
+
+## Etapa 16 — Lo que un portal ya te enseñó a esperar ⏳ POR EMPEZAR
+
+> Salió de una pregunta del dueño sobre countries y barrios privados (agregado
+> como 027/028 — ver más abajo) y de un pedido explícito: "qué más enriquecería
+> el sistema". Seis puntos, todos alrededor de la misma cartera que ya tiene
+> filtros ricos desde la migración 027/028: buscarla mejor, entenderla en el
+> tiempo, y sacarla del sistema en un papel.
+>
+> Ninguno arranca de cero. Es la misma regla que ya ordena la etapa 15: **lo
+> caro ya está**, y por eso están en este orden y no en otro.
+
+### 16.1 · Precio y expensas en el filtro
+
+- [ ] Rango de precio, por moneda — ARS y USD no se comparan en el mismo campo,
+      misma regla que ya rige el resto del sistema.
+- [ ] Rango de expensas.
+
+**Por qué**: es el filtro que más se usa en cualquier portal, y hoy Propiedades
+filtra por ambientes, amenities y una docena de atributos más — nunca por
+cuánto cuesta. La 027/028 dejó rica la búsqueda de **qué es** la propiedad; a
+**cuánto sale** no se llegó.
+
+**Lo caro ya está**: el `WHERE` de `listar()` ya hace `EXISTS` contra
+`operacion` para tipo y estado — extenderlo a un rango de precio es la misma
+pieza, no una nueva.
+
+**Hecho cuando**: filtrar "USD 100.000 a 150.000" devuelve exactamente eso, y
+nada de otra moneda mezclado en el medio.
+
+### 16.2 · Búsqueda por radio en el mapa
+
+- [ ] Elegir un punto en el mapa y un radio en km, y que el listado devuelva
+      sólo lo que cae adentro.
+
+**Lo caro ya está**: `propiedad.lat`/`lng` se geocodifican y persisten desde la
+etapa 3. No hace falta una extensión nueva de Postgres: la distancia se calcula
+con la fórmula de Haversine sobre las dos columnas que ya existen.
+
+**Riesgo**: con la cartera de hoy no hace falta índice — se mide antes de
+indexar, mismo criterio que ya se aplicó en 12.2 y en 10.3.
+
+**Hecho cuando**: un punto + 3 km devuelve sólo las propiedades geocodificadas
+adentro de ese círculo, verificado contra coordenadas conocidas.
+
+### 16.3 · Comparar propiedades
+
+- [ ] Elegir de 2 a 4 propiedades desde el listado y verlas en columnas, lado a
+      lado: ambientes, m², orientación, urbanización, amenities, precio.
+
+**Por qué**: es el paso natural después de filtrar bien — una vez que el
+filtro devuelve seis candidatas, la pregunta siguiente es en qué se
+diferencian, no volver a abrir cada ficha.
+
+**Lo caro ya está**: no hace falta tabla ni endpoint nuevo. Es una pantalla que
+junta varias respuestas de `GET /propiedades/:id`, que ya trae todo lo que la
+027/028 agregó.
+
+**Hecho cuando**: se eligen tres propiedades desde el listado y se ven en
+columnas, sin volver a cargar cada ficha por separado.
+
+### 16.4 · Historial de precio y de consultas por publicación
+
+- [ ] `precio_historial`: cada cambio de precio de una operación deja su propia
+      fila, con fecha. Sin esto, "bajó el precio dos veces en dos meses" es una
+      pregunta que hoy no se puede contestar.
+- [ ] Consultas por operación en el tiempo — **no es un contador nuevo**, es
+      agrupar por semana lo que `oportunidad.operacion_id` ya guarda desde la
+      etapa 3. Así se ve si una propiedad lleva seis meses publicada sin que
+      nadie pregunte, sin inventar una métrica de "vistas" que este sistema no
+      puede medir de verdad: no hay portal público propio (etapa 6 lo descarta
+      a propósito), así que lo único real que se puede contar es el lead que
+      efectivamente entró.
+
+**Por qué**: hoy no hay forma de saber si una propiedad se "quemó" en el
+mercado —dejó de generar consultas sin que nadie cambiara nada— o si el precio
+nunca se movió desde que se cargó.
+
+**Hecho cuando**: la ficha de una operación muestra su curva de precio y sus
+consultas por mes, con las dos series derivadas de datos que ya existen.
+
+### 16.5 · Reserva de turnos para visitas
+
+- [ ] Turno con fecha y hora, atado a una oportunidad y a un asesor. Se ve en
+      su agenda.
+- [ ] El recordatorio automático usa el mismo despachador de la etapa 7.
+
+**Riesgo, y es el mismo de siempre**: el envío real por email o WhatsApp sigue
+bloqueado en la etapa 7 —falta proveedor configurado y las plantillas de
+WhatsApp Business, que son trámite, no código—. El turno se agenda y aparece en
+la bandeja igual; el aviso automático que le llega solo al inquilino depende de
+que esa etapa se destrabe. No se simula un envío que no ocurre.
+
+**Hecho cuando**: se agenda una visita desde un lead con fecha y hora, y
+aparece en la agenda del asesor que la tomó.
+
+### 16.6 · Ficha técnica en PDF
+
+- [ ] Una plantilla más del motor que ya existe (etapa 5): superficie,
+      ambientes, orientación, urbanización, amenities y fotos de la propiedad.
+- [ ] Imprimir o "guardar como PDF" con los estilos de impresión de la etapa 8
+      — el mismo patrón que ya usa la liquidación, no una librería de PDF nueva.
+
+**Por qué**: hoy ese folleto se arma a mano en otro programa, con datos que ya
+están cargados acá.
+
+**Lo caro ya está**: el motor de plantillas, el editor con formato tipo Word de
+la etapa 5, y los estilos de impresión de la etapa 8.
+
+**Hecho cuando**: se abre una propiedad y sale una ficha lista para imprimir o
+mandar, con el membrete de la inmobiliaria.
+
+---
+
+## Etapa 17 — Sellado de seguridad ⏳ POR EMPEZAR
+
+> La etapa 8 hizo una revisión de seguridad y encontró tres cosas reales. Ésta
+> no la repite: parte de que el sistema **ya guarda datos sensibles de terceros**
+> —DNI, recibos de sueldo, situación crediticia del BCRA— y pregunta qué pasa el
+> día que algo se filtra, no si el código está prolijo.
+>
+> Ordenada por lo que expone, no por lo que cuesta.
+
+### 17.1 · El bucket es de lectura pública, y ahí viven los DNI
+
+**Hallazgo verificado, no una hipótesis.** `docker-compose.yml` corre
+`mc anonymous set download` sobre el bucket entero, y `AlmacenamientoService`
+—el mismo servicio para todo— sube ahí las fotos de propiedades **y** las dos
+caras del DNI, los tres recibos de sueldo de cada garante y lo que cuelgue de un
+acta. La clave lleva 8 bytes aleatorios, así que la URL no se adivina; pero es
+lectura pública, `ContentDisposition: inline` y `max-age=31536000, immutable`.
+Cualquiera con la URL —un log, un historial, una captura compartida, un
+`Referer`— lee un DNI para siempre y sin dejar rastro.
+
+En dev está contenido (MinIO en localhost). El riesgo es que `docs/deploy.md`
+repita el patrón en producción.
+
+- [ ] **Separar por sensibilidad**: lo publicable (fotos de propiedades, que van
+      al feed XML de portales y *deben* ser públicas) va a un bucket o prefijo
+      público; lo sensible va a uno privado.
+- [ ] Lo privado se sirve por **URL firmada de vida corta**, generada por el
+      endpoint que ya valida el tenant y el rol. Nunca por URL permanente.
+- [ ] Los objetos ya subidos se migran, no se dejan atrás.
+
+**Hecho cuando**: pedir la URL de un DNI sin sesión da 403, y la misma foto de
+propiedad sigue abriendo sin sesión porque tiene que abrir.
+
+### 17.2 · Datos personales: qué se guarda, cuánto tiempo y quién los ve
+
+Un legajo de garante es dato sensible bajo la Ley 25.326. Hoy se guarda sin
+política de retención y sin forma de borrarlo.
+
+- [ ] **Retención**: qué pasa con el legajo de un garante de un contrato que
+      terminó hace tres años. Hoy queda para siempre.
+- [ ] **Borrado a pedido**, que es un derecho del titular del dato — y hoy
+      borrar la persona no borra sus objetos del bucket.
+- [ ] **Quién ve un DNI queda auditado.** La auditoría ya registra los
+      movimientos de plata; mirar el documento de alguien merece el mismo trato.
+- [ ] La consulta al BCRA guarda el veredicto congelado (bien) — falta decidir
+      si el detalle crudo de deudas de un tercero debe persistir, y por cuánto.
+
+### 17.3 · La cadena de suministro y el CI que nunca corrió
+
+- [ ] **El CI existe desde el 04/08 y nunca corrió** — el roadmap lo anotaba
+      como bloqueado por no tener repo remoto. **Ya hay remoto**
+      (`github.com/MartinMousist/bemo-inmo`): el bloqueo se levantó y nadie lo
+      notó. Hacerlo correr es el primer paso.
+- [ ] `npm audit` y avisos de dependencias en el CI, fallando el build.
+      Hoy nada avisa de una CVE en una dependencia.
+- [ ] gitleaks ya corre en pre-commit; que corra también en CI — un hook local
+      se saltea con `--no-verify`.
+
+### 17.4 · Superficie de la aplicación
+
+- [ ] **CSP estricta.** `helmet` pone sus defaults; falta la política propia,
+      que es lo que convierte un XSS almacenado en nada.
+- [ ] **Rate limit más allá del login.** Hoy `limite-intentos` cubre `/auth`;
+      el resto de la API no tiene techo. La consulta al BCRA es la más obvia:
+      es una llamada a un tercero con rate limit por IP.
+- [ ] **Segundo factor para el titular**, que es quien puede cambiar el tipo de
+      cuenta, los planes y las comisiones de todos.
+- [ ] Rotación de `JWT_SECRET` sin tirar a todos los usuarios abajo.
+
+### 17.5 · Que el aislamiento se pruebe contra un atacante, no contra un test
+
+- [ ] `fuga.spec.ts` prueba que una inmobiliaria no ve a la otra. Falta el
+      caso hostil: IDs de otro tenant en el cuerpo de un PATCH, en un filtro,
+      en un `ORDER BY`, en un import CSV.
+- [ ] **Un test que falle si alguien agrega un endpoint sin `@Roles`** — hoy el
+      guard es default-deny para autenticar, pero el rol es opt-in.
+
+**Gate de la etapa**: un tercero con acceso al bucket y a la API sin credenciales
+no obtiene ni un dato personal. Y las tres primeras se verifican **rompiéndolas
+a propósito**, como ya se hizo con `withTenant` y con `@Roles` en la etapa 2.
+
+---
+
+## Etapa 18 — Inbox omnicanal ⏳ POR EMPEZAR
+
+> El lead entra por Meta, por mail o por WhatsApp y hoy la respuesta vive en la
+> app de cada canal. El sistema tiene el lead —`oportunidad.origen` existe desde
+> la etapa 3— y **no tiene una sola línea de la conversación**.
+>
+> ⚠️ **Esta etapa tiene una dependencia externa que NO es código**, y está
+> anotada acá para que no se descubra a mitad de camino: enviar por email
+> necesita proveedor configurado, y WhatsApp/Meta necesitan verificación de
+> negocio y plantillas aprobadas. Es el mismo bloqueo de la etapa 7 y de la 9.
+> `GET /v1/avisos/canales` ya devuelve hoy `email: false` y `whatsapp: false`.
+
+### 18.1 · El modelo que falta
+
+- [ ] `conversacion` + `mensaje`: hilo por lead, con dirección
+      (entrante / saliente), canal, cuerpo, adjuntos y estado de envío.
+- [ ] `origen` suma `meta` y `email` a su CHECK — hoy tiene `portal`, `web`,
+      `whatsapp`, `telefono`, `referido`, `cartel`, `redes` y `otro`.
+- [ ] Idempotencia por id externo del proveedor: un webhook se reintenta, y un
+      mensaje duplicado en un hilo es peor que uno faltante.
+
+### 18.2 · La entrada, canal por canal
+
+- [ ] **Email primero, y a propósito**: es el único de los tres que se puede
+      poner a andar **sin trámite** —una casilla y un webhook o IMAP—. Los otros
+      dos dependen de verificaciones que llevan semanas.
+- [ ] WhatsApp Business Cloud y Meta Lead Ads entran después, con el mismo
+      modelo, cuando la verificación esté.
+
+### 18.3 · La pantalla
+
+- [ ] Lista de leads con su origen y su último mensaje, ordenada por lo que
+      espera respuesta hace más tiempo — que es la pregunta real: **a quién le
+      estoy quedando mal**.
+- [ ] Panel lateral con el hilo, sin salir del listado.
+- [ ] Responder desde ahí, con lo que se escribe encolado en el mismo
+      `evento_programado` que la etapa 7 ya construyó. Ese modelo ya tiene
+      `canal`, `estado`, `intentos` y su clave de idempotencia: *«cuando el
+      envío exista, los eventos ya generados salen sin tocar nada más»*.
+
+**La regla que manda sobre el diseño de la pantalla**: mientras el canal no
+pueda enviar, el cuadro de respuesta **dice que queda en cola y no simula que
+salió**. Es la misma decisión de la etapa 6 con el botón *Publicar* que no
+publicaba, y la de `mi-plan` con el cobro. Un mensaje que el usuario cree
+enviado y no salió es peor que no tener el cuadro.
+
+**Hecho cuando**: entra un mail a la casilla de la inmobiliaria, aparece como
+lead en el inbox con su hilo, y la respuesta queda registrada y sale sola el día
+que el canal se destraba.
+
+---
+
+## Sprint actual
+
+> Backlog de la etapa 16 más lo que ya estaba abierto en 15.3–15.6, en un solo
+> orden por **lo que duele dividido por lo que cuesta** — la misma regla que ya
+> ordena el resto del documento. Cada feature sigue yendo **completa o no va**:
+> no se corta una capa a la mitad para entrar en el sprint.
+
+**Sprint 1** — todo reusa una pieza ya construida y ninguno tiene dependencia
+externa:
+1. 16.1 · Precio y expensas en el filtro
+2. 15.6 · Cuenta corriente por persona — *"no es una tabla nueva, es la vista
+   que suma lo que ya está"*, la nota más barata de toda la etapa 15
+3. 16.4 · Historial de precio y de consultas por publicación
+4. 16.6 · Ficha técnica en PDF
+
+**Sprint 2** — mismo tamaño que el 1, con un poco más de SQL o de pantalla
+nueva:
+5. 15.5 · La cotización del día
+6. 16.2 · Búsqueda por radio en el mapa
+7. 16.3 · Comparar propiedades
+
+**Sprint 3** — más grandes, y uno con una salvedad:
+8. 15.4 · Portal del inquilino
+9. 16.5 · Reserva de turnos para visitas — el turno en sí no depende de nada;
+   el recordatorio automático sigue atado a que la etapa 7 consiga proveedor.
+
+**Sprint 0 — antes que todo lo de arriba**:
+- 17.1 · El bucket público con los DNI adentro. Es el único punto de todo el
+  roadmap que expone datos de terceros **hoy**, y no espera a nadie: es
+  configuración y URLs firmadas.
+- 17.3 · Hacer correr el CI, que estuvo bloqueado por algo que ya se destrabó.
+
+**Repartido entre los sprints 2 y 3**:
+- 18 · Inbox omnicanal, en el orden que impone su dependencia: primero el
+  modelo y el email (sin trámite), después WhatsApp y Meta.
+- El resto de la 17, que es trabajo sostenido y no un ítem.
+
+**Fuera de sprint, no por tamaño sino por trámite ajeno**:
+- 15.3 · Facturación electrónica de ARCA — necesita certificado y punto de
+  venta de ARCA, que sólo el dueño puede tramitar. Misma categoría que la
+  API key de Google Maps: cuando esté, es una constante que se cambia, no un
+  rediseño.
+- 18.2 · WhatsApp y Meta del inbox — verificación de negocio y plantillas
+  aprobadas. Semanas de trámite, cero líneas de código.
+
+**Gate del sprint**: cada punto entra completo —migración, servicio, tests,
+pantalla, verificación en el navegador— o no entra. Un punto a medias no
+cuenta para el sprint aunque esté "casi".
 
 ---
 

@@ -131,3 +131,41 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Dependencias ────────────────────────────────────────────────────────────
+  #
+  # El gate corta en CRITICAL sobre lo que efectivamente se despacha
+  # (`--omit=dev`), y el reporte de `high` se imprime sin romper el build. No es
+  # laxitud: es que un gate que arranca en rojo se aprende a ignorar en una
+  # semana, y entonces no avisa el día que aparece algo de verdad.
+  #
+  # Lo que hoy queda en `high` y por qué no bloquea, revisado uno por uno:
+  #
+  #   · multer (DoS) — NO ES ALCANZABLE. Esta app no parsea multipart en ningún
+  #     lado: las imágenes viajan en base64 por decisión documentada en
+  #     `fotos.controller.ts`. Multer entra como dependencia transitiva de
+  #     `@nestjs/platform-express` y ningún controlador lo instancia.
+  #   · express / body-parser vía `@nestjs/platform-express` — el fix es Nest 11
+  #     y hoy el proyecto está en 10.4.22. Es una migración mayor con riesgo
+  #     sobre 955 tests, así que va como su propio ítem (etapa 17.3) y no
+  #     escondida adentro de un `audit fix`.
+  #
+  # Cuando esa migración entre, este job pasa a `--audit-level=high`.
+  dependencias:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: API · lo que se despacha
+        working-directory: api
+        run: |
+          npm audit --omit=dev --audit-level=critical
+          echo "--- high, informativo (ver el comentario del workflow) ---"
+          npm audit --omit=dev --audit-level=high || true
+
+      - name: Web · lo que se despacha
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
