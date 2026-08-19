@@ -52,9 +52,9 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | | |
 |---|---|
 | Commits | 56 |
-| Migraciones | 30 (la última: `030_precio_historial.sql`) |
-| Tests | **982 de API** contra Postgres real + **194 de front**. Todo en verde |
-| Pantallas | 45 |
+| Migraciones | 31 (la última: `031_cotizacion.sql`) |
+| Tests | **998 de API** contra Postgres real + **194 de front**. Todo en verde |
+| Pantallas | 47 |
 | CI | ✅ **Verde en los cuatro jobs** — `api`, `web`, `secretos`, `dependencias` |
 
 ### Etapas
@@ -72,8 +72,8 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 | 10–11 | Mejoras · Lo que se ve usando la app | ✅ | — |
 | 12 | Lo que pidió el dueño | ✅ salvo 12.3 | Avisar cuando falta el IPC del mes |
 | 13–14 | Garantes · Editor Word · Tipo de cuenta | ✅ | — |
-| 15 | Lo que le falta a un sistema así | ⏳ **en curso** | 15.6 cerrada; faltan 15.3, 15.4 y 15.5 |
-| 16 | Lo que un portal te enseñó a esperar | ⏳ **en curso** | 16.1, 16.4 y 16.6 cerradas; faltan 16.2, 16.3 y 16.5 |
+| 15 | Lo que le falta a un sistema así | ⏳ **en curso** | faltan **15.3** (ARCA, por trámite) y **15.4** (portal del inquilino) |
+| 16 | Lo que un portal te enseñó a esperar | ⏳ **en curso** | sólo falta **16.5** (turnos de visita) |
 | 17 | Sellado de seguridad | ⏳ **en curso** | 17.1 y 17.3 cerradas; faltan 17.2, 17.4, 17.5 |
 | 18 | Inbox omnicanal | ⏳ por empezar | Todo. Ojo con la dependencia externa |
 
@@ -203,23 +203,26 @@ habían migrado a UUID v4—. Ningún test lo veía. **La primera pantalla que s
 un número es la que encuentra los errores de los datos**, y por eso conviene
 construirla temprano.
 
-### Sprint 2 — lo próximo, en este orden
+### ✅ Sprint 2 — cerrado el 2026-08-19
 
-1. **15.5 · La cotización del día.** Hay operaciones en USD y liquidaciones en
-   ARS y **no hay tipo de cambio en ninguna parte**. Se guarda como un índice,
-   con su fecha y su fuente, y toda conversión lleva su memoria de cálculo.
-   La ingesta del BCRA ya funciona y tiene su cron.
-2. **16.2 · Búsqueda por radio en el mapa.** Haversine sobre `lat`/`lng`, que ya
-   se geocodifican y persisten. Medir antes de indexar.
-3. **16.3 · Comparar propiedades.** Front solo, sin endpoint nuevo: junta
-   respuestas de `GET /propiedades/:id`.
+15.5 cotización del día · 16.2 búsqueda por radio · 16.3 comparar propiedades.
 
-### Sprint 3
+**Lo que dejó de decisión reusable**: el BCRA publica el dólar oficial, pero ese
+NO es el tipo de cambio con el que se vende una propiedad en dólares, y el que
+sí se usa no lo publica nadie. El modelo admite los dos —oficial global, propia
+por inmobiliaria— y **la pantalla dice cuál es cuál** en vez de dejar que se
+asuma. Misma familia de decisión que el IPC manual y que el botón *Publicar* que
+no publicaba.
 
-4. **15.4 · Portal del inquilino.** El del propietario es exactamente este
-   patrón: público, por token, con función SECURITY DEFINER.
-5. **16.5 · Reserva de turnos para visitas.** El turno se agenda y se ve; el
-   recordatorio automático depende de que la etapa 7 consiga proveedor.
+### Sprint 3 — lo próximo
+
+1. **15.4 · Portal del inquilino.** El del propietario es exactamente este
+   patrón: público, por token, con función SECURITY DEFINER. Sus cuotas, su
+   saldo y sus comprobantes, más un botón para reportar un desperfecto que entra
+   como reclamo con la propiedad ya identificada.
+2. **16.5 · Reserva de turnos para visitas.** El turno se agenda y aparece en la
+   agenda del asesor; el recordatorio automático sigue atado a que la etapa 7
+   consiga proveedor de email o WhatsApp. No se simula un envío que no ocurre.
 
 ### Seguridad — lo que falta de la etapa 17
 
@@ -332,18 +335,18 @@ Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
 docs/roadmap.md.
 
-Estado (2026-08-19): 30 migraciones, 982 tests de API contra Postgres real y
+Estado (2026-08-19): 31 migraciones, 998 tests de API contra Postgres real y
 194 de front, todo en verde. El CI corre y está verde en los cuatro jobs.
 Entrás con owner@andes.test / unaclavelarga1.
 
-Lo último que se cerró: el **Sprint 1 completo** —cuenta corriente por persona,
-historial de precio y consultas, y ficha técnica para imprimir—, más el sellado
-de seguridad 17.1 (el bucket estaba de lectura pública con los DNI de los
-garantes adentro) y 16.1, precio y expensas en el filtro.
+Lo último que se cerró: los **Sprints 1 y 2 completos** —cuenta corriente,
+historial de precio, ficha para imprimir, cotización del día, búsqueda por
+radio y comparar propiedades—, más el sellado 17.1 (el bucket estaba de lectura
+pública con los DNI de los garantes adentro).
 
-Lo que sigue es el **Sprint 2** de CONTINUAR.md §5, y arranca por 15.5, la
-cotización del día: hay operaciones en USD y liquidaciones en ARS y no hay tipo
-de cambio en ninguna parte del sistema.
+Lo que sigue es el **Sprint 3** de CONTINUAR.md §5, y arranca por 15.4, el
+portal del inquilino: el del propietario ya es exactamente ese patrón —público,
+por token, con función SECURITY DEFINER—.
 
 Antes de escribir código, verificá el estado real en vez de creerle a este
 documento: `git log --oneline -5`, `gh run list --limit 3` y
