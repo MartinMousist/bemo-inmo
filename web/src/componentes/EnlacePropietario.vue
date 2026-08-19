@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
@@ -17,7 +17,19 @@ interface Acceso {
   ultimoUso: string | null; usos: number; creadoEl: string; vigente: boolean;
 }
 
-const props = defineProps<{ personaId: string; nombre: string }>();
+/**
+ * `rol` sin default: los dos portales muestran plata de una persona, y elegir
+ * por descuido cuál sería mostrarle a un inquilino la liquidación de un dueño.
+ * Es la misma regla que el servicio se impone del otro lado.
+ */
+const props = defineProps<{
+  personaId: string;
+  nombre: string;
+  rol: 'propietario' | 'inquilino';
+}>();
+
+/** El recurso REST de cada portal: `/propietarios` o `/inquilinos`. */
+const base = computed(() => (props.rol === 'propietario' ? 'propietarios' : 'inquilinos'));
 
 const auth = useAuth();
 const ui = useUi();
@@ -33,7 +45,7 @@ async function abrir() {
   if (!abierto.value) return;
   cargando.value = true;
   try {
-    accesos.value = await api<Acceso[]>(`/propietarios/${props.personaId}/accesos`);
+    accesos.value = await api<Acceso[]>(`/${base.value}/${props.personaId}/accesos`);
   } catch (e) {
     ui.error('No se pudo cargar', e instanceof ApiError ? e.paraMostrar : '');
   } finally {
@@ -57,12 +69,12 @@ async function generar() {
 
   try {
     const r = await api<{ ruta: string; expiraEl: string }>(
-      `/propietarios/${props.personaId}/accesos`,
+      `/${base.value}/${props.personaId}/accesos`,
       { method: 'POST' },
     );
     // La URL completa, porque lo que se copia y se manda por WhatsApp es esto.
     recien.value = { url: `${location.origin}${r.ruta}`, expiraEl: r.expiraEl };
-    accesos.value = await api<Acceso[]>(`/propietarios/${props.personaId}/accesos`);
+    accesos.value = await api<Acceso[]>(`/${base.value}/${props.personaId}/accesos`);
     ui.ok('Enlace generado', 'Copialo ahora: no se vuelve a mostrar.');
   } catch (e) {
     ui.error('No se pudo generar', e instanceof ApiError ? e.paraMostrar : '');
@@ -86,7 +98,7 @@ async function revocar(a: Acceso) {
 
   try {
     await api(`/propietarios/accesos/${a.id}`, { method: 'DELETE' });
-    accesos.value = await api<Acceso[]>(`/propietarios/${props.personaId}/accesos`);
+    accesos.value = await api<Acceso[]>(`/${base.value}/${props.personaId}/accesos`);
     recien.value = null;
     ui.ok('Enlace dado de baja');
   } catch (e) {

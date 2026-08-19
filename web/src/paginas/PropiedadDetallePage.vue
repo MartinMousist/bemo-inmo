@@ -596,7 +596,7 @@ onMounted(cargar);
                   <span class="mono pct">{{ t.porcentaje }}%</span>
                 </div>
                 <!-- Acá está el dueño: es el lugar natural para darle acceso. -->
-                <EnlacePropietario :persona-id="t.personaId" :nombre="t.nombre" />
+                <EnlacePropietario :persona-id="t.personaId" :nombre="t.nombre" rol="propietario" />
               </li>
             </ul>
             <p v-else class="vacio">Sin titulares cargados.</p>

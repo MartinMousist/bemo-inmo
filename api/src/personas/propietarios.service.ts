@@ -203,7 +203,7 @@ const SELECT = `
 
          (SELECT count(*)::int FROM titularidad t4 WHERE t4.persona_id = p.id) AS unidades_n,
 
-         EXISTS (SELECT 1 FROM acceso_propietario ap
+         EXISTS (SELECT 1 FROM acceso_portal ap
                   WHERE ap.persona_id = p.id AND ap.revocado_el IS NULL
                     AND ap.expira_el > now()) AS tiene_acceso`;
 

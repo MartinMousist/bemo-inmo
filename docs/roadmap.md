@@ -806,11 +806,32 @@ administrar» y «es donde vive mi negocio».
 **Riesgo**: es la integración más pesada de las seis. La condición de arranque
 —15.1 y 15.2 cerradas— ya se cumple.
 
-### 15.4 · Portal del inquilino
+### 15.4 · Portal del inquilino ✅ CERRADA
 
-- [ ] Sus cuotas, su saldo y sus comprobantes, sin sesión y por token.
-- [ ] Un botón para reportar un desperfecto, que entra como reclamo con la
-      propiedad ya identificada.
+- [x] Sus cuotas, su saldo y su contrato, sin sesión y por token.
+- [x] Reportar un desperfecto, que entra como reclamo con la propiedad ya
+      identificada — **la propiedad no se elige**: sale de su contrato vigente,
+      que es lo que impide reportar sobre una unidad que no se habita.
+- [x] **La tabla se generalizó en vez de duplicarse**: `acceso_propietario` pasó
+      a `acceso_portal` con una columna `rol`. Un `acceso_inquilino` habría sido
+      la misma tabla, la misma función y la misma lógica de revocación otra vez
+      — dos copias de un mecanismo de seguridad son dos lugares donde arreglar
+      el mismo agujero, y el día que se arregle uno solo nadie se entera.
+- [x] La vista del inquilino **no menciona honorarios ni liquidaciones**: lo que
+      la inmobiliaria le cobra al dueño no es asunto suyo. Hay test.
+
+**El agujero que apareció al probarlo, con el código ya «funcionando»**: los dos
+portales comparten tabla, token y resolución, y `vista()` no comprobaba el ROL.
+Un inquilino que cambiaba `/inquilino` por `/propietario` en su propia URL veía
+las liquidaciones del dueño. Se encontró probando exactamente eso; ahora el rol
+se compara al resolver y el error es idéntico al de un token inventado, para no
+decirle a nadie qué tokens existen.
+
+**Trampa de Postgres**: `ALTER TABLE ... RENAME` **no reescribe el cuerpo de las
+funciones** —se guardan como texto y se resuelven al ejecutarlas—. La migración
+corrió limpia, el typecheck pasó y los tests que no abren el portal siguieron en
+verde; el error salió recién al abrir un enlace. Arreglado en la 033, que existe
+porque las migraciones son inmutables.
 
 **Lo caro ya está**: el portal del propietario es exactamente este patrón —
 público, por token, resuelto con función SECURITY DEFINER.

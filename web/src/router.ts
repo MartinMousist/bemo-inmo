@@ -22,6 +22,13 @@ const router = createRouter({
       component: () => import('./paginas/PortalPropietarioPage.vue'),
       meta: { publica: true, permiteSesion: true },
     },
+    // El del inquilino, con las mismas reglas: público, con el token en la URL,
+    // y `permiteSesion` para que un empleado vea exactamente lo que ve él.
+    {
+      path: '/inquilino/:token',
+      component: () => import('./paginas/PortalInquilinoPage.vue'),
+      meta: { publica: true, permiteSesion: true },
+    },
     { path: '/registrar', component: () => import('./paginas/RegistrarPage.vue'), meta: { publica: true } },
     {
       path: '/invitacion/:token',

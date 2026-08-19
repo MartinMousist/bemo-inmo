@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../api/cliente';
+import EnlacePropietario from '../componentes/EnlacePropietario.vue';
 import { fecha, moneyCorto, numero } from '../dominio/formato';
 import { filtrosRecordados } from '../dominio/filtros';
 import PageHeader from '../componentes/PageHeader.vue';
@@ -169,6 +170,7 @@ onMounted(cargar);
               <th class="num">Mora</th>
               <th>Próximo ajuste</th>
               <th class="num">Garantes</th>
+              <th><span class="visually-hidden">Portal del inquilino</span></th>
             </tr>
           </thead>
           <tbody>
@@ -221,6 +223,16 @@ onMounted(cargar);
                 <span :class="{ falta: f.garantes.cargados < f.garantes.minimo }">
                   {{ f.garantes.cargados }}/{{ f.garantes.minimo }}
                 </span>
+              </td>
+              <!-- El enlace del portal. Sólo con inquilino identificado: sin
+                   persona no hay a quién dárselo. -->
+              <td @click.stop @keydown.stop>
+                <EnlacePropietario
+                  v-if="f.inquilino"
+                  :persona-id="f.inquilino.id"
+                  :nombre="f.inquilino.nombre"
+                  rol="inquilino"
+                />
               </td>
             </tr>
           </tbody>

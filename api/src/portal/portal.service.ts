@@ -28,6 +28,43 @@ import { round2 } from '../alquileres/ajustes.motor';
  *    Uno que no vence es un enlace para siempre.
  */
 
+export type RolPortal = 'propietario' | 'inquilino';
+
+/**
+ * Lo que ve un inquilino con su enlace.
+ *
+ * **No es la vista del propietario con otros datos**: son dos preguntas
+ * distintas. El dueño quiere saber cuánto le entra; el inquilino quiere saber
+ * cuánto debe y hasta cuándo tiene contrato. Por eso los saldos van con el
+ * signo al revés y no hay una sola mención a honorarios ni a liquidaciones —
+ * lo que la inmobiliaria le cobra al dueño no es asunto suyo.
+ */
+export interface VistaInquilino {
+  inmobiliaria: string;
+  inquilino: string;
+  generadoEl: string;
+  contratos: Array<{
+    propiedad: string;
+    desde: string;
+    hasta: string;
+    montoActual: number;
+    moneda: string;
+  }>;
+  /** Lo que debe, por moneda. Vacío es «al día», y la pantalla lo dice así. */
+  saldo: Array<{ moneda: string; monto: number }>;
+  cuotas: Array<{
+    periodo: string;
+    venceEl: string;
+    total: number;
+    cobrado: number;
+    saldo: number;
+    moneda: string;
+    estado: string;
+  }>;
+  /** Si puede reportar un desperfecto: hace falta un contrato vigente. */
+  puedeReportar: boolean;
+}
+
 export interface AccesoCreado {
   id: string;
   /** Se devuelve UNA sola vez. Después queda sólo el hash. */
@@ -91,6 +128,12 @@ export class PortalService {
     tenantId: string,
     personaId: string,
     usuarioId: string,
+    /**
+     * Qué portal abre este enlace. Sin default a propósito: los dos muestran
+     * plata de una persona y elegir por descuido cuál sería mostrarle a un
+     * inquilino la liquidación de un propietario.
+     */
+    rol: RolPortal,
   ): Promise<AccesoCreado> {
     return this.db.withTenant(tenantId, async (ej) => {
       const { rows: pe } = await ej.query<{ id: string }>(
@@ -99,31 +142,42 @@ export class PortalService {
       );
       if (!pe.length) throw AppError.notFound('No se encontró esa persona.');
 
-      // Que sea propietario de algo. Un enlace para alguien que no tiene
-      // propiedades muestra una pantalla vacía y no se entiende por qué.
+      // Que tenga el rol que el enlace promete. Un acceso para alguien que no
+      // lo tiene abre una pantalla vacía y nadie entiende por qué.
+      //
+      // La comprobación depende del rol —era sólo la de propietario hasta que
+      // esta pieza pasó a servir a los dos— y usa la misma definición que
+      // `CONJUNTO_ROL` de personas: un rol es una relación, no una columna.
       const { rows: tiene } = await ej.query(
-        `SELECT 1 FROM titularidad WHERE persona_id = $1
-          UNION ALL
-         SELECT 1 FROM contrato_parte WHERE persona_id = $1 AND rol = 'locador'
-          LIMIT 1`,
+        rol === 'propietario'
+          ? `SELECT 1 FROM titularidad WHERE persona_id = $1
+              UNION ALL
+             SELECT 1 FROM contrato_parte WHERE persona_id = $1 AND rol = 'locador'
+              LIMIT 1`
+          : `SELECT 1 FROM contrato_parte
+              WHERE persona_id = $1 AND rol = 'locatario' LIMIT 1`,
         [personaId],
       );
       if (!tiene.length) {
         throw new AppError(
           422,
           ErrorCode.ESTADO_INVALIDO,
-          'Esa persona no figura como propietaria de ninguna propiedad, así que ' +
-            'el enlace no le mostraría nada.',
+          rol === 'propietario'
+            ? 'Esa persona no figura como propietaria de ninguna propiedad, así que '
+              + 'el enlace no le mostraría nada.'
+            : 'Esa persona no figura como inquilina de ningún contrato, así que '
+              + 'el enlace no le mostraría nada.',
           'Unprocessable Entity',
         );
       }
 
-      // Se revoca lo anterior: dos enlaces vivos para la misma persona son dos
-      // cosas que después hay que acordarse de dar de baja.
+      // Se revoca lo anterior DEL MISMO ROL: alguien puede alquilar una unidad
+      // y ser dueño de otra, y revocarle el enlace de propietario al generarle
+      // el de inquilino le rompería el que ya estaba usando.
       await ej.query(
-        `UPDATE acceso_propietario SET revocado_el = now()
-          WHERE persona_id = $1 AND revocado_el IS NULL`,
-        [personaId],
+        `UPDATE acceso_portal SET revocado_el = now()
+          WHERE persona_id = $1 AND rol = $2 AND revocado_el IS NULL`,
+        [personaId, rol],
       );
 
       const token = randomBytes(32).toString('base64url');
@@ -131,16 +185,16 @@ export class PortalService {
       expira.setDate(expira.getDate() + DIAS_DE_VIDA);
 
       const { rows } = await ej.query<{ id: string; expira_el: Date }>(
-        `INSERT INTO acceso_propietario
-           (tenant_id, persona_id, token_hash, expira_el, creado_por)
-         VALUES ($1,$2,$3,$4,$5) RETURNING id, expira_el`,
-        [tenantId, personaId, hash(token), expira, usuarioId],
+        `INSERT INTO acceso_portal
+           (tenant_id, persona_id, token_hash, expira_el, creado_por, rol)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, expira_el`,
+        [tenantId, personaId, hash(token), expira, usuarioId, rol],
       );
 
       return {
         id: rows[0].id,
         token,
-        ruta: `/propietario/${token}`,
+        ruta: `/${rol}/${token}`,
         expiraEl: rows[0].expira_el.toISOString(),
       };
     });
@@ -153,7 +207,7 @@ export class PortalService {
         ultimo_uso: Date | null; usos: number; created_at: Date;
       }>(
         `SELECT id, expira_el, revocado_el, ultimo_uso, usos, created_at
-           FROM acceso_propietario
+           FROM acceso_portal
           WHERE persona_id = $1
           ORDER BY created_at DESC
           LIMIT 20`,
@@ -177,7 +231,7 @@ export class PortalService {
   async revocar(tenantId: string, accesoId: string): Promise<void> {
     await this.db.withTenant(tenantId, async (ej) => {
       const { rowCount } = await ej.query(
-        `UPDATE acceso_propietario SET revocado_el = now()
+        `UPDATE acceso_portal SET revocado_el = now()
           WHERE id = $1 AND revocado_el IS NULL`,
         [accesoId],
       );
@@ -196,24 +250,13 @@ export class PortalService {
    * se lee todo lo demás bajo RLS.
    */
   async vista(token: string): Promise<VistaPropietario> {
-    // `db.query` y no `withTenant`: acá todavía NO hay tenant que fijar. Es
-    // justamente lo que esta consulta resuelve.
-    const r = await this.db.query<{
-      tenant_id: string; persona_id: string; acceso_id: string;
-    }>('SELECT * FROM app_resolver_acceso_propietario($1)', [hash(token)]);
-
-    if (!r.length) {
-      // Un token inválido y uno vencido dan lo MISMO. Distinguirlos le diría a
-      // quien prueba enlaces al voleo cuáles existieron alguna vez.
-      throw new AppError(
-        404,
-        ErrorCode.NOT_FOUND,
-        'Este enlace no es válido o ya venció. Pedile uno nuevo a tu inmobiliaria.',
-        'Not Found',
-      );
-    }
-
-    const { tenant_id: tenantId, persona_id: personaId, acceso_id: accesoId } = r[0];
+    // Por `resolver()`, que además comprueba el ROL.
+    //
+    // Cuando esta pieza servía a un solo portal, resolver el token alcanzaba.
+    // Con dos, no: sin el chequeo de rol, un inquilino que cambia `/inquilino`
+    // por `/propietario` en su propia URL abre la vista del dueño y le ve las
+    // liquidaciones. Se encontró probando exactamente eso.
+    const { tenantId, personaId, accesoId } = await this.resolver(token, 'propietario');
 
     await this.db.query('SELECT app_marcar_uso_acceso($1)', [accesoId]);
 
@@ -226,6 +269,128 @@ export class PortalService {
         liquidaciones: await this.liquidacionesDe(ej, personaId),
       };
     });
+  }
+
+  /**
+   * La vista del inquilino. Mismo token, misma resolución, otro contenido.
+   *
+   * Se comprueba el ROL del acceso: un enlace de propietario no abre esta
+   * pantalla aunque el uuid sea válido. Sin ese chequeo, cambiar `/propietario`
+   * por `/inquilino` en la URL mostraría la otra vista con el mismo token.
+   */
+  async vistaInquilino(token: string): Promise<VistaInquilino> {
+    const { tenantId, personaId, accesoId } = await this.resolver(token, 'inquilino');
+    await this.db.query('SELECT app_marcar_uso_acceso($1)', [accesoId]);
+
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows: cab } = await ej.query<{ inmobiliaria: string; inquilino: string }>(
+        `SELECT t.nombre AS inmobiliaria,
+                trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) AS inquilino
+           FROM tenant t, persona p WHERE t.id = $1 AND p.id = $2`,
+        [tenantId, personaId],
+      );
+
+      const { rows: contratos } = await ej.query<{
+        id: string; propiedad: string; desde: string; hasta: string;
+        monto: string; moneda: string; vigente: boolean;
+      }>(
+        `SELECT c.id,
+                pr.calle || coalesce(' ' || pr.numero, '') AS propiedad,
+                c.fecha_inicio::text AS desde, c.fecha_fin::text AS hasta,
+                c.monto_inicial::text AS monto, c.moneda,
+                c.estado = 'vigente' AS vigente
+           FROM contrato_alquiler c
+           JOIN contrato_parte cp ON cp.contrato_id = c.id
+           JOIN propiedad pr ON pr.id = c.propiedad_id
+          WHERE cp.persona_id = $1 AND cp.rol = 'locatario'
+          ORDER BY c.fecha_inicio DESC`,
+        [personaId],
+      );
+
+      const ids = contratos.map((c) => c.id);
+      // `cuotasDe` devuelve un Map por contrato —así lo usa la vista del
+      // propietario, que las muestra agrupadas—. Acá se aplanan: el inquilino
+      // ve UNA cuenta, aunque alquile dos unidades a la misma inmobiliaria.
+      const porContrato = ids.length ? await this.cuotasDe(ej, ids) : new Map();
+      const cuotas = [...porContrato.values()].flat();
+
+      // El saldo se arma de las cuotas ya traídas y no con otra consulta: dos
+      // consultas que suman lo mismo son dos números que se pueden desdecir.
+      const porMoneda = new Map<string, number>();
+      for (const q of cuotas) {
+        if (q.saldo > 0) porMoneda.set(q.moneda, (porMoneda.get(q.moneda) ?? 0) + q.saldo);
+      }
+
+      return {
+        inmobiliaria: cab[0]?.inmobiliaria ?? '',
+        inquilino: cab[0]?.inquilino ?? '',
+        generadoEl: new Date().toISOString(),
+        contratos: contratos.map((c) => ({
+          propiedad: c.propiedad,
+          // `date` de Postgres: se recorta el texto, no se pasa por `Date`.
+          desde: String(c.desde).slice(0, 10),
+          hasta: String(c.hasta).slice(0, 10),
+          montoActual: Number(c.monto),
+          moneda: c.moneda,
+        })),
+        saldo: [...porMoneda.entries()]
+          .map(([moneda, monto]) => ({ moneda, monto: Math.round(monto * 100) / 100 }))
+          .sort((a, b) => a.moneda.localeCompare(b.moneda)),
+        cuotas,
+        puedeReportar: contratos.some((c) => c.vigente),
+      };
+    });
+  }
+
+  /**
+   * Reportar un desperfecto desde el portal.
+   *
+   * Va por función de base: quien reporta no tiene sesión ni usuario, así que
+   * no puede escribir en `reclamo` por el camino normal. La propiedad NO la
+   * elige: sale de su contrato vigente, que es lo que hace que el reclamo
+   * llegue identificado y lo que impide reportar sobre una unidad ajena.
+   */
+  async reportar(token: string, categoria: string, descripcion: string): Promise<{ id: string }> {
+    const { accesoId } = await this.resolver(token, 'inquilino');
+    try {
+      const filas = await this.db.query<{ app_reclamo_desde_portal: string }>(
+        'SELECT app_reclamo_desde_portal($1, $2, $3)',
+        [accesoId, categoria, descripcion],
+      );
+      return { id: filas[0].app_reclamo_desde_portal };
+    } catch (err) {
+      if ((err as { code?: string }).code === 'BE003') {
+        throw new AppError(
+          409, ErrorCode.VALIDATION_FAILED,
+          'No hay un contrato vigente asociado a este enlace.',
+          'Conflict',
+        );
+      }
+      throw err;
+    }
+  }
+
+  /** Resuelve el token y comprueba que sea del portal que se está abriendo. */
+  private async resolver(
+    token: string,
+    rol: RolPortal,
+  ): Promise<{ tenantId: string; personaId: string; accesoId: string }> {
+    const r = await this.db.query<{
+      tenant_id: string; persona_id: string; acceso_id: string; rol: string;
+    }>('SELECT * FROM app_resolver_acceso_portal($1)', [hash(token)]);
+
+    // El rol se compara acá y no en la función: un enlace de propietario que
+    // no abre la vista de inquilino tiene que dar EXACTAMENTE el mismo error
+    // que un token inventado. Distinguirlos diría que ese token existe.
+    if (!r.length || r[0].rol !== rol) {
+      throw new AppError(
+        404,
+        ErrorCode.NOT_FOUND,
+        'Este enlace no es válido o ya venció. Pedile uno nuevo a tu inmobiliaria.',
+        'Not Found',
+      );
+    }
+    return { tenantId: r[0].tenant_id, personaId: r[0].persona_id, accesoId: r[0].acceso_id };
   }
 
   private async cabecera(ej: Ejecutor, tenantId: string, personaId: string) {

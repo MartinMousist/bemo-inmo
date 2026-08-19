@@ -96,8 +96,10 @@ import { TableroService } from './tablero/tablero.service';
 import { NotasController } from './notas/notas.controller';
 import { NotasService } from './notas/notas.service';
 import {
+  AccesosInquilinoController,
   AccesosPropietarioController,
   PortalController,
+  PortalInquilinoController,
 } from './portal/portal.controller';
 import { PortalService } from './portal/portal.service';
 import { InicioService } from './inicio/inicio.service';
@@ -138,6 +140,8 @@ import { CuentaService } from './cuenta/cuenta.service';
     NotasController,
     AccesosPropietarioController,
     PortalController,
+    AccesosInquilinoController,
+    PortalInquilinoController,
     ConciliacionController,
     ActasDeContratoController,
     ActasController,
