@@ -63,9 +63,20 @@ jobs:
 
           # El bucket, una sola vez. Sin él la primera subida da NoSuchBucket y
           # parece un bug de la app.
+          #
+          # Y con la MISMA política que el compose: raíz cerrada, `publico/`
+          # abierto. Sin esto el CI probaría contra un bucket con otros
+          # permisos que producción, que es el agujero que ya dejó pasar la
+          # falta de `helmet` en el arnés de tests (etapa 8).
           docker run --rm --network host \
             -e MC_HOST_local=http://ci_s3_access:ci_s3_secret_min8@localhost:9000 \
             minio/mc:latest mb --ignore-existing local/bemo-inmo-ci
+          docker run --rm --network host \
+            -e MC_HOST_local=http://ci_s3_access:ci_s3_secret_min8@localhost:9000 \
+            minio/mc:latest anonymous set none local/bemo-inmo-ci
+          docker run --rm --network host \
+            -e MC_HOST_local=http://ci_s3_access:ci_s3_secret_min8@localhost:9000 \
+            minio/mc:latest anonymous set download local/bemo-inmo-ci/publico
 
       # Node 20, no la última: Node 26 inyecta un localStorage experimental que
       # rompe la suite del frontend con errores que no son bugs reales.

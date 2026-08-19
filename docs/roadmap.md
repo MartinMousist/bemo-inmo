@@ -997,7 +997,7 @@ mandar, con el membrete de la inmobiliaria.
 >
 > Ordenada por lo que expone, no por lo que cuesta.
 
-### 17.1 · El bucket es de lectura pública, y ahí viven los DNI
+### 17.1 · El bucket es de lectura pública, y ahí viven los DNI ✅ CERRADA
 
 **Hallazgo verificado, no una hipótesis.** `docker-compose.yml` corre
 `mc anonymous set download` sobre el bucket entero, y `AlmacenamientoService`
@@ -1011,12 +1011,33 @@ Cualquiera con la URL —un log, un historial, una captura compartida, un
 En dev está contenido (MinIO en localhost). El riesgo es que `docs/deploy.md`
 repita el patrón en producción.
 
-- [ ] **Separar por sensibilidad**: lo publicable (fotos de propiedades, que van
-      al feed XML de portales y *deben* ser públicas) va a un bucket o prefijo
-      público; lo sensible va a uno privado.
-- [ ] Lo privado se sirve por **URL firmada de vida corta**, generada por el
-      endpoint que ya valida el tenant y el rol. Nunca por URL permanente.
-- [ ] Los objetos ya subidos se migran, no se dejan atrás.
+- [x] **Separado por prefijo de visibilidad**: `publico/` para las fotos de
+      propiedades —que van al feed XML y *deben* ser públicas— y `privado/`
+      para garantes y actas. La política pasa de `download` sobre la raíz a
+      `none` + `download` sólo sobre `publico/`.
+- [x] `subirImagen()` **exige declarar la visibilidad**, sin default. El
+      compilador encontró los cinco lugares que suben algo y obligó a decidir
+      en cada uno. Un default —cualquiera de los dos— convierte «me olvidé de
+      pensarlo» en una decisión de seguridad tomada por descuido, que es
+      exactamente como el DNI terminó en un bucket abierto.
+- [x] Lo privado se sirve por **URL firmada de 5 minutos**, generada después de
+      que el endpoint validó tenant y rol.
+- [x] Los 711 objetos ya subidos se movieron con `scripts/migrar-bucket-029.sh`,
+      que además reescribe las urls públicas y completa la `clave` de lo privado.
+- [x] El CI aplica la MISMA política que el compose. Sin eso probaría contra un
+      bucket con otros permisos que producción — el mismo agujero que dejó pasar
+      la falta de `helmet` en el arnés de tests de la etapa 8.
+
+**Dos trampas que aparecieron construyéndolo:**
+
+- **La URL firmada apuntaba a `http://s3:9000`**, el host interno de compose,
+  que ningún navegador resuelve. No se arregla reemplazando el host después:
+  SigV4 firma el `Host` y cambiarlo da `SignatureDoesNotMatch`. Hay que firmar
+  contra el host público desde el principio, y eso es un segundo cliente de S3.
+  Es la misma distinción que el compose ya documentaba para `S3_PUBLIC_URL`.
+- **El script movió 1 de 711 objetos y pareció que había andado.** `docker
+  compose exec` hereda el stdin del `while read`, se come el resto de la lista
+  y el bucle termina después del primero. Va con `< /dev/null`.
 
 **Hecho cuando**: pedir la URL de un DNI sin sesión da 403, y la misma foto de
 propiedad sigue abriendo sin sesión porque tiene que abrir.
@@ -1074,9 +1095,16 @@ política de retención y sin forma de borrarlo.
 - [ ] **Un test que falle si alguien agrega un endpoint sin `@Roles`** — hoy el
       guard es default-deny para autenticar, pero el rol es opt-in.
 
-**Gate de la etapa**: un tercero con acceso al bucket y a la API sin credenciales
-no obtiene ni un dato personal. Y las tres primeras se verifican **rompiéndolas
-a propósito**, como ya se hizo con `withTenant` y con `@Roles` en la etapa 2.
+**Gate de 17.1 — CERRADO.** Verificado por HTTP contra el bucket real, no
+mirando el string de la clave: la foto de una propiedad da **200** sin sesión
+—tiene que darlo— y el documento de un garante da **403** con su URL exacta,
+que es lo que tendría quien la leyó de un log. Firmada, la misma clave da 200.
+Siete tests en `bucket-privado.spec.ts`, y las dos afirmaciones que sostienen
+el gate corren en TODOS los entornos: son peticiones anónimas, así que no
+dependen del host público y se pueden hacer contra el endpoint interno.
+
+**Gate de la etapa completa**: un tercero con acceso al bucket y a la API sin
+credenciales no obtiene ni un dato personal. Falta lo de 17.2 en adelante.
 
 ---
 

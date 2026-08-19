@@ -45,6 +45,22 @@ services:
 
   # Crea el bucket una vez y se apaga. Sin esto la primera subida falla con
   # NoSuchBucket y parece un bug de la app.
+  # ── Política del bucket ──────────────────────────────────────────────────────
+  #
+  # `anonymous set none` sobre la raíz y `download` SÓLO sobre `publico/`.
+  #
+  # Antes era `download` sobre el bucket entero, y adentro convivían las fotos
+  # de propiedades con las dos caras del DNI de cada garante, sus recibos de
+  # sueldo y las fotos de las actas. La clave lleva 8 bytes aleatorios —la URL
+  # no se adivina— pero era lectura pública, `inline` e `immutable`: quien
+  # tuviera la URL leía un DNI para siempre y sin dejar rastro.
+  #
+  # Las fotos de propiedades siguen abiertas porque TIENEN que estarlo: van en
+  # el feed XML que consumen los portales, y un portal no manda cabecera de
+  # autorización. Lo sensible se sirve con URL firmada de cinco minutos.
+  #
+  # El `set none` explícito no es redundante: un bucket que ya quedó abierto de
+  # una corrida anterior no se cierra solo al agregar la regla del prefijo.
   s3-init:
     image: minio/mc:latest
     depends_on:
@@ -58,8 +74,9 @@ services:
       /bin/sh -c "
       mc alias set local http://s3:9000 $$S3_ACCESS_KEY $$S3_SECRET_KEY &&
       mc mb --ignore-existing local/$$S3_BUCKET &&
-      mc anonymous set download local/$$S3_BUCKET &&
-      echo 'bucket listo'
+      mc anonymous set none local/$$S3_BUCKET &&
+      mc anonymous set download local/$$S3_BUCKET/publico &&
+      echo 'bucket listo: publico/ abierto, el resto cerrado'
       "
 
   api:

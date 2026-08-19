@@ -404,7 +404,7 @@ async function sembrarDocumentosGarantes(
       if (ya.length) continue;
 
       const subido = await almacen.subirImagen(
-        ANDES, `garantes/${g.garantiaId}`, png, `${tipo}-ejemplo.png`,
+        ANDES, `garantes/${g.garantiaId}`, png, false, `${tipo}-ejemplo.png`,
       );
 
       const { rowCount } = await client.query(
@@ -516,7 +516,7 @@ async function sembrarFotosPropiedades(
       });
 
       const subido = await almacen.subirImagen(
-        ANDES, `propiedades/${p.id}`, png, `${etiqueta.toLowerCase()}-muestra-${vista + 1}.png`,
+        ANDES, `propiedades/${p.id}`, png, true, `${etiqueta.toLowerCase()}-muestra-${vista + 1}.png`,
       );
 
       const { rowCount } = await client.query(

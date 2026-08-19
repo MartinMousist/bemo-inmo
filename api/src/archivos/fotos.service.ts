@@ -63,8 +63,22 @@ export class FotosService {
     }
 
     const subido = await this.almacen.subirImagen(
-      tenantId, `propiedades/${propiedadId}`, datos, nombreOriginal,
+      // Públicas: el feed XML se las entrega a los portales, que leen sin
+      // credenciales. Es el único caso del sistema que TIENE que ser público.
+      tenantId, `propiedades/${propiedadId}`, datos, true, nombreOriginal,
     );
+
+    // `url` es `string | null` porque los objetos privados no tienen una URL
+    // que sirva siempre. Acá se subió con `publico: true`, así que la trae — y
+    // la columna es NOT NULL. El chequeo documenta esa invariante en vez de
+    // taparla con un `!`: si alguien cambia el `true` de arriba, esto lo dice
+    // en el momento y no con un error de Postgres tres capas más abajo.
+    if (!subido.url) {
+      await this.almacen.borrar(subido.clave);
+      throw new Error('Una foto de propiedad tiene que subirse como pública.');
+    }
+    // En una const: el narrowing de arriba no cruza el closure de `withTenant`.
+    const url = subido.url;
 
     try {
       return await this.db.withTenant(tenantId, async (ej) => {
@@ -75,10 +89,10 @@ export class FotosService {
                    -- La primera foto es la portada sin que nadie lo pida.
                    NOT EXISTS (SELECT 1 FROM propiedad_foto WHERE propiedad_id = $2))
            RETURNING id, orden, es_portada`,
-          [tenantId, propiedadId, subido.url],
+          [tenantId, propiedadId, url],
         );
         return {
-          id: rows[0].id, url: subido.url,
+          id: rows[0].id, url,
           orden: rows[0].orden, esPortada: rows[0].es_portada,
         };
       });

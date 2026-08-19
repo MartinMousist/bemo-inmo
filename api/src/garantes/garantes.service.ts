@@ -107,7 +107,17 @@ export interface DocumentoGarante {
   id: string;
   tipo: string;
   etiqueta: string;
-  url: string;
+  /**
+   * URL **firmada y con vencimiento**, no la del bucket.
+   *
+   * Estos archivos son las dos caras de un DNI y tres recibos de sueldo: viven
+   * en el prefijo privado y no se pueden leer sin credenciales. La URL se firma
+   * al armar la respuesta, después de que el endpoint validó tenant y rol.
+   *
+   * `null` si el almacenamiento no está configurado o la firma falló: la ficha
+   * del garante tiene que abrirse igual, con el resto del legajo.
+   */
+  url: string | null;
   nombreOriginal: string | null;
   subidoEl: string;
 }
@@ -527,7 +537,9 @@ export class GarantesService {
     });
 
     const subido = await this.almacen.subirImagen(
-      tenantId, `garantes/${garanteId}`, datos, nombreOriginal,
+      // Privadas, y es el motivo de toda esta separación: acá van las dos
+      // caras del DNI y los tres recibos de sueldo de una persona.
+      tenantId, `garantes/${garanteId}`, datos, false, nombreOriginal,
     );
 
     try {
@@ -543,9 +555,12 @@ export class GarantesService {
 
         await ej.query(
           `INSERT INTO garantia_documento
-             (tenant_id, garantia_id, tipo, url, nombre_original, subido_por)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [tenantId, garanteId, tipo, subido.url, nombreOriginal ?? null, usuarioId],
+             (tenant_id, garantia_id, tipo, url, clave, nombre_original, subido_por)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          // `url` queda como registro de dónde está el objeto; lo que se usa
+          // para servirlo es `clave`. En un privado `subido.url` es null.
+          [tenantId, garanteId, tipo, subido.url ?? '', subido.clave,
+           nombreOriginal ?? null, usuarioId],
         );
 
         for (const v of viejos) {
@@ -687,11 +702,44 @@ export class GarantesService {
       });
 
       const desde = offset(f);
-      return armarPagina(filtrados.slice(desde, desde + f.porPagina), filtrados.length, f);
+      // Se firma DESPUÉS de paginar: firmar los 300 de la cartera para mostrar
+      // 25 sería trabajo tirado, y una URL firmada que nadie va a abrir es una
+      // URL viva de más.
+      const pagina = await this.firmarDocumentos(
+        filtrados.slice(desde, desde + f.porPagina),
+        clavesDeDocumentos(rows),
+      );
+      return armarPagina(pagina, filtrados.length, f);
     });
   }
 
-  /** Una sola consulta con los documentos agregados: no una por garante. */
+  /**
+   * Reemplaza la URL de cada documento por una firmada y con vencimiento.
+   *
+   * Va como pasada aparte y no adentro de `aGarante()` porque firmar es
+   * asíncrono y `aGarante()` es puro: es la función que deriva el veredicto del
+   * legajo, y meterle una promesa la convertiría en algo que no se puede
+   * probar con casos de papel.
+   *
+   * Firmar es una operación LOCAL —un HMAC sobre la clave, sin ida al bucket—,
+   * así que N documentos son N hashes y no N viajes de red.
+   *
+   * Las filas anteriores a la 029 no tienen `clave` guardada: se deriva de la
+   * `url` con la misma función que ya se usaba para borrar.
+   */
+  private async firmarDocumentos<T extends { documentos: DocumentoGarante[] }>(
+    garantes: T[],
+    claves: Map<string, string | null>,
+  ): Promise<T[]> {
+    for (const g of garantes) {
+      for (const d of g.documentos) {
+        const clave = claves.get(d.id) ?? (d.url ? this.almacen.claveDeUrl(d.url) : null);
+        d.url = clave ? await this.almacen.urlFirmada(clave) : null;
+      }
+    }
+    return garantes;
+  }
+
   private async leerDe(
     ej: Ejecutor,
     contratoId: string,
@@ -716,7 +764,8 @@ export class GarantesService {
       "SELECT to_char(current_date, 'YYYY-MM-DD') AS hoy",
     );
 
-    return rows.map((f) => aGarante(f, hoy[0].hoy));
+    const garantes = rows.map((f) => aGarante(f, hoy[0].hoy));
+    return this.firmarDocumentos(garantes, clavesDeDocumentos(rows));
   }
 }
 
@@ -737,7 +786,7 @@ const SELECT_GARANTE = `
          trim(coalesce(p.nombre,'') || ' ' || coalesce(p.apellido,'')) AS nombre,
          p.doc_numero, p.telefono, p.email,
          (SELECT json_agg(json_build_object(
-             'id', d.id, 'tipo', d.tipo, 'url', d.url,
+             'id', d.id, 'tipo', d.tipo, 'url', d.url, 'clave', d.clave,
              'nombreOriginal', d.nombre_original, 'subidoEl', d.created_at)
             ORDER BY d.tipo)
             FROM garantia_documento d WHERE d.garantia_id = g.id) AS documentos,
@@ -813,7 +862,7 @@ interface FilaGarante {
   telefono: string | null;
   email: string | null;
   documentos: Array<{
-    id: string; tipo: string; url: string;
+    id: string; tipo: string; url: string; clave: string | null;
     nombreOriginal: string | null; subidoEl: string;
   }> | null;
   historial: {
@@ -822,6 +871,22 @@ interface FilaGarante {
     ultima: { el: string; situacion: number | null; apto: boolean | null } | null;
     chequesError: string | null;
   } | null;
+}
+
+/**
+ * `id de documento → clave del objeto`, sacado de las filas crudas.
+ *
+ * `aGarante()` no propaga la clave a su salida a propósito: es un detalle del
+ * almacenamiento y no tiene por qué viajar al front, que sólo necesita una URL
+ * que funcione. Este mapa la lleva desde la fila hasta la firma sin ensuciar el
+ * tipo público.
+ */
+function clavesDeDocumentos(filas: FilaGarante[]): Map<string, string | null> {
+  const m = new Map<string, string | null>();
+  for (const f of filas) {
+    for (const d of f.documentos ?? []) m.set(d.id, d.clave);
+  }
+  return m;
 }
 
 function aGarante(f: FilaGarante, hoy: string): Garante {

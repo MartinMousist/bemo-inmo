@@ -37,7 +37,15 @@ import type {
 
 export interface FotoActa {
   id: string;
-  url: string;
+  /**
+   * URL **firmada y con vencimiento**. Estas fotos son el interior de la casa
+   * de alguien y la prueba de un reclamo por el depósito: viven en el prefijo
+   * privado del bucket y no se leen sin credenciales.
+   *
+   * `null` si el almacenamiento no está configurado o la firma falló — el acta
+   * tiene que abrirse igual, con sus ambientes y observaciones.
+   */
+  url: string | null;
   nombreOriginal: string | null;
   subidaEl: string;
 }
@@ -295,15 +303,19 @@ export class ActasService {
     }
 
     const subido = await this.almacen.subirImagen(
-      tenantId, `actas/${itemId}`, datos, nombreOriginal,
+      // Privadas: son el interior de la casa de alguien y la prueba de un
+      // reclamo por el depósito. No hay razón para que se lean sin sesión.
+      tenantId, `actas/${itemId}`, datos, false, nombreOriginal,
     );
 
     try {
       await this.db.withTenant(tenantId, (ej) =>
         ej.query(
-          `INSERT INTO acta_foto (tenant_id, acta_item_id, url, nombre_original, subida_por)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [tenantId, itemId, subido.url, nombreOriginal ?? null, usuarioId],
+          `INSERT INTO acta_foto (tenant_id, acta_item_id, url, clave, nombre_original, subida_por)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          // `url` queda como registro; lo que sirve el archivo es `clave`. En
+          // un objeto privado `subido.url` es null.
+          [tenantId, itemId, subido.url ?? '', subido.clave, nombreOriginal ?? null, usuarioId],
         ),
       );
     } catch (err) {
@@ -381,7 +393,7 @@ export class ActasService {
                   'id', i.id, 'ambiente', i.ambiente, 'estado', i.estado,
                   'detalle', i.detalle, 'orden', i.orden,
                   'fotos', (SELECT json_agg(json_build_object(
-                              'id', f.id, 'url', f.url,
+                              'id', f.id, 'url', f.url, 'clave', f.clave,
                               'nombreOriginal', f.nombre_original,
                               'subidaEl', f.created_at) ORDER BY f.created_at)
                               FROM acta_foto f WHERE f.acta_item_id = i.id))
@@ -393,7 +405,23 @@ export class ActasService {
       [contratoId],
     );
 
-    return rows.map(aActa);
+    const actas = rows.map(aActa);
+
+    // Firmar es local (un HMAC sobre la clave, sin ida al bucket), así que
+    // recorrer todas las fotos del acta no cuesta un viaje por foto. Las filas
+    // anteriores a la 029 no tienen `clave`: se deriva de la url con la misma
+    // función que ya se usaba para borrar.
+    for (const a of actas) {
+      for (const i of a.items) {
+        for (const f2 of i.fotosDetalle) {
+          const clave = (f2 as { clave?: string | null }).clave
+            ?? (f2.url ? this.almacen.claveDeUrl(f2.url) : null);
+          f2.url = clave ? await this.almacen.urlFirmada(clave) : null;
+          delete (f2 as { clave?: string | null }).clave;
+        }
+      }
+    }
+    return actas;
   }
 }
 
@@ -412,7 +440,8 @@ interface FilaActa {
   firmada_inquilino: string | null;
   items: Array<{
     id: string; ambiente: string; estado: EstadoItem; detalle: string | null;
-    orden: number; fotos: FotoActa[] | null;
+    orden: number;
+    fotos: Array<FotoActa & { clave: string | null }> | null;
   }> | null;
 }
 
