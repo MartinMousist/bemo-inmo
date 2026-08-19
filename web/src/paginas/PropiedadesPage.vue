@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import { useAuth } from '../stores/auth';
 import { useUi } from '../stores/ui';
@@ -20,6 +20,7 @@ import {
   etiquetaSituacion,
   money,
   moneyCorto,
+  plural,
   numero,
   tonoSituacion,
 } from '../dominio/formato';
@@ -84,6 +85,7 @@ interface Propiedad {
 }
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuth();
 const ui = useUi();
 
@@ -239,6 +241,8 @@ const { valores: filtros } = filtrosRecordados('propiedades', {
   // de ARS 380.000 con una venta de USD 118.000 en la misma lista.
   precioMin: '', precioMax: '', precioMoneda: 'USD',
   expensasMin: '', expensasMax: '', expensasMoneda: 'ARS',
+  // Cerca de un punto. Los tres van juntos: el back sólo filtra con los tres.
+  lat: '', lng: '', radioKm: '',
 });
 
 /** Las claves de rango/multi-select, en el orden en que se mandan a la API. */
@@ -248,6 +252,7 @@ const CAMPOS_RANGO = [
   'cocherasMin', 'cocherasMax', 'plantasMin', 'plantasMax', 'antiguedadMax',
   'supTotalMin', 'supTotalMax', 'supCubiertaMin', 'supCubiertaMax',
   'precioMin', 'precioMax', 'expensasMin', 'expensasMax',
+  'lat', 'lng', 'radioKm',
 ] as const;
 
 // `precioMoneda` y `expensasMoneda` NO entran en ninguna de las dos listas de
@@ -285,6 +290,27 @@ function alternarEnCsv(campo: typeof CAMPOS_MULTI[number], clave: string): void 
   const sin = actual.filter((c) => c !== clave);
   filtros.value[campo] = (sin.length === actual.length ? [...actual, clave] : sin).join(',');
 }
+
+/**
+ * Lo marcado para comparar.
+ *
+ * Vive en la pantalla y NO en `filtros`: no es un filtro y no se recuerda entre
+ * visitas. Volver mañana y encontrar tres propiedades tildadas de una sesión
+ * anterior sería desconcertante.
+ */
+const paraComparar = ref<string[]>([]);
+const MAX_COMPARAR = 4;
+
+function alternarComparar(id: string) {
+  const i = paraComparar.value.indexOf(id);
+  if (i >= 0) paraComparar.value.splice(i, 1);
+  else if (paraComparar.value.length < MAX_COMPARAR) paraComparar.value.push(id);
+}
+
+/** ¿Está buscando por cercanía? Los tres campos o ninguno. */
+const buscaPorRadio = computed(
+  () => !!filtros.value.lat && !!filtros.value.lng && !!filtros.value.radioKm,
+);
 
 function limpiarMasFiltros(): void {
   for (const k of CAMPOS_RANGO) filtros.value[k] = '';
@@ -359,7 +385,24 @@ async function exportar() {
   catch (e) { error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo exportar.'; }
 }
 
-onMounted(cargar);
+/**
+ * «Buscar cerca» de la ficha entra por la URL.
+ *
+ * Esta pantalla recuerda sus filtros en `localStorage` y no los sincroniza con
+ * la URL —es una preferencia personal, no algo que se comparta—. Pero un enlace
+ * que dice «mostrame lo que está cerca de ESTA propiedad» sí es de qué se está
+ * hablando, así que esos tres se leen del query UNA vez al montar.
+ *
+ * Van los tres o ninguno: con dos, el back ignora el filtro y la pantalla
+ * mostraría todo mientras el panel dice que está filtrando.
+ */
+onMounted(() => {
+  const { lat, lng, radioKm } = route.query;
+  if (typeof lat === 'string' && typeof lng === 'string' && typeof radioKm === 'string') {
+    filtros.value = { ...filtros.value, lat, lng, radioKm };
+  }
+  void cargar();
+});
 </script>
 
 <template>
@@ -475,6 +518,34 @@ onMounted(cargar);
           </div>
         </div>
 
+        <!-- ── Cerca de un punto ────────────────────────────────────────
+             Sin la API key de Google no hay mapa donde hacer clic, así que se
+             cargan las coordenadas. NO es un placeholder de algo mejor: es la
+             misma salida manual que ya usa la ficha para ubicar una propiedad,
+             y desde la ficha hay un botón que las trae puestas. -->
+        <div class="grupo-multi">
+          <h3>Cerca de un punto</h3>
+          <div class="grid-rangos">
+            <label class="rango rango-simple"><span>Latitud</span>
+              <input v-model="filtros.lat" inputmode="decimal" placeholder="-32.9812" />
+            </label>
+            <label class="rango rango-simple"><span>Longitud</span>
+              <input v-model="filtros.lng" inputmode="decimal" placeholder="-68.8794" />
+            </label>
+            <label class="rango rango-simple"><span>Radio (km)</span>
+              <input v-model="filtros.radioKm" inputmode="decimal" placeholder="3" />
+            </label>
+          </div>
+          <p v-if="buscaPorRadio" class="nota-precio">
+            Las propiedades <strong>sin coordenadas cargadas quedan afuera</strong>: no se
+            puede afirmar que estén dentro del radio. Se ubican a mano desde cada ficha.
+          </p>
+          <p v-else class="nota-radio">
+            Van los tres juntos. Desde la ficha de una propiedad, «Buscar cerca» los
+            completa solo.
+          </p>
+        </div>
+
         <!-- Se dice, en vez de adivinar: el precio vive en la operación, y una
              propiedad puede estar en venta Y en alquiler a la vez. -->
         <p v-if="(filtros.precioMin || filtros.precioMax) && !filtroOperacion" class="nota-precio">
@@ -573,6 +644,18 @@ onMounted(cargar);
       El botón «Exportar» baja la cartera completa, no lo que está filtrado.
     </p>
 
+    <!-- Aparece recién con dos marcadas: comparar una sola no significa nada. -->
+    <p v-if="paraComparar.length" class="barra-comparar">
+      <span>{{ plural(paraComparar.length, 'propiedad marcada', 'propiedades marcadas') }}</span>
+      <RouterLink
+        v-if="paraComparar.length >= 2"
+        class="btn sm"
+        :to="`/propiedades/comparar?ids=${paraComparar.join(',')}`"
+      >Comparar</RouterLink>
+      <span v-else class="ayuda">Marcá otra para comparar.</span>
+      <button class="btn secondary sm" type="button" @click="paraComparar = []">Quitar</button>
+    </p>
+
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
     <!-- En tarjetas la grilla va SUELTA, sin la tarjeta contenedora: una
@@ -621,6 +704,7 @@ onMounted(cargar);
         <table class="table-sticky table-clicable">
           <thead>
             <tr>
+              <th><span class="visually-hidden">Comparar</span></th>
               <th>Código</th>
               <th>Dirección</th>
               <th class="secundaria">Tipo</th>
@@ -639,6 +723,17 @@ onMounted(cargar);
               @click="router.push(`/propiedades/${p.id}`)"
               @keydown.enter="router.push(`/propiedades/${p.id}`)"
             >
+              <!-- `@click.stop`: la fila entera navega a la ficha, y sin esto
+                   tildar para comparar abriría la propiedad. -->
+              <td class="check-comparar" @click.stop @keydown.stop>
+                <input
+                  type="checkbox"
+                  :checked="paraComparar.includes(p.id)"
+                  :disabled="!paraComparar.includes(p.id) && paraComparar.length >= MAX_COMPARAR"
+                  :aria-label="`Comparar ${p.etiqueta}`"
+                  @change="alternarComparar(p.id)"
+                />
+              </td>
               <td class="mono cod">{{ p.etiqueta }}</td>
               <td>
                 <span class="dir">{{ p.direccion }}</span>
@@ -907,6 +1002,15 @@ button.hon-total:focus-visible { outline: 2px solid var(--acento); outline-offse
 }
 .chip-check input { accent-color: var(--accent); }
 .limpiar-mas { align-self: flex-start; }
+.check-comparar { width: 1%; }
+.check-comparar input { accent-color: var(--accent); }
+.barra-comparar {
+  display: flex; align-items: center; gap: var(--s-md); flex-wrap: wrap;
+  margin: 0; padding: var(--s-sm) var(--s-md);
+  background: var(--surface-2); border-radius: var(--r-md); font-size: 13px;
+}
+.barra-comparar .ayuda { color: var(--muted); }
+.nota-radio { margin: 0; font-size: 12px; color: var(--muted); max-width: 70ch; }
 
 /* Cuatro columnas: la etiqueta ocupa la fila, después moneda + desde + hasta. */
 .rango.con-moneda { grid-template-columns: auto 1fr 1fr; }

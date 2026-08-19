@@ -202,6 +202,7 @@ export class PropiedadesService {
         f.tipoUrbanizacion ?? null,
         f.precioMin ?? null, f.precioMax ?? null, f.precioMoneda ?? null,
         f.expensasMin ?? null, f.expensasMax ?? null, f.expensasMoneda ?? null,
+        f.lat ?? null, f.lng ?? null, f.radioKm ?? null,
       ];
 
       // El MISMO `donde` para el conteo y para la página. Si el filtro entrara
@@ -266,7 +267,30 @@ export class PropiedadesService {
                   AND ($5::boolean OR o.estado <> 'cerrada')
                   AND ($35::text IS NULL OR o.expensas_moneda = $35)
                   AND ($33::numeric IS NULL OR o.expensas >= $33)
-                  AND ($34::numeric IS NULL OR o.expensas <= $34)))`;
+                  AND ($34::numeric IS NULL OR o.expensas <= $34)))
+
+          -- A menos de N km de un punto, por Haversine.
+          --
+          -- 6371 es el radio medio de la Tierra en km. La fórmula da el arco
+          -- sobre la esfera, que a esta escala —una ciudad— difiere del valor
+          -- real en metros: de sobra para «mostrame lo que está cerca».
+          --
+          -- Las que NO tienen coordenada quedan afuera, y es lo correcto: no se
+          -- puede afirmar que estén dentro del radio. La pantalla dice cuántas
+          -- son, para que ese recorte no sea invisible.
+          --
+          -- Sin índice: con esta cartera un scan es más rápido que cualquier
+          -- cosa que se pueda montar acá, y el repo ya midió antes de indexar
+          -- en 10.3 y en 12.2.
+          AND (($36::numeric IS NULL OR $37::numeric IS NULL OR $38::numeric IS NULL)
+               OR (p.lat IS NOT NULL AND p.lng IS NOT NULL
+                   AND 6371 * acos(
+                         least(1, greatest(-1,
+                           cos(radians($36)) * cos(radians(p.lat))
+                           * cos(radians(p.lng) - radians($37))
+                           + sin(radians($36)) * sin(radians(p.lat))
+                         ))
+                       ) <= $38))`;
 
       const { rows: conteo } = await ej.query<{ total: string }>(
         `SELECT count(*)::text AS total FROM propiedad p ${donde}`,
@@ -295,7 +319,7 @@ export class PropiedadesService {
            f.orden,
            f.dir,
          )}
-         LIMIT $36 OFFSET $37`,
+         LIMIT $39 OFFSET $40`,
         [...params, f.porPagina, offset(f)],
       );
 

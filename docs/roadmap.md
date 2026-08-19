@@ -956,10 +956,20 @@ pieza, no una nueva.
 **Hecho cuando**: filtrar "USD 100.000 a 150.000" devuelve exactamente eso, y
 nada de otra moneda mezclado en el medio.
 
-### 16.2 · Búsqueda por radio en el mapa
+### 16.2 · Búsqueda por radio en el mapa ✅ CERRADA
 
-- [ ] Elegir un punto en el mapa y un radio en km, y que el listado devuelva
-      sólo lo que cae adentro.
+- [x] Centro + radio en km, resuelto con **Haversine** sobre `lat`/`lng` — sin
+      PostGIS. La extensión valdría la pena para polígonos o rutas; para «a
+      menos de N km de acá» sería una dependencia nueva a cambio de nada.
+- [x] **Sin mapa para hacer clic, y se dice por qué**: eso necesita la API key
+      de Google. Mientras tanto van las coordenadas a mano —la misma salida que
+      ya usa la ficha— y desde cada propiedad hay un botón «Buscar cerca» que
+      las completa solo, que es la vía que se usa de verdad.
+- [x] Las propiedades **sin coordenadas quedan afuera**, y la pantalla lo
+      aclara: no se puede afirmar que estén dentro del radio. Incluirlas «por
+      las dudas» sería un filtro que miente.
+- [x] Los tres campos van juntos: con dos, no filtra. Hay test.
+- [x] Sin índice, midiendo antes de indexar como en 10.3 y 12.2.
 
 **Lo caro ya está**: `propiedad.lat`/`lng` se geocodifican y persisten desde la
 etapa 3. No hace falta una extensión nueva de Postgres: la distancia se calcula
@@ -971,10 +981,20 @@ indexar, mismo criterio que ya se aplicó en 12.2 y en 10.3.
 **Hecho cuando**: un punto + 3 km devuelve sólo las propiedades geocodificadas
 adentro de ese círculo, verificado contra coordenadas conocidas.
 
-### 16.3 · Comparar propiedades
+### 16.3 · Comparar propiedades ✅ CERRADA
 
-- [ ] Elegir de 2 a 4 propiedades desde el listado y verlas en columnas, lado a
-      lado: ambientes, m², orientación, urbanización, amenities, precio.
+- [x] De 2 a 4, marcadas desde el listado, en columnas con su foto.
+- [x] **Sin endpoint nuevo**: es `GET /propiedades/:id` repetido. Un «comparar»
+      que reciba una lista de ids no traería un dato que no esté ya, y sería una
+      segunda forma de leer una propiedad que hay que mantener sincronizada.
+- [x] **Las filas iguales se esconden por default**, que es lo que hace útil la
+      tabla: comparar es buscar diferencias, y treinta filas donde veintiocho
+      coinciden las entierran. Se puede destildar, y **se dice cuántas se
+      ocultaron** — una tabla que esconde sin avisar deja a alguien buscando un
+      dato que sí está.
+- [x] Los ids viajan en la URL: el enlace se comparte.
+- [x] La marca NO se recuerda entre visitas: no es un filtro, y volver mañana
+      con tres propiedades tildadas de otra sesión sería desconcertante.
 
 **Por qué**: es el paso natural después de filtrar bien — una vez que el
 filtro devuelve seis candidatas, la pregunta siguiente es en qué se

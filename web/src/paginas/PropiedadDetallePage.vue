@@ -263,6 +263,13 @@ onMounted(cargar);
     <template v-else-if="p">
       <PageHeader :titulo="p.direccion" :bajada="`${p.etiqueta} · ${ETIQUETA_TIPO[p.tipo] ?? p.tipo}`">
         <template #acciones>
+          <!-- Sólo con coordenadas: sin ellas el filtro no tendría centro, y un
+               botón que lleva a una búsqueda vacía es peor que no estar. -->
+          <RouterLink
+            v-if="p.ubicacionConocida"
+            class="btn secondary"
+            :to="`/propiedades?lat=${p.lat}&lng=${p.lng}&radioKm=3`"
+          >Buscar cerca</RouterLink>
           <RouterLink class="btn secondary" :to="`/propiedades/${p.id}/ficha`">
             Ficha para imprimir
           </RouterLink>

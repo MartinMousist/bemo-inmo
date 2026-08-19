@@ -263,6 +263,20 @@ export class FiltroPropiedadesDto extends FiltroConAgenteDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) expensasMax?: number;
   @IsOptional() @IsIn(MONEDAS as unknown as string[]) expensasMoneda?: string;
 
+  // ── Cerca de un punto ────────────────────────────────────────────────────
+  //
+  // Los tres van juntos: un centro sin radio no dice nada y un radio sin centro
+  // tampoco. El `donde` sólo aplica el filtro si están los tres.
+  //
+  // Se resuelve con Haversine sobre `lat`/`lng`, que ya se geocodifican y
+  // persisten desde la etapa 3 — sin PostGIS. La extensión valdría la pena el
+  // día que haya que resolver polígonos o rutas; para «a menos de N km de acá»
+  // es una dependencia nueva en el contenedor a cambio de nada.
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(-90) @Max(90) lat?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(-180) @Max(180) lng?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.1) @Max(500)
+  radioKm?: number;
+
   /**
    * «Tiene TODOS estos» (`@>` en el service), no «tiene alguno». Es la
    * pregunta que se hace quien filtra: pedir pileta y seguridad y recibir una

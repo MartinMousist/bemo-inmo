@@ -42,6 +42,8 @@ const router = createRouter({
     { path: '/propiedades', component: () => import('./paginas/PropiedadesPage.vue') },
     { path: '/propiedades/nueva', component: () => import('./paginas/PropiedadFormPage.vue') },
     { path: '/propiedades/:id/editar', component: () => import('./paginas/PropiedadFormPage.vue') },
+    // Literal, y ANTES de `/:id`: `comparar` no es el id de nada.
+    { path: '/propiedades/comparar', component: () => import('./paginas/CompararPage.vue') },
     // Antes de `/:id`: si fuera después, «ficha» entraría como id de propiedad.
     // Es la misma lección que ya dejaron escrita venta y alquiler.
     {

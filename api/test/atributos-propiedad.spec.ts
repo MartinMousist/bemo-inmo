@@ -369,4 +369,68 @@ describe('Atributos de propiedad (migración 027)', () => {
         .set(...como(inmo)).expect(400);
     });
   });
+
+  // ── Cerca de un punto (16.2) ────────────────────────────────────────────────
+
+  describe('búsqueda por radio', () => {
+    // Mendoza capital y alrededores, coordenadas reales.
+    const CENTRO = { lat: -32.8895, lng: -68.8458 };
+
+    beforeAll(async () => {
+      await crear('Radio Centro', { lat: CENTRO.lat, lng: CENTRO.lng });
+      // ~2 km al norte: 0,018° de latitud es algo menos de 2 km.
+      await crear('Radio Cerca', { lat: CENTRO.lat + 0.018, lng: CENTRO.lng });
+      // ~55 km: bien afuera de cualquier radio urbano.
+      await crear('Radio Lejos', { lat: CENTRO.lat + 0.5, lng: CENTRO.lng });
+      // Sin coordenadas: el caso que decide si el filtro miente o no.
+      await crear('Radio SinUbicar', {});
+    });
+
+    const calles = (r: { body: { items: Array<{ direccion: string }> } }) =>
+      r.body.items.map((p) => p.direccion);
+
+    it('trae lo que está adentro y deja afuera lo que no', async () => {
+      const r = await http()
+        .get(`/v1/propiedades?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radioKm=5&porPagina=100`)
+        .set(...como(inmo)).expect(200);
+      const c = calles(r);
+      expect(c.some((x) => x.includes('Radio Centro'))).toBe(true);
+      expect(c.some((x) => x.includes('Radio Cerca'))).toBe(true);
+      expect(c.some((x) => x.includes('Radio Lejos'))).toBe(false);
+    });
+
+    it('una propiedad SIN coordenadas nunca entra', async () => {
+      // Es lo correcto: no se puede afirmar que esté dentro del radio. Si
+      // entrara «por las dudas», el filtro estaría mintiendo.
+      const r = await http()
+        .get(`/v1/propiedades?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radioKm=500&porPagina=100`)
+        .set(...como(inmo)).expect(200);
+      expect(calles(r).some((x) => x.includes('Radio SinUbicar'))).toBe(false);
+    });
+
+    it('el radio chico recorta de verdad', async () => {
+      const r = await http()
+        .get(`/v1/propiedades?lat=${CENTRO.lat}&lng=${CENTRO.lng}&radioKm=1&porPagina=100`)
+        .set(...como(inmo)).expect(200);
+      const c = calles(r);
+      expect(c.some((x) => x.includes('Radio Centro'))).toBe(true);
+      // A ~2 km, afuera de 1 km. Si Haversine estuviera mal —grados por km,
+      // radio equivocado— este es el test que se cae.
+      expect(c.some((x) => x.includes('Radio Cerca'))).toBe(false);
+    });
+
+    it('los tres campos van juntos: dos no filtran nada', async () => {
+      const todas = await http().get('/v1/propiedades?porPagina=100')
+        .set(...como(inmo)).expect(200);
+      const sinRadio = await http()
+        .get(`/v1/propiedades?lat=${CENTRO.lat}&lng=${CENTRO.lng}&porPagina=100`)
+        .set(...como(inmo)).expect(200);
+      expect(sinRadio.body.total).toBe(todas.body.total);
+    });
+
+    it('una coordenada imposible es 400', async () => {
+      await http().get('/v1/propiedades?lat=200&lng=-68&radioKm=1')
+        .set(...como(inmo)).expect(400);
+    });
+  });
 });
