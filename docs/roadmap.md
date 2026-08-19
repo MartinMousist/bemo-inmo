@@ -408,9 +408,11 @@ Ninguna de estas se nota hasta el día que algo falla, y ese día se notan todas
       anterior —y los dos de ésta— se encontraron mirando el navegador a mano.
       Cubrir primero lo que ya tuvo un bug: `dominio/formato.ts` (tuvo uno de zona
       horaria), el refresh single-flight, el importador y la galería de fotos.
-- [ ] ⏳ **CI sin verificar**: el workflow existe desde el 04/08 y nunca corrió.
-      **El motivo que lo bloqueaba ya no existe**: hay repo remoto desde esta
-      sesión (`github.com/MartinMousist/bemo-inmo`). Pasa a la etapa 17.3.
+- [x] **CI verificado.** La nota anterior decía «nunca corrió, porque no hay
+      repo remoto» y era **falsa las dos veces**: hay remoto, y el CI venía
+      corriendo desde el 06/08 —con una corrida roja ese día y verde el 10/08—.
+      Nadie lo miró, que es la forma más silenciosa de tener un gate abierto.
+      Comprobado con `gh run list`, no leyendo este archivo.
 
 ### 10.5 · Producto — lo que pide quien ya lo usa
 
@@ -1035,14 +1037,23 @@ política de retención y sin forma de borrarlo.
 
 ### 17.3 · La cadena de suministro y el CI que nunca corrió
 
-- [ ] **El CI existe desde el 04/08 y nunca corrió** — el roadmap lo anotaba
-      como bloqueado por no tener repo remoto. **Ya hay remoto**
-      (`github.com/MartinMousist/bemo-inmo`): el bloqueo se levantó y nadie lo
-      notó. Hacerlo correr es el primer paso.
-- [ ] `npm audit` y avisos de dependencias en el CI, fallando el build.
-      Hoy nada avisa de una CVE en una dependencia.
-- [ ] gitleaks ya corre en pre-commit; que corra también en CI — un hook local
-      se saltea con `--no-verify`.
+- [x] **El CI corre y está verde**, con los cuatro jobs: `api`, `web`,
+      `secretos` y `dependencias`. Lo que el roadmap afirmaba —«existe y nunca
+      corrió»— era falso: venía corriendo desde el 06/08 y nadie lo miraba.
+      **La lección no es sobre el CI**: una nota de estado que nadie vuelve a
+      verificar envejece hasta volverse mentira, y este archivo tenía tres.
+- [ ] Los jobs avisan de la deprecación de Node 20 en las actions
+      (`checkout@v4`, `setup-node@v4`, `gitleaks-action@v2`). No rompe hoy;
+      va a romper solo.
+- [x] `npm audit` en el CI. Corta en CRITICAL sobre lo que se despacha
+      (`--omit=dev`) e informa los `high` sin romper: un gate que arranca en
+      rojo se aprende a ignorar. Web tenía un `high` real (nanoid) y ya está.
+- [x] gitleaks ya corría en CI además del pre-commit — otra nota que este
+      archivo daba por pendiente y estaba hecha.
+- [ ] **Nest 10 → 11.** Es el fix de los dos `high` que quedan en producción.
+      Uno de ellos (multer, DoS) **no es alcanzable** —no se parsea multipart
+      en ningún lado—; el otro es express/body-parser transitivo. Migración
+      mayor sobre 955 tests: va sola, no adentro de un `audit fix --force`.
 
 ### 17.4 · Superficie de la aplicación
 
