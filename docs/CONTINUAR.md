@@ -47,32 +47,43 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 
 ## 2. Estado real
 
+*Última sesión: 2026-08-19.*
+
 | | |
 |---|---|
-| Commits | 40 |
-| Migraciones | 23 |
-| Tests | **865 de API** contra Postgres real + **194 de front**. Todo en verde |
-| Pantallas | 38 |
+| Commits | 56 |
+| Migraciones | 29 (la última: `029_clave_privada.sql`) |
+| Tests | **967 de API** contra Postgres real + **194 de front**. Todo en verde |
+| Pantallas | 43 |
+| CI | ✅ **Verde en los cuatro jobs** — `api`, `web`, `secretos`, `dependencias` |
 
 ### Etapas
 
 | # | Etapa | Estado | Qué falta para cerrarla |
 |---|---|---|---|
 | 0 | Validación | ⚠️ **ABIERTA** | Que alguien diga un precio concreto |
-| 1 | Fundaciones | ✅ | — |
-| 2 | Auth y aislamiento | ✅ | — |
-| 3 | Espina compartida | ✅ | — |
+| 1–3 | Fundaciones · Auth · Espina | ✅ | — |
 | 4 | Alquileres | ⚠️ construida | **Tres liquidaciones reales tuyas** |
 | 5 | Ventas y comisiones | ⚠️ construida | Una venta real con su reparto |
 | 6 | Publicaciones | ⚠️ Plan B listo | Convenio con un portal (no es código) |
 | 7 | Recordatorios | ⚠️ generación lista | Proveedor de mail · verificación de WhatsApp |
 | 8 | Piloto | ⚠️ lista | 30 días de uso diario |
 | 9 | Planes | ⚠️ lista | Un cliente y un medio de pago |
-| 10 | Mejoras | ✅ | — |
-| 11 | Lo que se ve usando la app | ✅ | — |
+| 10–11 | Mejoras · Lo que se ve usando la app | ✅ | — |
+| 12 | Lo que pidió el dueño | ✅ salvo 12.3 | Avisar cuando falta el IPC del mes |
+| 13–14 | Garantes · Editor Word · Tipo de cuenta | ✅ | — |
+| 15 | Lo que le falta a un sistema así | ⏳ **en curso** | 15.3 a 15.6 — ver §5 |
+| 16 | Lo que un portal te enseñó a esperar | ⏳ **en curso** | 16.1 cerrada; faltan 16.2 a 16.6 |
+| 17 | Sellado de seguridad | ⏳ **en curso** | 17.1 y 17.3 cerradas; faltan 17.2, 17.4, 17.5 |
+| 18 | Inbox omnicanal | ⏳ por empezar | Todo. Ojo con la dependencia externa |
 
-**Ningún gate abierto depende de código.** Están marcados así a propósito: dar por
-cerrado un gate cuya evidencia no existe es el error #2 del playbook con otra cara.
+**Ningún gate abierto de las etapas 0 a 9 depende de código.** Están marcados así
+a propósito: dar por cerrado un gate cuya evidencia no existe es el error #2 del
+playbook con otra cara.
+
+⚠️ **Nueve gates abiertos y vamos por la etapa 18.** Es literalmente el error #1
+del playbook. Ninguna herramienta nueva los cierra: hacen falta tus
+liquidaciones, una venta tuya y treinta días de uso.
 
 ### Integraciones
 
@@ -81,7 +92,7 @@ cerrado un gate cuya evidencia no existe es el error #2 del playbook con otra ca
 | **BCRA** (Central de Deudores) | ✅ **Funcionando.** Contrato verificado contra la API real: `GET /CentralDeDeudores/v1.0/Deudas/{cuit}` y `…/Deudas/ChequesRechazados/{cuit}`, los dos con el mismo botón. Del DNI se derivan los CUIL posibles y se prueban en orden. El 404 **no es un error**: es «ninguna entidad lo informa», o sea sin deuda ni cheques. Sólo situación 1 se acepta; el veredicto se congela con su fecha y las consultas nuevas se agregan al historial en vez de pisarlo. ⚠️ No consultarlo con datos demo: los DNI del seed son de personas reales |
 | **BCRA** (ICL + UVA) | ✅ **Funcionando y automático.** Contrato verificado contra la API real (v4.0, variables 40 y 31). Se sincroniza solo cada 12 h (`SINCRONIZAR_INDICES`), y sigue estando `POST /v1/indices/sincronizar` a mano. Idempotente |
 | **INDEC** (IPC) | ❌ Manual **a propósito**. No hay API estable; raspar un HTML que cambia sin aviso pondría un número equivocado en un aviso de aumento |
-| **Google Maps** | ⚙️ **Son dos capacidades, y una ya funciona.** `GET /propiedades/capacidades` devuelve `{ geocodificacion, mapaEmbebido }` por separado. **El mapa de la ficha anda HOY, sin key**: es un `<iframe>` a `www.google.com/maps?…&output=embed`, que no lleva key ninguna — verificado con un `fetch` desde el contenedor (HTTP 200) y **visto en el navegador** en PROP-0032. Lo que falta la key es **geocodificar** (dirección → lat/lng): sin ella no se inventan coordenadas, se ofrece cargarlas a mano y la ficha dice de dónde salió cada una. Hay diagnóstico que le pega a Google de verdad y backfill de las cargadas antes. Los pasos exactos para el dueño están en §5, «La API key de Google Maps» |
+| **Google Maps** | ⚙️ **Son dos capacidades, y una ya funciona.** `GET /propiedades/capacidades` devuelve `{ geocodificacion, mapaEmbebido }` por separado. **El mapa de la ficha anda HOY, sin key**: es un `<iframe>` a `www.google.com/maps?…&output=embed`, que no lleva key ninguna — verificado con un `fetch` desde el contenedor (HTTP 200) y **visto en el navegador** en PROP-0032. Lo que falta la key es **geocodificar** (dirección → lat/lng): sin ella no se inventan coordenadas, se ofrece cargarlas a mano y la ficha dice de dónde salió cada una. Hay diagnóstico que le pega a Google de verdad y backfill de las cargadas antes. Los pasos exactos para el dueño están en §5 bis |
 | **S3** (fotos) | ✅ Funcionando con MinIO en dev. Mismo protocolo que S3/R2/Spaces |
 | **Portales** | ⛔ Bloqueado por convenio comercial. El generador de aviso funciona hoy (copiar y pegar) |
 | **WhatsApp / email** | ⛔ Los avisos se generan y se ven; el envío necesita verificación de negocio |
@@ -162,459 +173,93 @@ Cada una costó un rato de diagnóstico:
 | **La CSP de dev bloqueaba TODAS las fotos** | La API devuelve 200, `curl` a la URL de MinIO devuelve 200, y en pantalla no carga ninguna imagen: la ficha con `<img>` rotos y la cartera en tarjetas con treinta | `img-src 'self' data: blob: https:` en `vite.config.ts`. En producción el bucket es **https** y lo cubre el `https:`; MinIO en dev habla **http** por el 9000, así que caía afuera. El síntoma no está en la pestaña de red —dice FAILED sin motivo—: está en la **consola**, que lo dice con todas las letras. Se agregó `http://localhost:9000` sólo al bloque de dev; el Caddyfile de producción no se toca |
 | **Un `<style scoped>` se come el anillo de foco** | Se tabula por la grilla de propiedades, `:focus-visible` da `true`… y la tarjeta enfocada se ve igual que las demás | `familia.css` tiene `:focus-visible { box-shadow: var(--ring) }`, que es (0,1,0). Dentro de un `<style scoped>`, Vue le agrega el `[data-v-…]` a `.tarjeta`, que pasa a (0,2,0) y su `box-shadow: var(--sh-1)` **le gana al del foco**. Cualquier componente scoped que declare su propia sombra tiene que reponer `:focus-visible` a mano. Es la misma trampa de especificidad que el `h3` scoped contra `.text-lg` |
 | **`loading="lazy"` no ahorra tanto como parece** | Se abre la cartera en tarjetas con 25 propiedades y el navegador pide **23 de 24** imágenes, con sólo 8 en pantalla | Chrome usa un margen de precarga generoso —del orden de la altura del documento— cuando la conexión es rápida. Medido: página de 3.001px, viewport de 1.000px, 23 pedidos. Con las imágenes del seed (≈10 KB) no se nota; con fotos reales de celular de 8 MB, la primera carga de la cartera son decenas de MB. Ver el pendiente de las miniaturas |
+| **El bucket era de lectura pública, con los DNI adentro** | Ninguno. Todo «funcionaba» | `mc anonymous set download` sobre el bucket ENTERO, y un solo `AlmacenamientoService` para fotos de propiedades y para los documentos de garantes. La clave lleva 8 bytes aleatorios —no se adivina— pero era pública, `inline` e `immutable`: quien tuviera la URL leía un DNI para siempre. Cerrado en 17.1 con prefijos `publico/` y `privado/`. **Si agregás un tipo de archivo nuevo, `subirImagen()` te va a obligar a declarar la visibilidad: no le pongas un default** |
+| **SigV4 firma el `Host`** | La URL firmada sale linda en el JSON y da `ERR_NAME_NOT_RESOLVED` en el navegador | El cliente de S3 apunta a `S3_ENDPOINT`, que dentro de compose es `http://s3:9000` — un nombre que resuelve el DNS de contenedores y ningún browser. **No se arregla reemplazando el host después**: la firma lo cubre y MinIO contesta `SignatureDoesNotMatch`. Hay un segundo cliente, `firmador`, apuntado al endpoint público |
+| **`docker compose exec` se come el stdin de un `while read`** | Un script que recorre una lista procesa **el primer elemento** y termina como si hubiera andado. Movió 1 de 711 objetos | `exec` hereda el stdin del bucle y lo consume entero. Va con `< /dev/null` en la llamada de adentro. Está anotado en `scripts/migrar-bucket-029.sh` |
+| **`A AND B OR C` en SQL** | Un filtro con sólo el máximo cargado devuelve la cartera completa | Agrupa como `(A AND B) OR C`. En un `donde` con «si no vino, no filtres» eso desactiva la condición entera. Los dos `IS NULL` van entre paréntesis. Costó un test en 16.1 |
+| **Una nota de estado que nadie vuelve a verificar envejece hasta volverse mentira** | El roadmap mandaba a «hacer correr el CI» algo que ya corría hacía dos semanas | Tres notas de este repo eran falsas a la vez: `familia.css` fuera de git (estaba), el CI bloqueado por no haber remoto (había), y gitleaks pendiente en CI (ya corría). **Antes de creerle a un documento, comprobá con la máquina**: `git ls-files`, `gh run list`, `npm test` |
 
 ---
 
 ## 5. Lo que sigue, en orden
 
-### 🔴 Prioridad 0 — sin esto lo demás vale menos
-
-**Cerrar la etapa 0.** Tres liquidaciones y tres contratos reales del mes pasado,
-anonimizados si hace falta. Se toman los números, se cargan en el sistema y tienen
-que dar **exactamente lo mismo**. Si difiere en un peso, hay una regla que no se
-entendió.
-
-Lo que no sé y estoy interpretando:
-- ¿Los honorarios van sobre el bruto o sobre el neto?
-- ¿Las expensas las cobra la inmobiliaria y las pasa, o van aparte?
-- ~~¿Cómo se tratan los punitorios en la liquidación?~~ **Resuelto**: se calculan,
-  se pueden condonar con motivo, y a quién le corresponden lo decide cada contrato
-  (`punitorio_para`). Falta que confirmes que el default —al propietario— es el
-  que usás.
-- ¿El aumento se redondea? ¿A cuánto?
-- ¿Los porcentajes de honorarios de venta cambian por provincia?
-
----
-
-### ✅ Hecho en la sesión del 2026-08-09 — la cartera en tarjetas
-
-Segunda vista de las tres pantallas de propiedades, con la tabla como default.
-**Sin migración**: `propiedad_foto` existe con su RLS desde la 006 y los cinco
-atributos también, así que la 022 sigue libre. El único cambio de API es una
-columna calculada (`fotoPortada`) en el `SELECT` del listado.
-
-| Qué | Lo que apareció en el camino |
-|---|---|
-| **El interruptor tabla ⇄ tarjetas**, con la preferencia guardada (`dominio/vista.ts`), UNA clave para las tres pantallas | En tarjetas no hay `<thead>`, o sea que no hay `ThOrden`: sin un `<select>` «Ordenar» atado a los mismos `orden`/`dir`, cambiar de vista sacaba el orden de la cartera sin avisar |
-| **La tarjeta**: foto 4:3, precio con su moneda, chip de situación, dirección, íconos y superficie | El anillo de foco no se veía: un `<style scoped>` con `box-shadow` propio le gana al `:focus-visible` de la capa familia (ver trampas) |
-| **Cinco íconos nuevos** en `UiIcon.vue` — dormitorio, baño, cochera, superficie y ambientes | Verificados a 150/18/14px contra los seis que ya se usan al lado. Ninguno es casita, llave ni techo |
-| **La regla de los faltantes** en `dominio/atributos.ts` | Un terreno no tiene dormitorios: el ícono **no existe** en esa tarjeta. Y `0` («sin cochera») no se muestra igual que `NULL` («s/d» en ámbar), porque uno es una respuesta y el otro es una tarea |
-| **Fotos de verdad en el seed**, subidas a MinIO por `AlmacenamientoService.subirImagen()` | El PNG lo genera un motor puro nuevo con `node:zlib` —sin dependencias, sin red, sin fotos de nadie— y dice IMAGEN DE MUESTRA adentro. La primera versión salía sin volúmenes en la mitad de las propiedades: `s >> n` sobre un hash de 32 bits sin signo devuelve **negativo**, y un `rect` de ancho negativo no dibuja nada. Va `>>>` |
-| **«Estado» ⇒ «Situación»**, con la etiqueta y el tono unificados | La etiqueta estaba en tres lugares y el tono en tres más, y no coincidían. Ver el Decisions Log de `DESIGN.md` |
-| **La CSP de dev bloqueaba todas las fotos** | Un defecto **preexistente** que la cartera hizo visible: la ficha también mostraba imágenes rotas en dev. Ver trampas |
-
-**Pendiente que sale de acá, con su motivo**: `fotos.service.ts` guarda el
-**original** —hasta 8 MB— y no hay pipeline de miniaturas, así que la tarjeta
-pide esa imagen para un hueco de 240px. Con las del seed (≈10 KB) no se nota, y
-por eso es peligroso. `loading="lazy"` ayuda menos de lo esperado (medido: 23 de
-24 imágenes pedidas con 8 en pantalla) y el `Cache-Control: immutable` lo arregla
-recién a partir de la segunda visita. Redimensionar en Node necesita `sharp`, que
-es un binario nativo en el contenedor: es el error #7 esperando, y por eso esto se
-escribe como decisión y no se hace a las apuradas.
-
-### ✅ Hecho en la sesión del 2026-08-06
-
-La etapa 11 entera, más tres pedidos de producto. El detalle de cada decisión
-está en los mensajes de commit; acá va el titular y **lo que apareció al
-hacerlo**, que es lo que sirve.
-
-| Qué | Lo que apareció en el camino |
-|---|---|
-| **11.1 · Cinco defectos** encontrados usando la app | Vencimientos no cargaba y mostraba «0» en vez de decirlo; la primera fila de Propiedades era invisible; blanco sobre `--danger` daba 3,13:1 en oscuro |
-| **11.2 · Gastos y reclamos** con entidad propia | El gasto sólo entraba si el propietario también había cobrado ese mes: un mes con una unidad vacía y techo roto no generaba nada |
-| **11.3 · El tablero** | «Subir» no siempre es bueno: el delta de días de cobro se pintaba verde al empeorar. Y «Perdida · 200%» era un porcentaje de nada |
-| **11.4 · Ordenar, totales, tarjetas** | `columnas['constructor']` devuelve una función, no `undefined`. La misma trampa de prototipos del motor de plantillas |
-| **11.5 · Copy y accesibilidad** | El filtro RFC 9457 lee `message`, no `detail`: el texto redactado quedaba sin usar y salía «Bad Request Exception» |
-| **Seed con volumen real** | Corre como OWNER y **saltea RLS**: sin filtro por `tenant_id` marcó como pagadas siete cuotas de una inmobiliaria ajena |
-| **Carteras de venta y alquiler** separadas | La de alquiler mostraba **3 de 13**: el filtro excluía `estado = 'cerrada'`, que es el estado de una unidad alquilada |
-| **Pre-contratos**: la pantalla que faltaba | El motor estaba entero e invisible. La sintaxis `{{ }}` no se puede mostrar dentro de un template de Vue |
-| **Índices que se sincronizan solos** | El «pensado para un cron» de la etapa 4 no tenía cron |
-| **El seed carga las plantillas y los avisos** | Las plantillas se veían en dev porque alguien había apretado «Traer las base»: en una base limpia, Pre-contratos y Publicaciones arrancaban vacías. Ninguna de las dos se puede escribir en el `.sql` sin copiar el texto legal y el formato del aviso, así que el seed tiene un segundo paso en TypeScript que usa las mismas funciones que la app |
-| **Dos avisos de la misma propiedad** | Una casa en venta Y en alquiler daba dos filas idénticas salvo el portal. `tipoOperacion` venía en la respuesta desde el primer día y no se mostraba. Y la fila era un `header` con `@click`: lo único de esa pantalla que no se podía usar con el teclado |
-
-#### Pre-contratos: editar, mandar y que quede guardado (migración 020)
-
-El motor de plantillas estaba entero y probado, pero **generaba y mostraba**: no
-se podía cambiar una coma, no había forma de mandarlo y **el sistema no guardaba
-nada**. «¿Qué pre-contrato le mandamos a esta gente, quién lo hizo y cuándo?» no
-tenía respuesta.
-
-Ahora: `documento_generado` + `documento_envio` con RLS, el texto editable antes
-de mandarlo, los tres canales (WhatsApp, email, imprimir) y el historial por
-contrato. Más los cuatro contratos ICL/IPC del seed que **proyectan de verdad**.
-
-**Cinco decisiones que conviene no revisar sin motivo:**
-
-1. **La columna se llama `abierto_el`, NO `enviado_el`.** El sistema abre
-   `wa.me` o `mailto:`; no manda el mensaje y no sabe si la persona apretó
-   enviar. Escribir «enviado el 06/08» en el historial de un papel con efecto
-   legal sería afirmar un hecho que nadie verificó. La pantalla dice «se abrió
-   WhatsApp».
-2. **El largo decide el modo, y se avisa antes de apretar.** `completo` cuando
-   el texto entra en la URL, `adjunto` cuando no —ahí baja el `.txt` y el
-   mensaje lleva una carátula corta—. El motivo va escrito con su número de
-   caracteres y su límite. **Nunca se trunca**: ver la trampa nueva de §4.
-3. **Guardar y mandar son la misma llamada.** `POST /documentos/:id/envios`
-   persiste la fila **y** devuelve la URL. Depender de que el front registre
-   después de abrir el canal es depender de que la pestaña siga viva.
-4. **Un documento que ya salió es inmutable**, por trigger (`documento_congelado`),
-   igual que un ajuste confirmado. Editarlo da 409 y borrarlo también: es la
-   constancia de qué recibió la otra parte.
-5. **Imprimir va en ruta propia** (`/documentos/:id/imprimir`) y no en un modal:
-   el `@media print` global esconde botones y navegación pero **imprime todo el
-   resto de la página**, así que desde la ficha del contrato saldrían atrás del
-   pre-contrato los aumentos, las cuotas y los garantes. La ruta registra la
-   impresión al abrirse, así «volver a imprimir» desde el historial también
-   queda anotado. No genera PDF: el navegador ya ofrece «Guardar como PDF» y no
-   se promete uno.
-
-**Lo que apareció en el camino:**
-
-| Qué | Lo que apareció |
-|---|---|
-| El envío por mail | Un pre-contrato **no entra** en un `mailto:`. Medido: 2.087 caracteres → 3.377 de URL, contra un límite duro de 2.048 |
-| El seed y el IPC | No cargaba **ni un valor** de `indice_valor`. Con el IPC vacío, dos de los cuatro contratos nuevos no proyectaban nada |
-| La cadena del ajuste | Vivía suelta adentro de `contratos.service.ts` mezclada con consultas. Se extrajo `periodosDeAjuste()` al motor puro, con sus casos de papel. Lo que **no** se pudo extraer —el re-anclaje cuando un ajuste ya existe en la base— quedó comentado de los dos lados |
-| El esqueleto de «Nueva plantilla» | Enseñaba `{{#if}}` y `{{#each}}`, sintaxis que el motor no tiene. Salía literal adentro del contrato firmado |
-| Los códigos de propiedad del seed | `demo-cartera.sql` se reserva del 15 al 30. Los cuatro contratos nuevos arrancan en 31 |
-
----
-
-### 🟠 Lo que sigue, con su diseño ya resuelto
-
-Ordenado por lo que más duele. El primero —comisiones— **ya está cerrado**; se
-deja escrito porque era el mismo error #3 cuatro veces seguidas y sirve de
-recordatorio de cómo se ve una columna que nadie lee.
-
-#### 1. Comisiones ← *cerrado (migración 021)*
-
-Los tres pedidos que estaban abiertos acá —la config que nadie leía, el captador
-que no pre-llenaba nada y la trampa de unidades— quedaron resueltos, y con ellos
-**cuatro columnas que existían y no leía ningún código**, que es el error #3 del
-playbook cuatro veces en el mismo módulo:
-
-| Columna | Desde | Qué la lee ahora |
-|---|---|---|
-| `membresia.comision_captador_pct` / `_cerrador_pct` | 017 | Equipo, editable en la fila, y la sugerencia de reparto |
-| `propiedad.agente_captador_id` | 006 | Se devuelve en la ficha y en el listado, y pre-llena el captador |
-| `operacion.comision_config` | 006 | El % por propiedad, editable desde el listado |
-| `comision.contrato_id` | 008 | La comisión del alquiler, que el sistema **no generaba** |
-
-**Lo que entró:**
-
-- **Compartir con otra inmobiliaria**, en venta y en alquiler. Tabla nueva
-  `inmobiliaria_externa` (la única de la 021) con su pantalla adentro de
-  Comisiones, autocompletar y alta al vuelo desde el reparto. `comision.externa_id`
-  enlaza la ficha; `beneficiario_nombre` sigue guardando el nombre **congelado**,
-  porque una comisión ya cobrada no cambia de acreedor si alguien renombra la
-  agencia — misma regla que el ajuste confirmado.
-- **El % por punta de cada agente**, editable in-line en Equipo, con el heredado
-  en gris y la equivalencia en % de la venta al lado.
-- **El perfil de cada agente** en `/equipo/:usuarioId`: sus números por moneda y
-  estado, sus captaciones, sus contratos, sus ventas y el bloque de la casa.
-- **El detalle de una venta** en `/ventas/:id`. **No existía**: la fila del
-  listado navegaba ahí desde el primer día y caía en NoEncontradaPage.
-- **La comisión del alquiler**, con su reparto igual al de una venta.
-- **El % por propiedad**, editable desde el listado con la info a la vista.
-
-**Cinco decisiones que conviene no revisar sin motivo:**
-
-1. **El servidor sugiere, la persona confirma.** `GET …/reparto/sugerido` arma
-   el reparto entero —puntas, captador, cerrador y sus porcentajes— y **todo
-   llega editable**: el captador no siempre es quien cargó la propiedad.
-   `puntas` sigue siendo **obligatorio** en el POST; hacerlo opcional sin
-   fallback fue lo que se revirtió la vez anterior.
-2. **La comisión del alquiler es UN MES y es `monto_inicial`.** No la cuota
-   vigente: contra el monto de hoy, cada ajuste por índice recalcularía una
-   comisión que quizás ya se cobró.
-3. **Se genera con un paso explícito, como en ventas.** Un contrato cargado para
-   probar no puede dejar una comisión proyectada en la caja. La pantalla la
-   ofrece pre-llenada, así que cuesta un clic.
-4. **Un agente ve SUS montos.** Puede abrir el perfil de un compañero y ver lo no
-   monetario, pero los importes vienen en `null` con el motivo escrito. Y el
-   bloque de la inmobiliaria, para el rol agente, es **volumen** y no el pozo de
-   comisiones: con dos asesores, el total de la casa menos lo propio ES lo del
-   compañero. Un permiso que se esquiva restando no es un permiso.
-5. **El % de una propiedad NO recalcula un reparto ya hecho.** Pre-llena las
-   operaciones nuevas; rehacer uno existente es un botón aparte, y se bloquea si
-   hay algo cobrado.
-
-**Lo que quedó afuera, con su motivo:**
-
-- **El % de un agente es uno solo, no uno por tipo de operación.** `membresia`
-  tiene dos columnas —captador y cerrador— y el mismo número vale para una venta
-  de USD 300.000 y para un alquiler de un mes. Si en la práctica se paga
-  distinto, son dos columnas más y **una migración nueva**: la 021 ya está
-  aplicada y no se retoca.
-- **Compartir es siempre por punta.** El motor sabe repartir `{vendedora: 50}`;
-  el trato «partimos todo al medio sin importar las puntas» sería una regla
-  nueva del motor.
-- **El % por propiedad no toca el reparto interno**, a propósito: quién se lleva
-  qué puertas adentro es política de la casa, no un atributo del inmueble.
-
-#### 2. Personas por rol
-
-Los roles **se derivan, no se guardan** — decisión de la etapa 3, escrita en
-`personas.service.ts`: *«una persona es propietaria porque tiene una
-titularidad, no porque alguien marcó una casilla»*.
-
-Hoy se derivan tres —propietario, interesado, reservante— y **la base sabe tres
-más que nadie calcula**:
-
-| Rol | De dónde sale |
-|---|---|
-| Inquilino | `contrato_parte` rol `locatario` |
-| Garante | `contrato_parte` rol `garante`/`fiador` |
-| Comprador | `operacion_venta.comprador_id` |
-
-Plan acordado: **cuatro pantallas** —Leads, Inquilinos, Propietarios, Garantes—
-más filtro por rol en Personas, con **estados derivados** y no un campo manual.
-
-**«Locador» y «vendedor» NO llevan pantalla propia**: son el propietario visto
-desde un contrato o desde una venta. Dos pantallas con los mismos nombres y otro
-título.
-
-#### 3. El IPC sigue siendo manual
-
-ICL y UVA ahora se traen solos del BCRA cada 12 h. El IPC no: INDEC no tiene API
-estable y raspar un HTML que cambia sin aviso pondría un número equivocado en un
-aviso de aumento. Lo que sí se puede hacer sin romper esa decisión: **avisar en
-el inicio** cuando el mes ya pasó y el IPC de ese período no está cargado.
-
-#### 4. Garantes ← *cerrado, salvo el bot*
-
-Hecho en la etapa anterior: legajo por contrato, los cinco documentos sobre S3,
-el control contra la Central de Deudores con el veredicto congelado, la firma y
-la verificación de mínimo 2.
-
-**Hecho ahora (migración 019):**
-
-- **`garantia_por_vencer` ya tiene emisor**, y el campo «Vence el» que lo
-  alimenta. Iban juntos a propósito: emitir sobre una columna que ninguna
-  pantalla llena es el error #3 disfrazado de feature nueva.
-- **La revisión periódica del BCRA.** Al consultar se calcula
-  `garantia.bcra_revisar_el` con un motor puro (`proximaRevision()`): cada
-  **6 meses**, sólo si el contrato dura **24 o más**, nunca después de que
-  termine el contrato ni de que venza la garantía, y sólo sobre los que hoy dan
-  aptos. Cuando llega, sale el aviso `garantia_revision_bcra`.
-- **El historial: `garantia_bcra_consulta`.** Re-consultar pisando
-  `garantia.bcra_*` habría destruido el dato que justifica la decisión, que es
-  justo lo que la 018 se propuso guardar. Ahora `garantia.bcra_*` es el cache de
-  la última consulta y la tabla guarda todas. La **primera** es la que respaldó
-  la firma —dato derivado, sin columna que marcarla— y la pantalla muestra
-  «aceptado el DD/MM/AAAA · última revisión DD/MM/AAAA».
-- **Cheques rechazados**, con su parser y su cache. Un fallo de cheques no
-  invalida el veredicto de deudas: se guarda el bueno y la pantalla dice que los
-  cheques quedaron sin consultar.
-- **WhatsApp para coordinar la firma.** `<a href="wa.me/…">` con el texto ya
-  redactado y editable, más «Copiar el texto» y `mailto:`. **No simula ningún
-  envío**: abre el WhatsApp del usuario y el sistema no registra nada.
-  `telefono.motor.ts` normaliza el número (motor puro, con tests) y si no cierra
-  en los 10 dígitos nacionales el botón queda deshabilitado con el motivo.
-- **El seed siembra cinco garantías** con su legajo real sobre MinIO —completo,
-  a medias, sin firmar, y un seguro de caución que vence en 30 días—.
-
-**Tres decisiones que quedaron tomadas y conviene no revisar sin motivo:**
-
-1. **La re-consulta la aprieta una persona, no un cron.** El evento avisa; la
-   consulta la dispara alguien y queda su nombre en
-   `garantia_bcra_consulta.consultado_por`. Un cron que consultara solo estaría
-   pidiendo el dato bancario de un tercero sin que nadie lo pida —el incidente
-   de la tabla de trampas, a escala y cada seis meses— y encima contra una API
-   con control de tráfico **por IP** (devuelve 429; lo vimos).
-2. **Los cheques no tumban a nadie: se muestran.** La regla del dueño es «sólo
-   situación 1» y un cheque no es una situación, así que van como advertencia,
-   la misma categoría que «proceso judicial en curso». Es discutible y la
-   decisión es suya.
-3. **La revisión vencida informa, no bloquea.** Es un dato viejo, no un rechazo:
-   el garante sigue contando como apto con el veredicto que tiene.
-
-**Lo que sigue faltando:**
-
-- **El bot de WhatsApp** que cargue documentos solo: el endpoint de subida ya
-  recibe base64, así que lo que falta es el canal, no el back.
-- **Confirmar los tres números** de la revisión —24 meses de contrato, cada 6,
-  sólo los aptos—. Están juntos y con nombre en `situacion.motor.ts`
-  (`MESES_CONTRATO_PARA_REVISAR`, `MESES_ENTRE_REVISIONES`): cambiarlos es una
-  línea.
-- **La demo del BCRA no se hace con un garante del seed.** Con `bcra_*` en NULL
-  los cinco dicen «falta consultar el BCRA» y ningún contrato queda «en regla»:
-  es correcto —sin consulta no hay veredicto— y hay que decirlo antes de que
-  parezca un bug. Para verlo funcionando se consulta con un CUIT de sociedad
-  (`30500001735` devolvió 20 entidades en situación 1 el 07/08) o con el
-  documento propio.
-
-#### 5. Filtro por agente y «las mías» ← *cerrado*
-
-Un agente ve la **cartera entera** de la inmobiliaria y puede acotarla a lo suyo
-con un clic. El filtro **no es un permiso**: es una herramienta.
-
-Está en los **seis listados** que tienen a quién atribuirle una fila —propiedades
-(y sus dos carteras, que pegan al mismo endpoint), cartera de alquileres, listado
-de contratos, ventas, publicaciones y leads— con **un solo** parámetro,
-`agenteId`, un solo componente (`web/src/componentes/SelectAgente.vue`) y un solo
-DTO del que heredan todos (`api/src/common/filtro-agente.ts`).
-
-**Seis decisiones que conviene no revisar sin motivo:**
-
-1. **No existe `agenteId=mias`.** El backend tiene una sola semántica —«las de
-   este uuid»— y así el titular pide «las de Sofía» con el mismo mecanismo con el
-   que un asesor pide las suyas. «Las mías» es del front: manda su propio uuid.
-2. **`'yo'` se guarda, el uuid no.** En `localStorage` va el centinela, que se
-   traduce recién al armar la consulta. Motivo concreto: la PC del mostrador se
-   comparte, y guardar el uuid haría que la segunda persona abra la pantalla
-   filtrada por la primera y vea una lista vacía sin entender por qué. La regla 2
-   de `dominio/filtros.ts` —descartar un valor que ya no es válido— no se puede
-   aplicar a un uuid en el constructor porque el equipo llega por fetch: la
-   aplica `SelectAgente` cuando llegó.
-3. **En alquileres la columna dice «Captador», no «Agente».** `contrato_alquiler`
-   no tiene agente propio: lo único que la base sabe es quién captó el inmueble, y
-   quien coloca un inquilino puede ser otra persona. Llamarlo «Agente» sería
-   afirmar algo que el dato no dice. Si algún día se quiere «lo que coloqué yo»,
-   es una columna nueva (`agente_colocador_id`) con su migración.
-4. **En ventas, «mis ventas» es comisión O captación.** Sólo por
-   `comision.beneficiario_id` la lista aparecería **vacía** justo cuando la venta
-   se acaba de cerrar, porque todavía no tiene reparto. Efecto lateral que la
-   pantalla dice en una línea: la suma por agente puede dar más que el total,
-   porque una venta captada por uno y cobrada por otro cuenta para los dos.
-5. **Los leads siguen siendo privados**, y es la única excepción declarada. Lo que
-   cambió es que un asesor que filtra por un compañero recibe **403 con el
-   motivo** en vez de una lista vacía —antes eran dos condiciones sobre la misma
-   columna, indistinguible de «ese agente no tiene leads»—, y que el desplegable
-   ni siquiera le ofrece compañeros: un control que sólo sirve para dar error no
-   es un control. El desglose de comisiones por agente tampoco se tocó: es plata
-   del compañero.
-6. **«Sin captador» es un estado real**, no un caso raro: el INSERT del importador
-   de CSV ni siquiera lista la columna, así que toda propiedad importada nace así.
-   Va como parámetro aparte (`sinCaptador`) y no como valor mágico de `agenteId`,
-   que es un uuid validado. Y para que se pueda **salir** de ese estado, el
-   captador dejó de ir por `coalesce`: un `null` explícito desasigna.
-
-**Lo que apareció en el camino:**
-
-| Qué | Lo que apareció |
-|---|---|
-| El captador era invisible | `SELECT p.*` lo traía y `aPropiedad()` no lo mapeaba: la API **nunca** lo devolvía y el formulario nunca lo mandaba. Filtrar por él habría sido filtrar por el seed |
-| El botón «Exportar» | `GET /exportar/:recurso.csv` no toma filtros: al lado de una lista filtrada por agente baja **todo**. Se dice en la pantalla, debajo de los filtros, cuando hay filtro puesto |
-| La bandeja de Avisos **no** lleva filtro | `evento_programado.destinatario_usuario_id` existe desde la 010 y no lo escribe ni lo lee nadie: «mis avisos» daría 0 siempre. Es el error #3 esperando; el filtro va cuando el generador llene la columna |
-| `GET /reservas` tampoco | Devuelve todas las filas **sin paginar**. Agregarle un filtro sería sumarle una feature a algo que ya viola «truncar no es paginar» por el otro lado |
-| El índice que no se agregó | `propiedad` no tiene índice por `agente_captador_id`. No se agregó: es el error #4 y la cartera se midió en 20 ms |
-
-#### 6. El editor de plantillas tipo Word ← *cerrado (migración 023)*
-
-Una plantilla era un `text` que se editaba en un textarea monoespaciado y se
-imprimía dentro de un `<pre>`. Alcanzaba para probar el motor y no alcanzaba
-para un contrato: el papel que firma una persona no sale en Courier. Y la
-inmobiliaria que redacta en Word no podía traer su modelo sin perder el formato.
-
-Ahora el editor con formato está en **los dos lugares donde hay texto que va a
-salir impreso**: la plantilla (el modelo de la inmobiliaria) y el documento
-generado antes de mandarlo.
-
-**Ocho decisiones que conviene no revisar sin motivo:**
-
-1. **TipTap/ProseMirror, no un contenteditable propio.** La razón no es que
-   pegar y deshacer sean difíciles —que lo son—: es que el chip de variable
-   tiene que ser un **átomo indivisible** y `contenteditable` no garantiza eso.
-   En un `<span>` pelado el navegador parte el nodo cuando alguien escribe en el
-   medio y el corrector inserta marcas adentro. Un `{{ contrato.monto }}`
-   partido deja de matchear el regex del motor y sale literal adentro del
-   contrato que se firma. ProseMirror valida **cada transacción contra un
-   schema**: es la misma clase de garantía que un CHECK en Postgres. Se paga con
-   389 KB (125 KB gzip) en un chunk propio, cargado con `defineAsyncComponent`:
-   el bundle principal quedó igual, en 144 KB.
-2. **El texto es la verdad en un chip; los atributos son la verdad en un
-   bloque.** El backend re-deriva `data-var`/`data-formato` leyendo el `{{ }}`
-   de adentro del span —así una plantilla vieja o un `PUT` hecho a mano se
-   convierten solos en chips—, y re-escribe los `{% si %}`/`{% fin %}` desde los
-   atributos del div. Las dos direcciones tienen su motivo escrito en el código:
-   el token de una variable se sustituye en su lugar, el de una estructura es un
-   **par** que tiene que quedar balanceado a través de varios párrafos.
-3. **Los tokens de estructura van ADENTRO de su div, pegados a los bordes.**
-   Sueltos entre párrafos, borrar un condicional en falso se lleva un `</p>` de
-   un lado y deja un `<p>` abierto del otro. Con el div afuera, el rango que el
-   motor borra es siempre HTML balanceado y queda un div vacío, que
-   `[data-bloque]:empty { display: none }` esconde.
-4. **El sanitizado va en el servicio, no en el editor.** `PUT /v1/plantillas`
-   acepta un body y nada obliga a que haya pasado por TipTap. La frontera son
-   `guardar()`, `previsualizar()`, `crear()` y `actualizar()`; el editor es
-   comodidad.
-5. **El formato es una COLUMNA, no un olfateo de `<`.** Olfatear es adivinar, y
-   de eso dependen la vista imprimible, el `.txt` y el límite del `mailto:`. Un
-   contrato que diga «menor a 30 m2» daría «html» y saldría con las etiquetas a
-   la vista.
-6. **Los documentos ya generados NO se convierten.** Un papel que salió
-   monoespaciado salió así, y el trigger `documento_congelado` además lo impide
-   para los ya enviados. `documento_generado.formato` se congela al generar,
-   igual que `plantilla_nombre`.
-7. **`plantillas.defecto.ts` sigue en texto plano** y se pasa por `textoAHtml()`
-   al sembrar: una sola fuente del texto legal, y el conversor queda probado
-   contra las cuatro plantillas reales en cada corrida del seed.
-8. **El catálogo de variables vive en la API.** En `web/` se desincroniza del
-   `SELECT` que arma el contexto y ofrece variables que no existen. Hay un test
-   que lo confronta contra `EJEMPLO` **en las dos direcciones**: sin él, el menú
-   miente a los seis meses.
-
-**Lo que apareció en el camino:**
-
-| Qué | Lo que apareció |
-|---|---|
-| El diff de render | Es el único test que puede decir que convertir no rompió nada: renderiza las cuatro plantillas reales en texto y en HTML y exige que digan **lo mismo**. Compara las líneas con contenido y no las vacías, porque un `{% si %}` inline abre su propio bloque y eso puede mover una línea en blanco. Las palabras, los números y el orden no cambian |
-| El bloque de firmas | Está alineado a mano con espacios, y en HTML una corrida de espacios colapsa a uno: las dos firmas se pegaban. Una corrida de N espacios pasa a (N−1) espacios duros más uno normal, y `htmlATexto()` los devuelve. **Nunca adentro de un `{{ }}`** |
-| El largo del envío | El pre-contrato del seed mide **1.869 caracteres de texto y 2.035 de HTML**. Es el mismo 1.869 que ya estaba escrito en `envio.motor.ts` desde la etapa 11: la proyección lo dejó igual, que es el punto |
-| `sanitize-html` moderno no entra en Jest | Ver la trampa nueva de §4: se pinnea 2.17.1 con `-E` |
-| El chip mostraba el token | «`{{ contrato.monto }}`» no es lo que tiene que leer quien redacta un contrato. Un node view de ProseMirror muestra «Precio mensual · moneda» y `renderHTML()` sigue serializando el token: el editor habla castellano, el motor no tiene por qué |
-| La CSP no existía | El `Caddyfile` tenía HSTS, nosniff, X-Frame-Options y Permissions-Policy y **ninguna CSP**. Ahora está, y la misma en `server.headers` de Vite para que se rompa en dev y no el día del deploy. Comprobado en el navegador: Geist, Geist Mono y General Sans siguen cargando, sin una sola violación en consola |
-
-**Lo que quedó afuera, con su motivo:**
-
-- **Tablas.** Una tabla pegada de Word se aplana a párrafos **y se avisa en
-  pantalla**, con el motivo. Una tabla en un contrato tiene que comportarse bien
-  al cortar de página, y a medias es peor que no tenerla. El aviso no es
-  cortesía: sin él alguien pega un cuadro de vencimientos y firma un contrato al
-  que le falta la grilla.
-- **Enlaces.** Un contrato no los usa, y `<a href>` es la superficie de
-  `javascript:`. El backend ni siquiera los permite; ofrecer el botón sería
-  ofrecer algo que el sanitizador va a tirar.
-- **Numeración automática de cláusulas.** Se puede con
-  `@counter-style { system: fixed }`, pero entonces «PRIMERA» vive en una hoja
-  de estilos y no en el documento firmado: quien copie el texto se lleva un
-  contrato sin ordinales. Materializarlo al guardar duplica la lista de
-  ordinales entre `web/` y `api/`, que no comparten código.
-- **Números de página.** Chrome no soporta contenido en los márgenes de
-  `@page`; los pone el diálogo de impresión del navegador. Prometerlos sería
-  exactamente lo que la regla de honestidad de este producto prohíbe.
-- **PDF en el servidor.** Sigue sin generarse, por lo ya escrito en esa página.
-
-#### 7. Lo demás, marcado con ⏳ en el roadmap
-
-`metrica_mes` persistida para la comparación interanual · gastos y reclamos en
-el portal del propietario · columnas configurables · lint de colores a mano ·
-archivar lo viejo.
-
----
-
-### ⚠️ Dos cosas del entorno, no del código
-
-**El CI falló por una caída de GitHub Actions**, no por los cambios: *«The job
-was not acquired by Runner»*, *«Service Unavailable»*. Hay que reintentarlo.
-
-**El hostname de la máquina cambió** y git dejó de autodetectar la identidad.
-Ya está configurado en global (`bemotech.ok@gmail.com`). Los commits de esta
-sesión quedaron con el hostname viejo, igual que todos los anteriores.
-
----
-
-### 🔑 Lo único que está esperando algo tuyo
-
-1. **El precio.** Sigue siendo el gate de la etapa 0 y no lo destraba ningún código.
-2. **La API key de Google Maps.** Ver abajo: es lo único que falta, y sirve para
-   **una** cosa —geocodificar—. El mapa de la ficha ya funciona sin ella.
-3. **Capturas de `appmiti.com`.** No pude verlo: el dominio resuelve pero el servidor
-   no responde desde acá, ni por navegador, ni por `curl`, ni por búsqueda. La
-   portada de hoy es la arquitectura estándar del género con marca propia.
-
-#### La API key de Google Maps, paso a paso
+> El detalle de diseño de cada punto está en `docs/roadmap.md`, en su etapa.
+> Acá va sólo el ORDEN y por qué ese orden.
+>
+> **Regla que no se negocia**: cada punto entra completo —migración con RLS,
+> servicio, controlador con roles, tests (camino feliz + cada denegación +
+> aislamiento), pantalla y verificación en el navegador— o no entra. Un punto a
+> medias no cuenta aunque esté «casi».
+
+### Sprint 1 — lo próximo, en este orden
+
+1. **15.6 · Cuenta corriente por persona.** «¿Cuánto me debe este inquilino?» y
+   «¿cuánto le debo a este propietario?». **No es una tabla nueva**: es la vista
+   que suma cuotas, cobros, gastos y liquidaciones que ya están. Es el punto más
+   barato de todo lo que queda y el que más se usa.
+2. **16.4 · Historial de precio y de consultas.** `precio_historial` con una
+   fila por cambio. Las «consultas» NO son un contador nuevo: es agrupar por
+   semana lo que `oportunidad.operacion_id` ya guarda. No inventar «vistas»:
+   no hay portal público propio, así que lo único real que se puede contar es
+   el lead que entró.
+3. **16.6 · Ficha técnica en PDF.** Una plantilla más del motor de la etapa 5,
+   con los estilos de impresión de la etapa 8. Sin librería de PDF nueva.
+
+### Sprint 2
+
+4. **15.5 · La cotización del día.** Hay operaciones en USD y liquidaciones en
+   ARS y **no hay tipo de cambio en ninguna parte**. Se guarda como un índice,
+   con su fecha y su fuente, y toda conversión lleva su memoria de cálculo.
+   La ingesta del BCRA ya funciona y tiene su cron.
+5. **16.2 · Búsqueda por radio en el mapa.** Haversine sobre `lat`/`lng`, que ya
+   se geocodifican y persisten. Medir antes de indexar.
+6. **16.3 · Comparar propiedades.** Front solo, sin endpoint nuevo: junta
+   respuestas de `GET /propiedades/:id`.
+
+### Sprint 3
+
+7. **15.4 · Portal del inquilino.** El del propietario es exactamente este
+   patrón: público, por token, con función SECURITY DEFINER.
+8. **16.5 · Reserva de turnos para visitas.** El turno se agenda y se ve; el
+   recordatorio automático depende de que la etapa 7 consiga proveedor.
+
+### Seguridad — lo que falta de la etapa 17
+
+- **17.2 · Datos personales.** Un legajo de garante es dato sensible bajo la Ley
+  25.326 y hoy se guarda sin política de retención y sin forma de borrarlo.
+  Falta también auditar quién mira un DNI.
+- **17.4 · Superficie.** CSP propia (helmet sólo pone sus defaults), rate limit
+  fuera de `/auth` —hoy sólo el login tiene techo—, 2FA para el titular.
+- **17.5 · Aislamiento contra un atacante**, no contra un test amable: ids de
+  otro tenant en el cuerpo de un PATCH, en un filtro, en un import CSV. Y un
+  test que falle si alguien agrega un endpoint sin `@Roles`.
+- **Nest 10 → 11.** Es el fix de los dos `high` de `npm audit` que quedan en
+  producción. Uno (multer, DoS) **no es alcanzable** —no se parsea multipart en
+  ningún lado—; el otro es express/body-parser transitivo. Migración mayor sobre
+  967 tests: va sola, no adentro de un `audit fix --force`.
+
+### Etapa 18 — Inbox omnicanal
+
+Está diseñada en el roadmap, con su dependencia externa anotada ARRIBA para que
+no se descubra a mitad de camino:
+
+- El modelo (`conversacion` + `mensaje`) y **el email primero**, que es el único
+  canal que se pone a andar sin trámite.
+- WhatsApp y Meta necesitan verificación de negocio y plantillas aprobadas:
+  semanas de trámite, cero líneas de código.
+- **La regla que manda sobre la pantalla**: mientras el canal no pueda enviar,
+  el cuadro de respuesta dice que queda en cola y **no simula que salió**. Es la
+  misma decisión de la etapa 6 con el botón *Publicar* que no publicaba.
+
+### Fuera de sprint, por trámite ajeno
+
+- **15.3 · Facturación ARCA.** Necesita certificado y punto de venta que sólo el
+  dueño puede tramitar. Cuando esté, es una constante que se cambia.
+- **La API key de Google Maps.** Los pasos exactos están en §5 bis, acá abajo.
+
+## 5 bis. Lo único que está esperando algo tuyo
+
+### La API key de Google Maps, paso a paso
 
 **Antes que nada, qué habilita y qué no.** La key sirve para **geocodificar**:
 pasar una dirección a latitud y longitud. Nada más. El **mapa** de la ficha es un
@@ -677,7 +322,11 @@ preservar.
 
 ---
 
+---
+
 ## 6. Prompt para arrancar la próxima sesión
+
+Pegá esto tal cual en una sesión nueva:
 
 ```
 Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
@@ -685,27 +334,43 @@ Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
 docs/roadmap.md.
 
-Estado: once etapas cerradas, 590 tests de API contra Postgres real y 57 de
-front, todo en verde. El seed trae 20 propiedades, 19 contratos y su ciclo de
-cobranza —cuatro de ellos ICL/IPC que proyectan sus tres aumentos con el motor
-de verdad—, una serie de IPC demo marcada como tal, las cuatro plantillas base
-en las dos inmobiliarias y siete avisos de la cartera: entrás con
-owner@andes.test / unaclavelarga1.
+Estado (2026-08-19): 29 migraciones, 967 tests de API contra Postgres real y
+194 de front, todo en verde. El CI corre y está verde en los cuatro jobs.
+Entrás con owner@andes.test / unaclavelarga1.
 
-Lo que sigue es la etapa 12 del roadmap, con el diseño ya resuelto en
-CONTINUAR.md §5. Arrancá por 12.1, la config de comisiones — el servicio se
-empezó y se revirtió a propósito porque quedaba a medias.
+Lo último que se cerró: el sellado de seguridad 17.1 —el bucket estaba de
+lectura pública con los DNI de los garantes adentro— y 16.1, precio y expensas
+en el filtro de propiedades.
+
+Lo que sigue es el Sprint 1 de CONTINUAR.md §5, y arranca por 15.6, la cuenta
+corriente por persona: no es una tabla nueva, es la vista que suma cuotas,
+cobros, gastos y liquidaciones que ya están.
+
+Antes de escribir código, verificá el estado real en vez de creerle a este
+documento: `git log --oneline -5`, `gh run list --limit 3` y
+`docker compose exec -T api npm test`. Este archivo ya tuvo tres notas de
+estado que envejecieron hasta volverse mentira.
 
 Trabajamos como siempre:
 - Cada feature va completa: migración con RLS, servicio, controlador con roles,
   tests (camino feliz + cada denegación + aislamiento) y pantalla.
-- Verificá de verdad: tests contra la base real y la app en el navegador. La
-  etapa 11 entera salió de mirar la app, no el código.
+- Verificá de verdad: tests contra la base real y la app en el navegador.
 - Si algo queda sin hacer o no lo pudiste probar, decímelo explícitamente.
 - Nada de datos falsos: lo que no existe se marca "en desarrollo" con el motivo.
 ```
 
----
+### Si acabás de hacer `git pull` y no sabés dónde quedó
+
+```bash
+git log --oneline -8              # qué entró último
+gh run list --limit 3             # cómo salió el CI
+docker compose up -d              # levantar todo
+docker compose exec -T api npm test
+```
+
+Y después leé §5 de este archivo: el primer punto del Sprint 1 es por dónde
+sigue. Si algo de acá no coincide con lo que ves, **le creés a la máquina, no
+al documento**.
 
 ## 7. Mapa del código
 
