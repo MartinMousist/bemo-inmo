@@ -1339,14 +1339,47 @@ cada ítem de arriba dice **cómo** se verificó, no sólo que se hizo.
 > negocio y plantillas aprobadas. Es el mismo bloqueo de la etapa 7 y de la 9.
 > `GET /v1/avisos/canales` ya devuelve hoy `email: false` y `whatsapp: false`.
 
-### 18.1 · El modelo que falta
+### 18.1 · El modelo ✅ HECHO (migración 038)
 
-- [ ] `conversacion` + `mensaje`: hilo por lead, con dirección
-      (entrante / saliente), canal, cuerpo, adjuntos y estado de envío.
-- [ ] `origen` suma `meta` y `email` a su CHECK — hoy tiene `portal`, `web`,
-      `whatsapp`, `telefono`, `referido`, `cartel`, `redes` y `otro`.
-- [ ] Idempotencia por id externo del proveedor: un webhook se reintenta, y un
-      mensaje duplicado en un hilo es peor que uno faltante.
+- [x] `canal_cuenta` + `conversacion` + `mensaje`. Son tres y no dos:
+      **`canal` y `proveedor` van separados** porque WhatsApp se manda por
+      Twilio HOY y por la API oficial de Meta cuando la verificación esté —
+      mismo canal, otro proveedor, y las conversaciones no se enteran. Es lo que
+      hace que el plan «Twilio primero, Meta después» no sea una reescritura.
+- [x] El hilo es por (cuenta, contacto), no por canal. Si el mismo cliente
+      escribe por WhatsApp y por Telegram son dos hilos: son dos identidades que
+      todavía no sabemos que son la misma, y unificarlas mal mezcla las
+      conversaciones de dos personas.
+- [x] `origen` suma `telegram`, `email`, `instagram`, `facebook` y `meta`.
+- [x] Idempotencia por id del proveedor, con índice PARCIAL: un mensaje nuestro
+      sin despachar todavía no tiene id externo, y en Postgres `NULL != NULL`
+      —la trampa que ya había mordido en cotizaciones—.
+- [x] Credenciales cifradas con `pgcrypto`, con la clave FUERA de la base. El
+      token de Twilio es la llave para escribirle a los clientes de esa
+      inmobiliaria haciéndose pasar por ella: un dump no puede alcanzar.
+- [x] `asignado_a` con el disparador de membresía de la 035/037, y todas las FK
+      compuestas con `tenant_id`.
+
+### 18.1 bis · El bot ✅ HECHO (`bot.motor.ts`, 31 tests)
+
+Motor puro, sin base ni red. **La regla que lo ordena: ante la duda, escala.**
+Escalar de más le cuesta a un asesor diez segundos; no escalar cuando alguien
+pidió una persona cuesta el cliente.
+
+- [x] Palabras de salida (`asesor`, `humano`, `operador`…) que **ganan sobre
+      cualquier ruteo automático**: pedir una persona no se negocia.
+- [x] Ruteo por tema a equipo (alquileres, ventas, administración, reclamos).
+- [x] Confirmaciones y cancelaciones, que avisan a una persona. La cancelación
+      se evalúa ANTES: «no puedo, cancelo» tiene las dos, y si ganara la
+      confirmación el sistema avisaría exactamente lo contrario de lo que pasó.
+- [x] El bot se calla si hay alguien atendiendo, y distingue **apagado a mano**
+      (no vuelve solo) de **pausado porque un agente contestó** (vuelve solo).
+      Son dos columnas porque apagarlo a mano tiene que sobrevivir al reloj.
+- [x] Lo que no entiende **NO se contesta con «no te entendí»: escala.** Un bot
+      que se queda ahí es el que hace que la gente deje de escribir.
+- [x] Negación con alcance por oración: «no hace falta un asesor, quiero
+      alquilar» niega el asesor y NO el alquiler. Cortar por coma y conjunción
+      en vez de por ventana de palabras costó dos tests en rojo.
 
 ### 18.2 · La entrada, canal por canal
 

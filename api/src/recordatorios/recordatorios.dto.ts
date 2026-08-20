@@ -17,6 +17,11 @@ export const TIPOS_EVENTO = [
   'visita_agendada',
   'garantia_por_vencer',
   'garantia_revision_bcra',
+
+  // Etapa 18. Son los dos avisos que pide una bandeja omnicanal: que alguien
+  // se entere de que hace falta una persona, y de que nadie contestó.
+  'conversacion_escalada',
+  'conversacion_sin_responder',
 ] as const;
 
 /** `q` busca por título o detalle del aviso. */
