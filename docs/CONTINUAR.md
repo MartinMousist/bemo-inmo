@@ -352,6 +352,43 @@ preservar.
 
 ---
 
+## 5 ter · El bot de Telegram (2 minutos, gratis, sin trámite)
+
+Es lo único que hace falta para que el inbox omnicanal se pueda probar **de
+punta a punta hoy**: entra un mensaje real, aparece en la bandeja, se contesta y
+llega. Telegram no pide verificación de negocio ni plantillas aprobadas, que es
+lo que a WhatsApp le lleva semanas.
+
+1. En Telegram, escribile a **@BotFather**.
+2. `/newbot` → le ponés un nombre (ej. `Bemo INMO Ventas`) y un usuario que
+   termine en `bot` (ej. `bemo_inmo_ventas_bot`).
+3. Te devuelve un token con esta forma: `8123456789:AAF...` — **son 45
+   caracteres y es una credencial**: quien lo tenga puede escribirle a tus
+   clientes haciéndose pasar por la inmobiliaria.
+
+Ese token **no se pega en un chat ni en un issue**. Va en `.env`:
+
+```
+TELEGRAM_BOT_TOKEN_DEMO=8123456789:AAF...
+```
+
+En producción no va en `.env`: se carga desde la pantalla de canales y queda
+**cifrado con pgcrypto** en `canal_cuenta.secreto` (migración 038). La variable
+de entorno es sólo para la cuenta de demostración local.
+
+### Por qué en desarrollo no hace falta un túnel
+
+Telegram ofrece `getUpdates` —long polling— además del webhook. El adaptador
+soporta los dos y terminan en el mismo `parsear()`, así que en la laptop se
+prueba sin exponer nada a internet. El webhook (`setWebhook`) recién hace falta
+cuando esto viva en un servidor con TLS.
+
+Para Twilio sí hace falta URL pública desde el primer minuto: su sandbox de
+WhatsApp le pega a un webhook. Ahí sirve `cloudflared tunnel --url
+http://localhost:3000` y cargar esa URL en `canal_cuenta.config.urlPublica`
+—Twilio firma la URL, así que si no coincide exactamente, nada valida—.
+
+
 ## 6. Prompt para arrancar la próxima sesión
 
 Pegá esto tal cual en una sesión nueva:
