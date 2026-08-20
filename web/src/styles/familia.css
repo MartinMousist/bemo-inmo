@@ -842,14 +842,43 @@ th[aria-sort] > button { color: var(--ink); }
 }
 
 .grupo-titulo {
+  /* Pasó de <p> a <button> cuando los grupos se volvieron plegables: hay que
+     sacarle los defaults del botón para que siga leyéndose como un rótulo y no
+     como un control. Lo que sí conserva de botón es lo que importa: el foco por
+     teclado y el `aria-expanded`. */
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
   margin: 0 0 6px;
-  padding: 0 8px;
+  padding: 4px 8px;
+  font-family: inherit;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted-2);
+  text-align: left;
 }
+.grupo-titulo:hover { color: var(--ink); }
+.grupo-titulo span { margin-right: auto; }
+
+/* El chevron apunta a la derecha plegado y hacia abajo abierto: es la
+   convención que la gente ya sabe leer sin que nadie se la explique. */
+.grupo-titulo svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--t-micro, 120ms) ease;
+}
+.grupo-titulo svg.girado { transform: rotate(90deg); }
+
+/* Un grupo plegado no necesita el aire que separa de sus ítems. */
+.grupo:has(.grupo-titulo[aria-expanded='false']) { margin-bottom: 2px; }
 
 /* Ojo con el selector: va `.sidebar` adelante, NUNCA `.nav a` suelto.
    La portada también tiene un `<header class="nav">`, y ahí adentro el logo es

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useAuth } from '../stores/auth';
-import { guardarPlegado, leerPlegado } from '../dominio/sidebar';
+import {
+  guardarGruposCerrados, guardarPlegado, leerGruposCerrados, leerPlegado,
+} from '../dominio/sidebar';
 import UiIcon from './UiIcon.vue';
 import BemoLogo from './BemoLogo.vue';
 import MenuUsuario from './MenuUsuario.vue';
@@ -112,8 +115,78 @@ const gruposVisibles = computed(() =>
     .filter((g) => g.items.length > 0),
 );
 
+const ruta = useRoute();
+
 const drawerAbierto = ref(false);
 const paletaAbierta = ref(false);
+
+/**
+ * Grupos plegados.
+ *
+ * ── Por qué hizo falta ──
+ *
+ * Son 32 entradas en 6 secciones. Abiertas todas de una no entran en pantalla,
+ * así que la número 8 —«Bandeja»— sólo se encuentra scrolleando. Una pantalla
+ * que hay que buscar es una pantalla que no existe: pasó, y por eso esto está.
+ *
+ * La primera vez queda abierto SÓLO el grupo de la pantalla actual. Después
+ * manda lo que el usuario elija, que se recuerda.
+ */
+const cerrados = ref<Set<string>>(new Set());
+
+/** El grupo al que pertenece la ruta actual. Nunca se pliega solo. */
+const grupoActivo = computed(() => {
+  const p = ruta.path;
+  // Se elige la coincidencia MÁS LARGA: `/propiedades/venta` tiene que ganarle
+  // a `/propiedades`, o el grupo que se abre es el equivocado.
+  let mejor = { titulo: '', largo: -1 };
+  for (const g of gruposVisibles.value) {
+    for (const i of g.items) {
+      if ((p === i.a || p.startsWith(`${i.a}/`)) && i.a.length > mejor.largo) {
+        mejor = { titulo: g.titulo, largo: i.a.length };
+      }
+    }
+  }
+  return mejor.titulo;
+});
+
+function abierto(titulo: string): boolean {
+  // Plegada a iconos no hay títulos donde tocar: si además se plegaran los
+  // grupos, la barra quedaría sin forma de navegar.
+  if (plegado.value) return true;
+  return !cerrados.value.has(titulo);
+}
+
+function alternar(titulo: string) {
+  const s = new Set(cerrados.value);
+  if (s.has(titulo)) s.delete(titulo);
+  else s.add(titulo);
+  cerrados.value = s;
+  guardarGruposCerrados(s);
+}
+
+onMounted(() => {
+  const guardado = leerGruposCerrados();
+  if (guardado) {
+    cerrados.value = guardado;
+    return;
+  }
+  // Primera vez: todo plegado menos donde está parado.
+  cerrados.value = new Set(
+    gruposVisibles.value.map((g) => g.titulo).filter((t) => t !== grupoActivo.value),
+  );
+});
+
+// Al entrar a una pantalla, su grupo se abre. Sin esto, navegar por la paleta
+// (⌘K) o por un enlace dejaba el menú mostrando un grupo que no es donde estás.
+watch(grupoActivo, (t) => {
+  if (t && cerrados.value.has(t)) {
+    const s = new Set(cerrados.value);
+    s.delete(t);
+    cerrados.value = s;
+    guardarGruposCerrados(s);
+  }
+});
 
 /**
  * Barra lateral plegada.
@@ -154,19 +227,33 @@ window.addEventListener('keydown', (e) => {
 
       <nav>
         <div v-for="g in gruposVisibles" :key="g.titulo" class="grupo">
-          <p class="grupo-titulo">{{ g.titulo }}</p>
-          <RouterLink
-            v-for="i in g.items"
-            :key="i.a"
-            :to="i.a"
-            class="nav-item"
-            :title="plegado ? i.texto : undefined"
-            :aria-label="plegado ? i.texto : undefined"
-            @click="drawerAbierto = false"
+          <!-- Botón y no <p>: se abre y se cierra, así que tiene que ser
+               alcanzable por teclado y anunciarse como plegable. -->
+          <button
+            v-if="!plegado"
+            type="button"
+            class="grupo-titulo"
+            :aria-expanded="abierto(g.titulo)"
+            @click="alternar(g.titulo)"
           >
-            <UiIcon :nombre="i.icono" />
-            <span class="nav-label">{{ i.texto }}</span>
-          </RouterLink>
+            <span>{{ g.titulo }}</span>
+            <UiIcon nombre="chevron" :class="{ girado: abierto(g.titulo) }" />
+          </button>
+
+          <template v-if="abierto(g.titulo)">
+            <RouterLink
+              v-for="i in g.items"
+              :key="i.a"
+              :to="i.a"
+              class="nav-item"
+              :title="plegado ? i.texto : undefined"
+              :aria-label="plegado ? i.texto : undefined"
+              @click="drawerAbierto = false"
+            >
+              <UiIcon :nombre="i.icono" />
+              <span class="nav-label">{{ i.texto }}</span>
+            </RouterLink>
+          </template>
         </div>
       </nav>
 
