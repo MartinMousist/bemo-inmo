@@ -161,6 +161,16 @@ export class CanalesService {
     // hace impredecible.
     const webhookToken = randomBytes(32).toString('base64url');
 
+    // El secreto con el que el proveedor firma lo que nos manda.
+    //
+    // Se genera SOLO y no se le pide a nadie: en Telegram lo elegimos nosotros
+    // y se lo pasamos a `setWebhook`, así que pedírselo al usuario es pedirle
+    // que invente una credencial nuestra. Sin él, `verificarFirma` rechaza todo
+    // —el default es cerrado— y el canal quedaría conectado pero sordo, que es
+    // la peor combinación: parece que anda y no entra un mensaje.
+    const config: Record<string, unknown> = { ...(dto.config ?? {}) };
+    if (!config.webhookSecret) config.webhookSecret = randomBytes(24).toString('base64url');
+
     const id = await this.db.withTenant(tenantId, async (ej) => {
       try {
         const { rows } = await ej.query<{ id: string }>(
@@ -169,7 +179,7 @@ export class CanalesService {
            VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
           [
             tenantId, dto.canal, dto.proveedor, dto.nombre, dto.identificador,
-            JSON.stringify(dto.config ?? {}), webhookToken,
+            JSON.stringify(config), webhookToken,
           ],
         );
         return rows[0].id;

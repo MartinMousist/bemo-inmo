@@ -1389,16 +1389,30 @@ pidió una persona cuesta el cliente.
 - [ ] WhatsApp Business Cloud y Meta Lead Ads entran después, con el mismo
       modelo, cuando la verificación esté.
 
-### 18.3 · La pantalla
+### 18.2 bis · Los adaptadores ✅ HECHO
 
-- [ ] Lista de leads con su origen y su último mensaje, ordenada por lo que
-      espera respuesta hace más tiempo — que es la pregunta real: **a quién le
-      estoy quedando mal**.
-- [ ] Panel lateral con el hilo, sin salir del listado.
-- [ ] Responder desde ahí, con lo que se escribe encolado en el mismo
-      `evento_programado` que la etapa 7 ya construyó. Ese modelo ya tiene
-      `canal`, `estado`, `intentos` y su clave de idempotencia: *«cuando el
-      envío exista, los eventos ya generados salen sin tocar nada más»*.
+Telegram y Twilio completos. **Meta escrito entero aunque no se pueda usar
+todavía**: parsea el formato real y verifica la firma sobre el cuerpo crudo.
+Descubrir eso el día que llegue la aprobación, con un cliente esperando, es la
+peor forma de encontrarse con un parser. Correo hace lo que no depende del
+proveedor y **nunca devuelve `enviado: true`**.
+
+### 18.3 · La pantalla ✅ HECHO
+
+- [x] Lista ordenada por **hace cuánto que alguien espera**, con el tiempo a la
+      vista para que se vea por qué está arriba. Verificado en el navegador:
+      al contestarle a uno, baja y el contador pasa de 3 a 2 esperando.
+- [x] Panel lateral con el hilo, sin salir del listado.
+- [x] Responder desde ahí. **El cuadro dice si salió o quedó en cola**, con el
+      motivo. Un bug encontrado sólo por mirarlo en el navegador: el aviso de
+      «quedó en cola» se borraba solo, porque `abrir()` lo limpia y se estaba
+      seteando antes de refrescar el hilo. El agente habría creído que su
+      mensaje salió — que es exactamente lo que esta regla viene a evitar.
+- [x] Pantalla de canales: conectar, ver el estado REAL con su motivo, y la URL
+      del webhook. **La credencial entra y no sale**: cifrada, sin endpoint que
+      la devuelva ni al titular. El secreto del webhook se genera solo —en
+      Telegram lo elegimos nosotros— porque pedírselo al usuario dejaba el canal
+      conectado pero sordo.
 
 **La regla que manda sobre el diseño de la pantalla**: mientras el canal no
 pueda enviar, el cuadro de respuesta **dice que queda en cola y no simula que

@@ -40,6 +40,9 @@ const PATHS: Record<string, string> = {
   // Candado cerrado: el cuerpo y el arco. Cerrado y no abierto —un candado
   // abierto dice lo contrario de lo que hace esta pantalla—.
   candado: 'M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1M8 11V7a4 4 0 0 1 8 0v4',
+  // Globo de diálogo con la colita abajo a la izquierda: es la forma que se lee
+  // como «mensaje» sin necesidad de etiqueta.
+  chat: 'M21 12a8 8 0 0 1-8 8H8l-4 3v-4.5A8 8 0 1 1 21 12',
 
   // ── Los cinco de la tarjeta de propiedad ────────────────────────────────
   // Dibujados con las mismas reglas que los de arriba: viewBox 24, trazo 1.5,

@@ -48,6 +48,23 @@ describe('Inbox omnicanal', () => {
   const bandeja = (q = '', i = inmo, rol: 'owner' | 'agente' = 'owner') =>
     http().get(`/v1/inbox${q}`).set(...como(i, rol));
 
+  /** El secreto no sale por la API a propósito: para el test se lee de la base. */
+  async function secretoDe(cuentaId: string): Promise<string> {
+    const { Client } = await import('pg');
+    const { loadEnv } = await import('../src/config/env');
+    const c = new Client({ connectionString: loadEnv().DATABASE_OWNER_URL });
+    await c.connect();
+    try {
+      const { rows } = await c.query<{ s: string }>(
+        "SELECT config->>'webhookSecret' AS s FROM canal_cuenta WHERE id = $1",
+        [cuentaId],
+      );
+      return rows[0].s;
+    } finally {
+      await c.end();
+    }
+  }
+
   beforeAll(async () => {
     await limpiarFixtures();
     app = await crearApp();
@@ -84,6 +101,38 @@ describe('Inbox omnicanal', () => {
       const texto = JSON.stringify(r.body);
       expect(texto).not.toContain(SECRETO);
       expect(r.body[0].tieneSecreto).toBe(false);
+    });
+
+    it('el secreto del webhook se genera SOLO y tampoco sale', async () => {
+      // En Telegram lo elegimos nosotros y se lo pasamos a `setWebhook`:
+      // pedírselo al usuario es pedirle que invente una credencial nuestra. Y
+      // sin él `verificarFirma` rechaza todo, así que el canal quedaría
+      // conectado pero sordo —parece que anda y no entra un mensaje—.
+      const propia = await http().post('/v1/canales').set(...como(inmo))
+        .send({
+          canal: 'telegram', proveedor: 'telegram',
+          nombre: 'Auto', identificador: '@auto_bot',
+        })
+        .expect(201);
+
+      expect(propia.body.config.webhookSecret).toBeUndefined();
+
+      // Y anda: un webhook firmado con ese secreto entra.
+      const secreto = await secretoDe(propia.body.id);
+      expect(secreto).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+
+      await http().post(propia.body.rutaWebhook)
+        .set('x-telegram-bot-api-secret-token', secreto)
+        .send({
+          message: {
+            message_id: 4242, text: 'probando el secreto automático',
+            chat: { id: '777777' }, from: { first_name: 'Auto' },
+          },
+        })
+        .expect(200);
+
+      const r = await http().get('/v1/inbox?q=Auto').set(...como(inmo)).expect(200);
+      expect(r.body.items.length).toBe(1);
     });
 
     it('dice que NO está disponible y por qué', async () => {

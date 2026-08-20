@@ -120,6 +120,8 @@ const router = createRouter({
     // Sin restricción de rol: cada persona administra la seguridad de SU cuenta,
     // y el asesor que entra desde el teléfono la necesita igual que el titular.
     { path: '/seguridad', component: () => import('./paginas/SeguridadPage.vue') },
+    { path: '/inbox', component: () => import('./paginas/InboxPage.vue') },
+    { path: '/canales', component: () => import('./paginas/CanalesPage.vue') },
     { path: '/importar', component: () => import('./paginas/ImportarPage.vue') },
 
     { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },

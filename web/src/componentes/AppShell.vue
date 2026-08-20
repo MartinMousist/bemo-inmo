@@ -54,6 +54,7 @@ const grupos = [
     titulo: 'Alquileres',
     items: [
       { a: '/avisos', icono: 'campana', texto: 'Avisos' },
+      { a: '/inbox', icono: 'chat', texto: 'Bandeja' },
       { a: '/vencimientos', icono: 'calendario', texto: 'Vencimientos' },
       { a: '/contratos', icono: 'documento', texto: 'Contratos' },
       { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
