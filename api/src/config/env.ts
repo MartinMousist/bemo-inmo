@@ -162,6 +162,22 @@ const schema = z.object({
   RETENCION_BCRA_MESES: z.coerce.number().int().positive().default(12),
 
   /**
+   * La clave con la que se cifran las credenciales de canal (migración 038).
+   *
+   * Vive acá y NO en la base a propósito: si estuviera adentro, cifrar no
+   * serviría de nada —quien se lleva el dump se lleva la llave—. El token de
+   * Twilio o el del bot de Telegram son la llave para escribirle a los clientes
+   * de una inmobiliaria haciéndose pasar por ella.
+   *
+   * Tiene default para que dev y los tests arranquen solos; en producción
+   * `loadEnv` corta si quedó el default (ver abajo).
+   */
+  CANALES_SECRETO: z.string().min(16).default('clave-de-desarrollo-no-usar-en-prod'),
+
+  /** El token del bot de Telegram de la cuenta de demostración local. */
+  TELEGRAM_BOT_TOKEN_DEMO: z.string().optional(),
+
+  /**
    * Opcional a propósito. Sin key la app funciona igual: no geocodifica, no
    * inventa coordenadas, y la UI ofrece cargar lat/lng a mano diciendo por qué.
    * Un default falso acá sería una propiedad ubicada en el medio del océano.
@@ -235,6 +251,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   if (cached.isProduction) {
+    if (cached.CANALES_SECRETO === 'clave-de-desarrollo-no-usar-en-prod') {
+      throw new Error(
+        'CANALES_SECRETO quedó en el valor de desarrollo. Con esa clave, las '
+          + 'credenciales de canal están cifradas con algo que está en el repo.',
+      );
+    }
     if (cached.SEED_ON_BOOT) {
       throw new Error('SEED_ON_BOOT no puede estar activo en producción.');
     }

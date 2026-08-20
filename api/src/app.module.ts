@@ -114,6 +114,12 @@ import { RetencionService } from './datos-personales/retencion.service';
 import { EmailAdaptador } from './inbox/adaptadores/email.adaptador';
 import { MetaAdaptador } from './inbox/adaptadores/meta.adaptador';
 import { RegistroAdaptadores } from './inbox/adaptadores/registro';
+import { CanalesController } from './inbox/canales.controller';
+import { CanalesService } from './inbox/canales.service';
+import { InboxController } from './inbox/inbox.controller';
+import { InboxService } from './inbox/inbox.service';
+import { IngestaService } from './inbox/ingesta.service';
+import { WebhooksController } from './inbox/webhooks.controller';
 import { TelegramAdaptador } from './inbox/adaptadores/telegram.adaptador';
 import { TwilioAdaptador } from './inbox/adaptadores/twilio.adaptador';
 import { TotpService } from './auth/totp.service';
@@ -157,6 +163,9 @@ import { CuentaService } from './cuenta/cuenta.service';
     CuentaController,
     SeguridadController,
     RetencionController,
+    WebhooksController,
+    InboxController,
+    CanalesController,
     EquipoController,
     PersonasController,
     RolesPersonaController,
@@ -242,6 +251,9 @@ import { CuentaService } from './cuenta/cuenta.service';
     MetaAdaptador,
     EmailAdaptador,
     RegistroAdaptadores,
+    CanalesService,
+    IngestaService,
+    InboxService,
     { provide: APP_GUARD, useClass: AuthGuard },
     // DESPUÉS del de autenticación, y el orden es la feature: así el contador
     // general puede contar por usuario en vez de por IP, porque `req.actor` ya

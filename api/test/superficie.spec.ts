@@ -114,7 +114,7 @@ describe('Superficie expuesta', () => {
    * token. Doce rutas, cada una con su motivo; la trece tiene que costar
    * escribirla acá.
    */
-  it('las rutas públicas son exactamente estas trece', () => {
+  it('las rutas públicas son exactamente estas quince', () => {
     const publicas = rutas.filter((r) => r.publico).map((r) => `${r.verbo} ${r.camino}`).sort();
 
     expect(publicas).toEqual([
@@ -134,6 +134,13 @@ describe('Superficie expuesta', () => {
       'POST /inquilino/:token/reclamos',
       // El feed que consumen los portales inmobiliarios.
       'GET /feed/:token.xml',
+      // Por acá entran los mensajes de los canales. Públicos por necesidad:
+      // Telegram, Twilio y Meta no tienen forma de autenticarse contra
+      // nosotros. Lo que los protege es el token de 32 bytes en la URL, la
+      // firma del proveedor —sin firma válida no se procesa NADA— y un tope de
+      // tráfico propio. El GET es la verificación inicial de Meta.
+      'GET /webhooks/:token',
+      'POST /webhooks/:token',
       // El catálogo de planes: es la página de precios.
       'GET /planes',
       // Sondas de vida. No devuelven dato de nadie.

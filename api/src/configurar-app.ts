@@ -54,6 +54,22 @@ export function configurarApp(app: INestApplication): void {
   // de texto, y con el límite normal el archivo no entra.
   app.use('/v1/conciliacion/extractos', express.json({ limit: env.BODY_LIMIT_IMPORTAR }));
 
+  // Los webhooks de canal necesitan el cuerpo CRUDO además del parseado: Meta
+  // firma los bytes que mandó, y `JSON.stringify` de lo que parseó Express no
+  // los devuelve —cambia el orden de claves y los espacios— así que la firma no
+  // valida nunca. Es el error clásico de esa integración.
+  //
+  // Va SÓLO en esta ruta: guardar el crudo de cada request duplicaría la
+  // memoria por request para algo que usa un endpoint.
+  app.use('/v1/webhooks', express.json({
+    limit: env.BODY_LIMIT,
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: string }).rawBody = buf.toString('utf8');
+    },
+  }));
+  // Twilio manda `application/x-www-form-urlencoded`, no JSON.
+  app.use('/v1/webhooks', express.urlencoded({ extended: false, limit: env.BODY_LIMIT }));
+
   app.use(express.json({ limit: env.BODY_LIMIT }));
   app.use(express.urlencoded({ extended: true, limit: env.BODY_LIMIT }));
 
