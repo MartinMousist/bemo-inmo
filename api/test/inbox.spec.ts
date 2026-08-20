@@ -48,6 +48,24 @@ describe('Inbox omnicanal', () => {
   const bandeja = (q = '', i = inmo, rol: 'owner' | 'agente' = 'owner') =>
     http().get(`/v1/inbox${q}`).set(...como(i, rol));
 
+  /** Retrasa el último entrante: el umbral son horas y el test no las espera. */
+  async function envejecer(conversacionId: string, horas: number): Promise<void> {
+    const { Client } = await import('pg');
+    const { loadEnv } = await import('../src/config/env');
+    const c = new Client({ connectionString: loadEnv().DATABASE_OWNER_URL });
+    await c.connect();
+    try {
+      await c.query(
+        `UPDATE conversacion
+            SET ultimo_entrante_el = now() - ($2::int * interval '1 hour')
+          WHERE id = $1`,
+        [conversacionId, horas],
+      );
+    } finally {
+      await c.end();
+    }
+  }
+
   /** El secreto no sale por la API a propósito: para el test se lee de la base. */
   async function secretoDe(cuentaId: string): Promise<string> {
     const { Client } = await import('pg');
@@ -319,6 +337,47 @@ describe('Inbox omnicanal', () => {
       const despues = (await http().get(`/v1/inbox/${id}`).set(...como(inmo)).expect(200))
         .body.mensajes.length;
       expect(despues).toBe(antes);
+    });
+  });
+
+  describe('el aviso de que nadie contestó', () => {
+    it('salta cuando una conversación espera más que el umbral', async () => {
+      await entra('hola, hay alguien?', '900040', 'Nadie Contesta').expect(200);
+
+      // Se envejece el hilo: el umbral son horas y el test no puede esperarlas.
+      const lista = await bandeja('?q=Nadie Contesta').expect(200);
+      await envejecer(lista.body.items[0].id, 6);
+
+      await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+
+      const avisos = await http().get('/v1/avisos?tipo=conversacion_sin_responder')
+        .set(...como(inmo)).expect(200);
+
+      const a = avisos.body.items.find((x: { titulo: string }) =>
+        x.titulo.includes('Nadie Contesta'));
+      expect(a).toBeDefined();
+      expect(a.detalle).toContain('todavía no le contestó nadie');
+    });
+
+    it('NO salta si ya le contestaron', async () => {
+      // Es la mitad del criterio: lo que importa no es que el hilo esté abierto
+      // sino que el ÚLTIMO mensaje sea del cliente. Si ya le contestaron, no
+      // espera nada.
+      await entra('consulta atendida', '900041', 'Ya Atendido').expect(200);
+      const lista = await bandeja('?q=Ya Atendido').expect(200);
+      const id = lista.body.items[0].id;
+
+      await http().post(`/v1/inbox/${id}/mensajes`).set(...como(inmo))
+        .send({ texto: 'Ya te contesto' }).expect(201);
+
+      await envejecer(id, 6);
+      await http().post('/v1/avisos/generar').set(...como(inmo)).expect(201);
+
+      const avisos = await http().get('/v1/avisos?tipo=conversacion_sin_responder')
+        .set(...como(inmo)).expect(200);
+      const a = avisos.body.items.find((x: { titulo: string }) =>
+        x.titulo.includes('Ya Atendido'));
+      expect(a).toBeUndefined();
     });
   });
 

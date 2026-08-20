@@ -78,6 +78,38 @@ export interface Adaptador {
   parsear(cuerpo: unknown): MensajeEntrante[];
 
   enviar(cuenta: CuentaCanal, destino: string, texto: string): Promise<ResultadoEnvio>;
+
+  /**
+   * Deja la cuenta lista contra el proveedor: valida la credencial y registra
+   * el webhook si el canal lo necesita.
+   *
+   * Opcional porque no todos lo tienen: en Twilio y Meta el webhook se carga a
+   * mano en su panel, no por API.
+   */
+  conectar?(cuenta: CuentaCanal, urlWebhook: string | null): Promise<ResultadoConexion>;
+
+  /**
+   * Trae lo que haya pendiente, SIN webhook.
+   *
+   * Sólo Telegram lo ofrece (`getUpdates`), y es lo que permite probar el
+   * circuito en una laptop sin exponer nada a internet. En producción se usa el
+   * webhook; esto es para desarrollo.
+   */
+  sondear?(cuenta: CuentaCanal, offset: number): Promise<ResultadoSondeo>;
+}
+
+export interface ResultadoConexion {
+  ok: boolean;
+  detalle: string;
+  /** El nombre con el que el proveedor conoce a esta cuenta, si lo devuelve. */
+  identidad?: string;
+}
+
+export interface ResultadoSondeo {
+  mensajes: MensajeEntrante[];
+  /** El offset para la próxima vuelta. Se guarda para no repetir. */
+  siguienteOffset: number;
+  error?: string;
 }
 
 export interface ContextoWebhook {

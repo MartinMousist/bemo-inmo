@@ -4,6 +4,7 @@ import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { loadEnv } from '../config/env';
 import { RegistroAdaptadores } from './adaptadores/registro';
+import { IngestaService } from './ingesta.service';
 import type { CuentaCanal } from './adaptadores/tipos';
 
 /**
@@ -46,6 +47,7 @@ export class CanalesService {
   constructor(
     private readonly db: DbService,
     private readonly registro: RegistroAdaptadores,
+    private readonly ingesta: IngestaService,
   ) {}
 
   private get clave(): string {
@@ -237,6 +239,93 @@ export class CanalesService {
       const { rowCount } = await ej.query('DELETE FROM canal_cuenta WHERE id = $1', [id]);
       if (!rowCount) throw AppError.notFound('No se encontró esa cuenta de canal.');
     });
+  }
+
+  /**
+   * Deja la cuenta lista contra el proveedor.
+   *
+   * En Telegram valida el token y registra el webhook si la URL es pública. En
+   * los canales que no lo soportan lo dice, en vez de fingir que hizo algo.
+   */
+  async conectar(
+    tenantId: string,
+    id: string,
+    urlWebhook: string | null,
+  ): Promise<{ ok: boolean; detalle: string; identidad?: string }> {
+    const cuenta = await this.paraAdaptador(tenantId, id);
+    const adaptador = this.registro.de(cuenta.proveedor);
+
+    if (!adaptador?.conectar) {
+      return {
+        ok: false,
+        detalle: `El webhook de ${cuenta.proveedor} se carga a mano en su panel. `
+          + 'Copiá la URL de esta pantalla y pegala ahí.',
+      };
+    }
+
+    const r = await adaptador.conectar(cuenta, urlWebhook);
+
+    // Si el proveedor devolvió cómo se llama la cuenta, se guarda: es lo que
+    // confirma que el token es del bot que se cree y no de otro.
+    if (r.ok && r.identidad) {
+      await this.db.withTenant(tenantId, async (ej) => {
+        await ej.query(
+          "UPDATE canal_cuenta SET identificador = $2 WHERE id = $1 AND identificador <> $2",
+          [id, `@${r.identidad}`],
+        );
+      });
+    }
+
+    return r;
+  }
+
+  /**
+   * Trae los mensajes pendientes sin webhook (desarrollo).
+   *
+   * El offset se guarda en la config: Telegram repite cada actualización hasta
+   * que se la confirma pidiendo desde un offset mayor, así que sin guardarlo
+   * cada sondeo traería todo de nuevo.
+   */
+  async sondear(
+    tenantId: string,
+    id: string,
+  ): Promise<{ recibidos: number; detalle: string }> {
+    const cuenta = await this.paraAdaptador(tenantId, id);
+    const adaptador = this.registro.de(cuenta.proveedor);
+
+    if (!adaptador?.sondear) {
+      return {
+        recibidos: 0,
+        detalle: `${cuenta.proveedor} no permite recibir sin webhook.`,
+      };
+    }
+
+    const offset = Number(cuenta.config.pollOffset ?? 0);
+    const r = await adaptador.sondear(cuenta, offset);
+    if (r.error) return { recibidos: 0, detalle: r.error };
+
+    if (r.mensajes.length) await this.ingesta.recibir(cuenta, r.mensajes);
+
+    // El offset avanza SIEMPRE que Telegram haya devuelto algo, aunque ningún
+    // update se haya convertido en mensaje (un sticker, un cambio de título):
+    // si no, esos updates vuelven en cada sondeo para siempre.
+    if (r.siguienteOffset > offset) {
+      await this.db.withTenant(tenantId, async (ej) => {
+        await ej.query(
+          `UPDATE canal_cuenta
+              SET config = config || jsonb_build_object('pollOffset', $2::int)
+            WHERE id = $1`,
+          [id, r.siguienteOffset],
+        );
+      });
+    }
+
+    return {
+      recibidos: r.mensajes.length,
+      detalle: r.mensajes.length
+        ? `Entraron ${r.mensajes.length} mensajes.`
+        : 'No había mensajes nuevos.',
+    };
   }
 
   /** Lo que el sistema sabe manejar, para armar el selector de la pantalla. */

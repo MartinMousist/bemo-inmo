@@ -78,6 +78,51 @@ export class RecordatoriosService {
         );
       }
 
+      // ── Conversaciones sin responder ──
+      //
+      // El otro aviso de la etapa 18, y el que contesta «se me pasó alguien».
+      // La escalada avisa cuando el bot se rinde; este avisa cuando NADIE
+      // contestó, que es la falla silenciosa: nadie se entera de lo que no pasó.
+      //
+      // ⚠️ Este umbral está en HORAS, no en días como todos los de arriba. Una
+      // conversación que espera 30 días no es un aviso tardío, es un cliente
+      // perdido. Cuatro horas por defecto: es el día hábil partido al medio.
+      for (const horas of avisos.conversacion_sin_responder ?? [4]) {
+        sumar(
+          'conversacion_sin_responder',
+          await this.insertar(
+            ej,
+            tenantId,
+            `SELECT 'conversacion_sin_responder', 'conversacion', c.id,
+                    current_date AS dispara,
+                    coalesce(c.contacto_nombre, 'Un contacto') || ' espera hace ' ||
+                      $2::text || ' horas o más',
+                    'Entró por ' || cc.canal || ' y todavía no le contestó nadie.',
+                    jsonb_build_object('horas', $2, 'canal', cc.canal)
+               FROM conversacion c
+               JOIN canal_cuenta cc ON cc.id = c.canal_cuenta_id
+              WHERE c.estado = 'abierta'
+                AND c.ultimo_entrante_el < now() - ($2::int * interval '1 hour')
+                -- Sin respuesta de una PERSONA después del último mensaje suyo.
+                --
+                -- La primera versión miraba si el último mensaje del hilo era
+                -- del cliente, y estaba mal: el bot contesta la bienvenida al
+                -- instante, así que el último mensaje pasaba a ser saliente y el
+                -- aviso no saltaba nunca. Un saludo automático NO es haber
+                -- atendido a alguien —es justamente lo contrario: la persona
+                -- sigue esperando y encima ya recibió una respuesta que no
+                -- resuelve nada—. Lo encontró el test.
+                AND NOT EXISTS (
+                  SELECT 1 FROM mensaje m
+                   WHERE m.conversacion_id = c.id
+                     AND m.autor_tipo = 'agente'
+                     AND m.created_at >= c.ultimo_entrante_el
+                )`,
+            [tenantId, horas],
+          ),
+        );
+      }
+
       // ── Ajustes por aplicar ──
       for (const dias of avisos.ajuste_por_aplicar ?? []) {
         sumar(

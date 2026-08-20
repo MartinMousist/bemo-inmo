@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type {
-  Adaptador, ContextoWebhook, CuentaCanal, MensajeEntrante, ResultadoEnvio,
+  Adaptador, ContextoWebhook, CuentaCanal, MensajeEntrante,
+  ResultadoConexion, ResultadoEnvio, ResultadoSondeo,
 } from './tipos';
 
 const API = 'https://api.telegram.org';
@@ -147,6 +148,55 @@ export class TelegramAdaptador implements Adaptador {
     } catch (err) {
       return { actualizaciones: [], error: err instanceof Error ? err.message : 'Error de red' };
     }
+  }
+
+  /**
+   * Deja el bot listo: valida el token y, si hay URL pública, registra el
+   * webhook con el secreto que ya tiene la cuenta.
+   *
+   * Sin URL pública igual sirve: confirma que el token anda y devuelve el
+   * usuario del bot. En una laptop es el caso normal, y ahí se recibe por
+   * `sondear()`.
+   */
+  async conectar(cuenta: CuentaCanal, urlWebhook: string | null): Promise<ResultadoConexion> {
+    if (!cuenta.secreto) return { ok: false, detalle: 'Falta el token del bot' };
+
+    const quien = await this.verificarToken(cuenta.secreto);
+    if (!quien.ok) return { ok: false, detalle: quien.detalle };
+
+    if (!urlWebhook || urlWebhook.startsWith('http://localhost')) {
+      return {
+        ok: true,
+        identidad: quien.usuario,
+        detalle:
+          'Token válido. El webhook NO se registró porque la URL no es pública: '
+          + 'en desarrollo se reciben los mensajes con «Buscar mensajes».',
+      };
+    }
+
+    const secreto = String(cuenta.config.webhookSecret ?? '');
+    const r = await this.registrarWebhook(cuenta, urlWebhook, secreto);
+    return {
+      ok: r.ok,
+      identidad: quien.usuario,
+      detalle: r.ok ? `Conectado como @${quien.usuario}, webhook registrado.` : r.detalle,
+    };
+  }
+
+  /**
+   * Long polling. Devuelve lo que haya y el offset siguiente.
+   *
+   * Telegram repite cada actualización hasta que se la confirma pidiendo desde
+   * un offset mayor: por eso el offset se guarda, y por eso un reinicio en el
+   * medio no pierde mensajes.
+   */
+  async sondear(cuenta: CuentaCanal, offset: number): Promise<ResultadoSondeo> {
+    const r = await this.traerActualizaciones(cuenta, offset);
+    if (r.error) return { mensajes: [], siguienteOffset: offset, error: r.error };
+
+    const mensajes = r.actualizaciones.flatMap((a) => a.mensajes);
+    const ultimo = r.actualizaciones.reduce((max, a) => Math.max(max, a.id), offset - 1);
+    return { mensajes, siguienteOffset: ultimo + 1 };
   }
 
   /** Registra el webhook en Telegram. Se usa desde la pantalla de canales. */

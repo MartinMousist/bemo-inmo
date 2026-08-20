@@ -132,6 +132,48 @@ async function borrar(c: Cuenta) {
 
 const urlWebhook = (c: Cuenta) => `${window.location.origin}${c.rutaWebhook}`;
 
+/** El resultado de conectar o buscar, por cuenta. Se muestra tal cual. */
+const resultado = ref<Record<string, string>>({});
+const ocupado = ref<string | null>(null);
+
+async function conectar(c: Cuenta) {
+  ocupado.value = c.id;
+  try {
+    const r = await api<{ ok: boolean; detalle: string }>(`/canales/${c.id}/conectar`, {
+      method: 'POST',
+    });
+    resultado.value = { ...resultado.value, [c.id]: r.detalle };
+    await cargar();
+  } catch (e) {
+    resultado.value = {
+      ...resultado.value,
+      [c.id]: e instanceof ApiError ? e.paraMostrar : 'No se pudo conectar.',
+    };
+  } finally { ocupado.value = null; }
+}
+
+/**
+ * Traer mensajes sin webhook.
+ *
+ * Es el camino de desarrollo y la pantalla lo dice: en una laptop no hay URL
+ * pública a la que Telegram pueda pegarle. En un servidor con TLS esto no hace
+ * falta porque los mensajes entran solos.
+ */
+async function buscarMensajes(c: Cuenta) {
+  ocupado.value = c.id;
+  try {
+    const r = await api<{ recibidos: number; detalle: string }>(`/canales/${c.id}/sondear`, {
+      method: 'POST',
+    });
+    resultado.value = { ...resultado.value, [c.id]: r.detalle };
+  } catch (e) {
+    resultado.value = {
+      ...resultado.value,
+      [c.id]: e instanceof ApiError ? e.paraMostrar : 'No se pudo buscar.',
+    };
+  } finally { ocupado.value = null; }
+}
+
 onMounted(cargar);
 </script>
 
@@ -218,6 +260,8 @@ onMounted(cargar);
           <span class="detalle">{{ c.detalle }}</span>
         </div>
 
+        <p v-if="resultado[c.id]" class="resultado">{{ resultado[c.id] }}</p>
+
         <details class="webhook">
           <summary>URL del webhook</summary>
           <p class="nota">
@@ -233,6 +277,14 @@ onMounted(cargar);
       </div>
 
       <div class="acciones">
+        <button class="btn sm" type="button" :disabled="ocupado === c.id"
+          @click="conectar(c)">
+          {{ ocupado === c.id ? 'Probando…' : 'Probar y conectar' }}
+        </button>
+        <button v-if="c.proveedor === 'telegram'" class="btn secondary sm" type="button"
+          :disabled="ocupado === c.id" @click="buscarMensajes(c)">
+          Buscar mensajes
+        </button>
         <button class="btn secondary sm" type="button" @click="activar(c, !c.activa)">
           {{ c.activa ? 'Desactivar' : 'Activar' }}
         </button>
@@ -269,4 +321,9 @@ h2 { margin: 0; font-size: 15px; }
   background: var(--surface-2); padding: var(--s-xs) var(--s-sm); border-radius: var(--r-sm);
 }
 .acciones { display: flex; flex-direction: column; gap: var(--s-xs); }
+.resultado {
+  margin: var(--s-xs) 0 0; font-size: 12px; line-height: 1.5;
+  padding: var(--s-xs) var(--s-sm); background: var(--surface-2);
+  border-radius: var(--r-sm); max-width: 66ch;
+}
 </style>
