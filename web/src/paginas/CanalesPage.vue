@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api, ApiError } from '../api/cliente';
+import { useAuth } from '../stores/auth';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
@@ -27,6 +28,11 @@ interface Cuenta {
   identificador: string; activa: boolean;
   disponible: boolean; detalle: string; tieneSecreto: boolean;
   rutaWebhook: string; creadaEl: string;
+  /** `null` = canal de la inmobiliaria. Con valor, el número de esa persona. */
+  usuarioId: string | null;
+  usuarioNombre: string | null;
+  /** `false` = cargado y esperando que el titular lo habilite. */
+  aprobada: boolean;
 }
 
 const ETIQUETA_CANAL: Record<string, string> = {
@@ -47,6 +53,8 @@ const AYUDA: Record<string, string> = {
   'facebook/meta': 'Requiere una página de Facebook y verificación en Meta.',
   'email/smtp': 'Todavía no está implementado el envío. Se puede recibir, pero no responder.',
 };
+
+const auth = useAuth();
 
 const cuentas = ref<Cuenta[]>([]);
 const catalogo = ref<Array<{ proveedor: string; canales: string[] }>>([]);
@@ -131,6 +139,55 @@ async function borrar(c: Cuenta) {
 }
 
 const urlWebhook = (c: Cuenta) => `${window.location.origin}${c.rutaWebhook}`;
+
+const esJefe = computed(() => auth.rol === 'owner' || auth.rol === 'admin');
+
+/**
+ * Los canales agrupados por de quién son.
+ *
+ * Tres grupos y no una lista: «el número de la inmobiliaria» y «mi celular» son
+ * cosas distintas y se administran distinto. Mezclarlos hace que nadie sepa cuál
+ * puede tocar.
+ */
+const deLaInmobiliaria = computed(() => cuentas.value.filter((c) => !c.usuarioId));
+const mios = computed(() =>
+  cuentas.value.filter((c) => c.usuarioId && c.usuarioId === auth.usuario?.id));
+const delEquipo = computed(() =>
+  cuentas.value.filter((c) => c.usuarioId && c.usuarioId !== auth.usuario?.id));
+
+/** Los que esperan que el titular los habilite. Van arriba de todo. */
+const pendientes = computed(() => cuentas.value.filter((c) => !c.aprobada));
+
+/** Los tres grupos, en una sola lista para no triplicar el marcado. */
+const grupos = computed(() => [
+  {
+    clave: 'inmobiliaria',
+    titulo: 'De la inmobiliaria',
+    nota: 'Los números y casillas que atiende el equipo.',
+    items: deLaInmobiliaria.value,
+  },
+  {
+    clave: 'mios',
+    titulo: 'Mi número',
+    nota: 'Lo que te escriben a vos. Sólo lo ven el titular y quien vos derives.',
+    items: mios.value,
+  },
+  {
+    clave: 'equipo',
+    titulo: 'Del equipo',
+    nota: 'Los números personales de tus asesores.',
+    items: esJefe.value ? delEquipo.value : [],
+  },
+].filter((g) => g.items.length));
+
+async function aprobar(c: Cuenta) {
+  try {
+    await api(`/canales/${c.id}/aprobar`, { method: 'POST' });
+    await cargar();
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo habilitar.';
+  }
+}
 
 /** El resultado de conectar o buscar, por cuenta. Se muestra tal cual. */
 const resultado = ref<Record<string, string>>({});
@@ -244,7 +301,34 @@ onMounted(cargar);
       titulo="No hay canales conectados"
       detalle="Telegram es el más rápido para empezar: un token de @BotFather y listo, sin trámite." />
 
-    <section v-for="c in cuentas" v-else :key="c.id" class="card cuenta">
+    <template v-else>
+      <!-- Lo que espera aprobación va arriba de todo: si queda mezclado, el
+           titular no se entera y el asesor cree que su número está andando. -->
+      <section v-if="esJefe && pendientes.length" class="card stack pendientes">
+        <h2>Esperando que los habilites</h2>
+        <p class="nota">
+          Estos números están cargados y <strong>no reciben nada</strong> hasta
+          que los apruebes.
+        </p>
+        <div v-for="c in pendientes" :key="c.id" class="fila-pendiente">
+          <div>
+            <strong>{{ c.nombre }}</strong>
+            <span class="meta">
+              {{ ETIQUETA_CANAL[c.canal] ?? c.canal }} · {{ c.identificador }}
+              <template v-if="c.usuarioNombre"> · {{ c.usuarioNombre }}</template>
+            </span>
+          </div>
+          <button class="btn sm" type="button" @click="aprobar(c)">Habilitar</button>
+        </div>
+      </section>
+
+      <template v-for="g in grupos" :key="g.clave">
+        <div class="cab-grupo">
+          <h2>{{ g.titulo }}</h2>
+          <p class="nota">{{ g.nota }}</p>
+        </div>
+
+        <section v-for="c in g.items" :key="c.id" class="card cuenta">
       <div class="datos">
         <div class="titulo">
           <strong>{{ c.nombre }}</strong>
@@ -277,6 +361,9 @@ onMounted(cargar);
       </div>
 
       <div class="acciones">
+        <button
+          v-if="esJefe && !c.aprobada"
+          class="btn sm" type="button" @click="aprobar(c)">Habilitar</button>
         <button class="btn sm" type="button" :disabled="ocupado === c.id"
           @click="conectar(c)">
           {{ ocupado === c.id ? 'Probando…' : 'Probar y conectar' }}
@@ -290,7 +377,9 @@ onMounted(cargar);
         </button>
         <button class="btn secondary sm" type="button" @click="borrar(c)">Desconectar</button>
       </div>
-    </section>
+        </section>
+      </template>
+    </template>
   </div>
 </template>
 
@@ -306,6 +395,18 @@ h2 { margin: 0; font-size: 15px; }
   margin: 0; font-size: 13px; padding: var(--s-sm) var(--s-md);
   background: var(--surface-2); border-radius: var(--r-md); line-height: 1.6;
 }
+
+.cab-grupo { margin-top: var(--s-sm); }
+.cab-grupo h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); }
+.cab-grupo .nota { margin-top: 2px; }
+
+.pendientes { border: 1px solid var(--warning, var(--accent)); }
+.fila-pendiente {
+  display: flex; align-items: center; gap: var(--s-md);
+  padding: var(--s-xs) 0;
+}
+.fila-pendiente + .fila-pendiente { border-top: 1px solid var(--line); }
+.fila-pendiente > div { display: flex; flex-direction: column; margin-right: auto; }
 
 .cuenta { display: flex; gap: var(--s-md); align-items: flex-start; }
 .datos { display: flex; flex-direction: column; gap: var(--s-2xs); margin-right: auto; min-width: 0; }

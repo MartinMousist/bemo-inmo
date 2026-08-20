@@ -32,6 +32,10 @@ export interface ConversacionLista {
   /** El identificador del canal, enmascarado según el rol. */
   direccion: string;
   personaId: string | null;
+  /** La propiedad de la que habla el hilo, si se detectó o se vinculó. */
+  propiedadId: string | null;
+  propiedadEtiqueta: string | null;
+  propiedadDireccion: string | null;
   estado: string;
   noLeido: boolean;
   asignadoA: string | null;
@@ -130,6 +134,9 @@ export class InboxService {
         `SELECT c.id, cc.canal, cc.nombre AS cuenta, c.contacto_nombre, c.contacto_externo,
                 c.persona_id, c.estado, c.no_leido, c.asignado_a, u.nombre AS asignado_nombre,
                 c.bot_activo, c.ultimo_mensaje_el, c.ultimo_entrante_el, c.ventana_vence_el,
+                c.propiedad_id,
+                'PROP-' || lpad(pr.codigo::text, 4, '0') AS propiedad_etiqueta,
+                trim(pr.calle || ' ' || coalesce(pr.numero, '')) AS propiedad_direccion,
                 (SELECT m.cuerpo FROM mensaje m
                   WHERE m.conversacion_id = c.id
                   ORDER BY m.created_at DESC LIMIT 1) AS ultimo_cuerpo,
@@ -142,6 +149,7 @@ export class InboxService {
            FROM conversacion c
            JOIN canal_cuenta cc ON cc.id = c.canal_cuenta_id
            LEFT JOIN usuario u ON u.id = c.asignado_a
+           LEFT JOIN propiedad pr ON pr.id = c.propiedad_id
            ${where}
           -- Primero los que esperan, y de esos el que espera hace MÁS tiempo.
           ORDER BY (c.no_leido) DESC, c.ultimo_entrante_el ASC NULLS LAST
@@ -174,10 +182,14 @@ export class InboxService {
         `SELECT c.id, cc.canal, cc.nombre AS cuenta, c.contacto_nombre, c.contacto_externo,
                 c.persona_id, c.estado, c.no_leido, c.asignado_a, u.nombre AS asignado_nombre,
                 c.bot_activo, c.ultimo_mensaje_el, c.ultimo_entrante_el, c.ventana_vence_el,
+                c.propiedad_id,
+                'PROP-' || lpad(pr.codigo::text, 4, '0') AS propiedad_etiqueta,
+                trim(pr.calle || ' ' || coalesce(pr.numero, '')) AS propiedad_direccion,
                 NULL AS ultimo_cuerpo, NULL AS ultima_direccion
            FROM conversacion c
            JOIN canal_cuenta cc ON cc.id = c.canal_cuenta_id
            LEFT JOIN usuario u ON u.id = c.asignado_a
+           LEFT JOIN propiedad pr ON pr.id = c.propiedad_id
           WHERE c.id = $1
             AND ($2::uuid IS NULL
                  OR cc.usuario_id IS NULL
@@ -314,6 +326,9 @@ export class InboxService {
       contacto: r.contacto_nombre ?? enmascarar(r.contacto_externo, rol),
       direccion: enmascarar(r.contacto_externo, rol),
       personaId: r.persona_id,
+      propiedadId: r.propiedad_id,
+      propiedadEtiqueta: r.propiedad_etiqueta,
+      propiedadDireccion: r.propiedad_direccion,
       estado: r.estado,
       noLeido: r.no_leido,
       asignadoA: r.asignado_a,
@@ -365,6 +380,9 @@ interface FilaLista {
   contacto_nombre: string | null;
   contacto_externo: string;
   persona_id: string | null;
+  propiedad_id: string | null;
+  propiedad_etiqueta: string | null;
+  propiedad_direccion: string | null;
   estado: string;
   no_leido: boolean;
   asignado_a: string | null;

@@ -35,6 +35,9 @@ import { filtrosRecordados } from '../dominio/filtros';
 
 interface Conversacion {
   id: string; canal: string; cuenta: string; contacto: string; direccion: string;
+  propiedadId: string | null;
+  propiedadEtiqueta: string | null;
+  propiedadDireccion: string | null;
   estado: string; noLeido: boolean;
   asignadoA: string | null; asignadoNombre: string | null;
   botActivo: boolean;
@@ -204,6 +207,42 @@ async function responder() {
   } catch (e) {
     avisoEnvio.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo enviar.';
   } finally { enviando.value = false; }
+}
+
+/**
+ * Corregir la propiedad del hilo.
+ *
+ * El detector la engancha sola cuando el cliente escribe el código, pero se
+ * equivoca. La corrección manda: la ingesta no vuelve a pisar un vínculo que
+ * puso una persona, porque si el próximo mensaje lo rompiera corregir no
+ * serviría de nada.
+ */
+const buscandoProp = ref(false);
+const consultaProp = ref('');
+const resultadosProp = ref<Array<{ id: string; etiqueta: string; direccion: string }>>([]);
+
+async function buscarPropiedades() {
+  if (consultaProp.value.trim().length < 2) { resultadosProp.value = []; return; }
+  try {
+    const r = await api<{ items: Array<{ id: string; etiqueta: string; direccion: string }> }>(
+      `/propiedades?q=${encodeURIComponent(consultaProp.value)}&porPagina=6`,
+    );
+    resultadosProp.value = r.items;
+  } catch {
+    resultadosProp.value = [];
+  }
+}
+
+async function vincularPropiedad(propiedadId: string | null) {
+  if (!abierta.value) return;
+  await api(`/inbox/${abierta.value.id}/propiedad`, {
+    method: 'PATCH', body: JSON.stringify({ propiedadId }),
+  });
+  buscandoProp.value = false;
+  consultaProp.value = '';
+  resultadosProp.value = [];
+  await abrir(abierta.value);
+  await cargar();
 }
 
 async function cambiar(ruta: string, cuerpo: unknown) {
@@ -409,6 +448,50 @@ onMounted(cargar);
           <p class="valor">{{ ETIQUETA_CANAL[abierta.canal] ?? abierta.canal }} · {{ abierta.cuenta }}</p>
         </div>
 
+        <!-- La propiedad de la que habla el hilo. Se engancha sola cuando el
+             cliente escribe el código; acá se corrige. -->
+        <div>
+          <span class="et">Propiedad</span>
+          <template v-if="abierta.propiedadId && !buscandoProp">
+            <RouterLink :to="`/propiedades/${abierta.propiedadId}`" class="valor prop">
+              {{ abierta.propiedadEtiqueta }}
+            </RouterLink>
+            <p class="valor chico">{{ abierta.propiedadDireccion }}</p>
+            <div class="mini">
+              <button type="button" @click="buscandoProp = true">Cambiar</button>
+              <button type="button" @click="vincularPropiedad(null)">Quitar</button>
+            </div>
+          </template>
+
+          <template v-else-if="!buscandoProp">
+            <p class="valor chico">Sin vincular</p>
+            <div class="mini">
+              <button type="button" @click="buscandoProp = true">Vincular una</button>
+            </div>
+          </template>
+
+          <template v-else>
+            <input
+              v-model="consultaProp"
+              class="sel"
+              placeholder="Código o dirección…"
+              @input="buscarPropiedades" />
+            <ul v-if="resultadosProp.length" class="resultados-prop">
+              <li v-for="p in resultadosProp" :key="p.id">
+                <button type="button" @click="vincularPropiedad(p.id)">
+                  <strong>{{ p.etiqueta }}</strong>
+                  <span>{{ p.direccion }}</span>
+                </button>
+              </li>
+            </ul>
+            <div class="mini">
+              <button type="button" @click="buscandoProp = false; consultaProp = ''">
+                Cancelar
+              </button>
+            </div>
+          </template>
+        </div>
+
         <div>
           <span class="et">A cargo</span>
           <select
@@ -587,4 +670,22 @@ onMounted(cargar);
 .switch { display: flex; align-items: center; gap: var(--s-xs); font-size: 13px; margin-top: 4px; }
 .switch input { accent-color: var(--accent); }
 .botones-estado { display: flex; flex-direction: column; gap: var(--s-2xs); margin-top: 4px; }
+.prop { font-weight: 600; }
+.mini { display: flex; gap: var(--s-sm); margin-top: 2px; }
+.mini button {
+  background: none; border: 0; padding: 0; font: inherit; font-size: 11px;
+  color: var(--accent-ink); cursor: pointer; text-decoration: underline;
+}
+.resultados-prop {
+  list-style: none; margin: var(--s-2xs) 0 0; padding: 0;
+  border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
+}
+.resultados-prop button {
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  background: none; border: 0; padding: 4px var(--s-xs);
+  display: flex; flex-direction: column;
+}
+.resultados-prop button:hover { background: var(--surface-2); }
+.resultados-prop strong { font-size: 12px; }
+.resultados-prop span { font-size: 11px; color: var(--muted); }
 </style>
