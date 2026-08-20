@@ -139,6 +139,29 @@ const schema = z.object({
   RATE_LIMIT_TERCEROS_VENTANA_MIN: z.coerce.number().int().positive().default(1),
 
   /**
+   * Cuántos años se guarda el legajo de un garante después de que TERMINÓ el
+   * contrato que garantizaba.
+   *
+   * Cinco por defecto. No es un número que traiga la Ley 25.326 —no fija
+   * plazos: fija el principio de que el dato no se guarda más allá de su
+   * finalidad—, sino el horizonte en el que un contrato de alquiler todavía
+   * puede discutirse. **Es una decisión de la inmobiliaria y de su abogado**, y
+   * por eso es una variable y no una constante escondida en el código.
+   */
+  RETENCION_LEGAJOS_ANIOS: z.coerce.number().int().positive().default(5),
+
+  /**
+   * Cuántos meses se guarda el DESGLOSE crudo de la consulta al BCRA.
+   *
+   * El veredicto —apto, motivo, situación, período— no vence nunca: es la
+   * memoria de cálculo de una decisión que hay que poder explicar. Lo que vence
+   * es el detalle banco por banco de la deuda de un tercero, que después de un
+   * año no explica nada que el veredicto no diga y sigue siendo dato bancario
+   * de alguien que ni siquiera es cliente nuestro.
+   */
+  RETENCION_BCRA_MESES: z.coerce.number().int().positive().default(12),
+
+  /**
    * Opcional a propósito. Sin key la app funciona igual: no geocodifica, no
    * inventa coordenadas, y la UI ofrece cargar lat/lng a mano diciendo por qué.
    * Un default falso acá sería una propiedad ubicada en el medio del océano.

@@ -29,6 +29,13 @@ export const ACCIONES = [
   'comision_cobrada',
   'deposito_devuelto',
   'contrato_renovado',
+
+  // No es plata: es dato personal. Entra en la misma lista porque la tabla es
+  // una sola y la pregunta que se hace alguien tampoco cambia —«¿qué pasó el
+  // martes?»—. Mirar el DNI de un garante merece el mismo registro que mover
+  // su depósito, y esta es la acción que lo deja escrito (etapa 17.2).
+  'dato_personal.ver',
+  'dato_personal.purgado',
 ] as const;
 
 export type Accion = (typeof ACCIONES)[number];

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 import { armarPagina, offset, type Pagina } from '../common/paginacion';
 import { AlmacenamientoService } from '../archivos/almacenamiento.service';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
@@ -108,6 +109,14 @@ export interface DocumentoGarante {
   tipo: string;
   etiqueta: string;
   /**
+   * Si el archivo está subido.
+   *
+   * Existe porque `url` ya no viene en el listado: la pantalla necesita saber
+   * qué casilleros están completos —eso es media pantalla de legajo— sin que
+   * eso implique mostrar el DNI de nadie.
+   */
+  cargado: boolean;
+  /**
    * URL **firmada y con vencimiento**, no la del bucket.
    *
    * Estos archivos son las dos caras de un DNI y tres recibos de sueldo: viven
@@ -170,6 +179,16 @@ export interface Garante {
     entidades: unknown[];
     advertencias: string[];
 
+    /**
+     * Cuándo se purgó el desglose banco por banco, si se purgó.
+     *
+     * Existe para que la ficha pueda decirlo. Sin esto, `entidades: []` es
+     * ambiguo entre «ninguna entidad le informa deuda» y «el detalle se borró
+     * por retención», que son cosas opuestas para quien lee el legajo dos años
+     * después. Ver `retencion.service.ts`.
+     */
+    desglosePurgadoEl: string | null;
+
     /** Cuándo corresponde volver a consultar. `null` = no corresponde. */
     revisarEl: string | null;
     /** Por qué esa fecha (o por qué ninguna). Todo cálculo lleva su memoria. */
@@ -210,6 +229,7 @@ export class GarantesService {
     private readonly almacen: AlmacenamientoService,
     private readonly deudores: DeudoresService,
     private readonly recordatorios: RecordatoriosService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
   async listar(tenantId: string, contratoId: string): Promise<Garante[]> {
@@ -731,13 +751,81 @@ export class GarantesService {
     garantes: T[],
     claves: Map<string, string | null>,
   ): Promise<T[]> {
+    // Antes esto firmaba cada documento acá. Ya no: la URL se pide de a una,
+    // al abrir, por `verDocumento()`. Ver el comentario de ese método.
+    //
+    // La firma en sí sigue siendo local y barata; lo que cambió no es el costo
+    // sino QUIÉN decide que se mire.
     for (const g of garantes) {
       for (const d of g.documentos) {
-        const clave = claves.get(d.id) ?? (d.url ? this.almacen.claveDeUrl(d.url) : null);
-        d.url = clave ? await this.almacen.urlFirmada(clave) : null;
+        d.cargado = Boolean(claves.get(d.id) ?? d.url);
+        d.url = null;
       }
     }
     return garantes;
+  }
+
+  /**
+   * La URL firmada de UN documento, al abrirlo, y con el acceso auditado.
+   *
+   * ── Por qué no se firman todos en el listado, como antes ──
+   *
+   * Porque entonces «quién vio un DNI» no existía como pregunta: abrir el
+   * legajo firmaba las cinco URLs de cada garante y pintaba las miniaturas,
+   * mirara alguien o no. No había un momento discreto que auditar, y la
+   * auditoría del listado habría dicho «entró al contrato», que no es lo mismo.
+   *
+   * Ahora mirar un documento es un acto: se pide, se registra con nombre y
+   * fecha, y la miniatura no aparece sola en la pantalla de alguien que abrió
+   * el contrato para ver otra cosa.
+   *
+   * Se anota con `app_auditar_plata` —que de plata sólo tiene el nombre: es el
+   * único camino que escribe en `auditoria` y agregar una función gemela para
+   * esto sería duplicar el mismo INSERT.
+   */
+  async verDocumento(
+    tenantId: string,
+    documentoId: string,
+    usuarioId: string,
+    ip?: string,
+  ): Promise<{ url: string; tipo: string; nombre: string | null }> {
+    const doc = await this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{
+        clave: string | null; url: string | null;
+        tipo: string; nombre_original: string | null; garantia_id: string;
+      }>(
+        `SELECT clave, url, tipo, nombre_original, garantia_id
+           FROM garantia_documento WHERE id = $1`,
+        [documentoId],
+      );
+      if (!rows.length) throw AppError.notFound('No se encontró ese documento.');
+
+      // La auditoría va DENTRO de la transacción, igual que la de plata: si se
+      // registra el acceso y después falla algo, o al revés, el registro miente.
+      await this.auditoria.anotar(ej, tenantId, {
+        usuarioId,
+        accion: 'dato_personal.ver',
+        entidadTipo: 'garantia_documento',
+        entidadId: documentoId,
+        ip,
+        detalle: { tipo: rows[0].tipo, garantiaId: rows[0].garantia_id },
+      });
+
+      return rows[0];
+    });
+
+    // Las filas anteriores a la 029 no tienen `clave`: se deriva de la `url`.
+    const clave = doc.clave ?? (doc.url ? this.almacen.claveDeUrl(doc.url) : null);
+    const url = clave ? await this.almacen.urlFirmada(clave) : null;
+
+    if (!url) {
+      throw new AppError(
+        404, ErrorCode.NOT_FOUND,
+        'El archivo ya no está disponible.', 'Not Found',
+      );
+    }
+
+    return { url, tipo: doc.tipo, nombre: doc.nombre_original };
   }
 
   private async leerDe(
@@ -854,6 +942,7 @@ interface FilaGarante {
   bcra_detalle: {
     apto?: boolean; motivo?: string; entidades?: unknown[];
     advertencias?: string[]; revisionMemoria?: string;
+    desglosePurgadoEl?: string;
   } | null;
   bcra_revisar_el: string | null;
   bcra_cheques: VeredictoCheques | null;
@@ -894,6 +983,9 @@ function aGarante(f: FilaGarante, hoy: string): Garante {
     ...d,
     etiqueta: ETIQUETA_DOCUMENTO[d.tipo] ?? d.tipo,
     subidoEl: new Date(d.subidoEl).toISOString(),
+    // `firmarDocumentos()` lo recalcula con la clave real; acá arranca en true
+    // porque la fila existe, que es lo que significa «hay archivo».
+    cargado: true,
   }));
 
   const presentes = new Set(documentos.map((d) => d.tipo));
@@ -938,6 +1030,7 @@ function aGarante(f: FilaGarante, hoy: string): Garante {
       motivo: consultado ? (f.bcra_detalle?.motivo ?? null) : null,
       entidades: f.bcra_detalle?.entidades ?? [],
       advertencias: f.bcra_detalle?.advertencias ?? [],
+      desglosePurgadoEl: f.bcra_detalle?.desglosePurgadoEl ?? null,
 
       revisarEl,
       revisionMemoria: consultado ? (f.bcra_detalle?.revisionMemoria ?? null) : null,

@@ -1,6 +1,7 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post,
+  Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { GarantesService } from './garantes.service';
 import { CrearGaranteDto, EditarGaranteDto, SubirDocumentoDto } from './garantes.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
@@ -75,6 +76,25 @@ export class GaranteController {
    * queda guardado en `garantia_bcra_consulta.consultado_por`: acá se está
    * mirando el dato bancario de un tercero y eso tiene que tener nombre.
    */
+  /**
+   * La URL para abrir un documento del legajo.
+   *
+   * Ruta literal antes que `:id`: Nest resuelve en orden de declaración, y al
+   * revés «documentos» entraría como id.
+   *
+   * Que sea un endpoint aparte es el punto: mirar el DNI de alguien queda
+   * registrado con nombre y fecha, que es lo que pide la 17.2.
+   */
+  @Get('documentos/:documentoId')
+  @Roles('owner', 'admin', 'agente')
+  verDocumento(
+    @ActorActual() a: Actor,
+    @Param('documentoId', ParseUUIDPipe) documentoId: string,
+    @Req() req: Request,
+  ) {
+    return this.garantes.verDocumento(a.tenantId, documentoId, a.usuarioId, req.ip);
+  }
+
   @Post(':id/bcra')
   @Roles('owner', 'admin', 'agente')
   @LimiteDeTercero()

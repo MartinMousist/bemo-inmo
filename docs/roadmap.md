@@ -1178,19 +1178,43 @@ repita el patrón en producción.
 **Hecho cuando**: pedir la URL de un DNI sin sesión da 403, y la misma foto de
 propiedad sigue abriendo sin sesión porque tiene que abrir.
 
-### 17.2 · Datos personales: qué se guarda, cuánto tiempo y quién los ve
+### 17.2 · Datos personales: qué se guarda, cuánto tiempo y quién los ve ✅ CERRADA
 
-Un legajo de garante es dato sensible bajo la Ley 25.326. Hoy se guarda sin
-política de retención y sin forma de borrarlo.
+Un legajo de garante es dato sensible bajo la Ley 25.326.
 
-- [ ] **Retención**: qué pasa con el legajo de un garante de un contrato que
-      terminó hace tres años. Hoy queda para siempre.
-- [ ] **Borrado a pedido**, que es un derecho del titular del dato — y hoy
-      borrar la persona no borra sus objetos del bucket.
-- [ ] **Quién ve un DNI queda auditado.** La auditoría ya registra los
-      movimientos de plata; mirar el documento de alguien merece el mismo trato.
-- [ ] La consulta al BCRA guarda el veredicto congelado (bien) — falta decidir
-      si el detalle crudo de deudas de un tercero debe persistir, y por cuánto.
+- [x] **Retención.** `RetencionService` cuenta lo vencido y lo purga cuando
+      alguien lo pide. «Vencido» es el legajo de un contrato TERMINADO hace más
+      de `RETENCION_LEGAJOS_ANIOS` (5 por defecto): lo que vence no es el
+      documento, es la finalidad —mientras el contrato exista, el legajo lo
+      respalda—.
+      **No purga sola, y es a propósito**: borra prueba. Un proceso que lo hace
+      a las tres de la mañana deja a la inmobiliaria sin nada que mostrar si eso
+      se discute justo esa semana. La pide una persona y queda auditada.
+- [x] **Quién ve un DNI queda auditado.** Requirió cambiar el diseño, no
+      agregar un log: el listado firmaba las cinco URLs de cada garante y
+      pintaba las miniaturas, mirara alguien o no, así que **no existía un
+      momento discreto que auditar** —lo único registrable habría sido «entró al
+      contrato», que no es lo mismo—. Ahora la URL se pide de a una
+      (`GET /garantes/documentos/:id`) y ese pedido se anota con nombre y fecha.
+      De paso, el DNI de dos personas deja de estar en pantalla mientras alguien
+      mira el monto del alquiler con un cliente al lado.
+- [x] **El detalle crudo del BCRA vence; el veredicto no.** Verificado sobre
+      datos reales antes de decidir: `entidades` es qué bancos le informan
+      deuda, cuánto y con cuántos días de atraso; `probados`, variantes de CUIT
+      derivadas de su DNI; `bcra_cheques`, cheques rechazados con número y
+      fecha. Nada de eso explica algo que `motivo` no diga, y es dato bancario
+      de alguien que ni siquiera es cliente nuestro. Se purga a los
+      `RETENCION_BCRA_MESES` (12) y **se deja dicho que se purgó**
+      (`desglosePurgadoEl`): sin la marca, `entidades: []` es ambiguo entre
+      «ninguna entidad le informa deuda» y «lo borramos», que son cosas opuestas
+      para quien lee el legajo dos años después.
+- [x] **Borrado a pedido**: *la nota anterior estaba equivocada*. Decía que
+      borrar la persona no borra sus objetos del bucket; `garantia` es
+      `ON DELETE RESTRICT` sobre `persona`, así que ese camino no existe, y
+      `borrar()` de una garantía **ya purgaba el bucket** desde antes. Lo que
+      faltaba era un test que lo sostuviera, y ahora está.
+      **Quinta nota de estado de este archivo que envejeció hasta volverse
+      mentira.** El patrón ya es el hallazgo, no la anécdota.
 
 ### 17.3 · La cadena de suministro y el CI que nunca corrió
 

@@ -173,7 +173,7 @@ describe('El bucket: público lo publicable, privado lo demás', () => {
   });
 
   describe('el legajo del garante sale con URL firmada, no con la del bucket', () => {
-    it('los documentos que devuelve la API vienen firmados', async () => {
+    it('el listado NO firma nada, y abrir un documento sí (y queda auditado)', async () => {
       const prop = await http().post('/v1/propiedades').set(...como(inmo))
         .send({ calle: 'Bucket 100', tipo: 'departamento' }).expect(201);
 
@@ -206,9 +206,30 @@ describe('El bucket: público lo publicable, privado lo demás', () => {
 
       const doc = r.body[0].documentos.find((d: { tipo: string }) => d.tipo === 'dni_frente');
       expect(doc).toBeDefined();
-      expect(doc.url).toContain('X-Amz-Signature');
+
+      // Hasta la etapa 17.2 el listado firmaba las cinco URLs de cada garante y
+      // pintaba las miniaturas, mirara alguien o no. Ya no: abrir el contrato
+      // no es mirar un DNI, y mientras eso fuera lo mismo, «quién vio el DNI»
+      // no existía como pregunta que se pudiera contestar.
+      expect(doc.url).toBeNull();
+      // Pero la pantalla sigue sabiendo que el casillero está completo.
+      expect(doc.cargado).toBe(true);
+
+      const abierto = await http().get(`/v1/garantes/documentos/${doc.id}`)
+        .set(...como(inmo)).expect(200);
+
+      expect(abierto.body.url).toContain('X-Amz-Signature');
       // Y abre: la URL firmada tiene que servir de verdad, no sólo parecerlo.
-      if (bucketAlcanzable) expect(await traer(doc.url)).toBe(200);
+      if (bucketAlcanzable) expect(await traer(abierto.body.url)).toBe(200);
+
+      // El acceso quedó con nombre y fecha. Es todo el punto de la 17.2.
+      const auditoria = await http().get('/v1/auditoria?accion=dato_personal.ver')
+        .set(...como(inmo)).expect(200);
+      const asiento = auditoria.body.items.find(
+        (a: { entidadId: string }) => a.entidadId === doc.id,
+      );
+      expect(asiento).toBeDefined();
+      expect(asiento.usuario.nombre).toBeTruthy();
     });
   });
 });

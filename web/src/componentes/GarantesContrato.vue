@@ -67,7 +67,20 @@ const ui = useUi();
 const auth = useAuth();
 
 interface Documento {
-  id: string; tipo: string; etiqueta: string; url: string;
+  id: string; tipo: string; etiqueta: string;
+  /**
+   * Siempre `null` en el listado desde la etapa 17.2.
+   *
+   * La URL firmada se pide de a una, al abrir, contra
+   * `GET /garantes/documentos/:id`, y ese pedido queda auditado. Antes el
+   * listado firmaba las cinco de cada garante y pintaba las miniaturas: abrir
+   * el contrato para ver el monto del alquiler te ponía el DNI de dos personas
+   * en pantalla, y «quién vio un DNI» no era una pregunta que se pudiera
+   * contestar.
+   */
+  url: string | null;
+  /** Si el archivo está subido. Es lo que pinta el casillero como completo. */
+  cargado: boolean;
   nombreOriginal: string | null; subidoEl: string;
 }
 
@@ -112,6 +125,8 @@ interface Garante {
     motivo: string | null;
     entidades: EntidadBcra[];
     advertencias: string[];
+    /** Cuándo se purgó el desglose por retención, si se purgó. */
+    desglosePurgadoEl: string | null;
     revisarEl: string | null;
     revisionMemoria: string | null;
     revisionVencida: boolean;
@@ -157,6 +172,42 @@ const cargando = ref(true);
 const error = ref('');
 const consultando = ref<string | null>(null);
 const subiendo = ref<string | null>(null);
+
+/** El documento que se está abriendo, para no dejar el botón mudo. */
+const abriendo = ref<string | null>(null);
+
+/**
+ * Pide la URL firmada y abre el documento.
+ *
+ * ── Por qué hace falta un clic ──
+ *
+ * Porque mirar el DNI de alguien pasó a ser un acto que se registra con nombre
+ * y fecha (etapa 17.2, Ley 25.326). Mientras las miniaturas se pintaban solas
+ * al abrir el contrato, no había nada que registrar: todos «veían» todos los
+ * documentos todo el tiempo, y el registro habría dicho «entró al contrato»,
+ * que no es lo mismo.
+ *
+ * De paso el DNI de dos personas deja de estar en pantalla mientras alguien
+ * mira el monto del alquiler con un cliente al lado.
+ *
+ * `window.open` va ANTES del await: los navegadores bloquean la ventana que se
+ * abre después de una promesa porque ya no la asocian al clic. Se abre vacía y
+ * se le pone la URL cuando llega.
+ */
+async function abrirDocumento(d: Documento) {
+  abriendo.value = d.id;
+  const ventana = window.open('', '_blank', 'noopener,noreferrer');
+  try {
+    const { url } = await api<{ url: string }>(`/garantes/documentos/${d.id}`);
+    if (ventana) ventana.location.href = url;
+    else window.location.href = url;
+  } catch (e) {
+    ventana?.close();
+    ui.error(e instanceof ApiError ? e.paraMostrar : 'No se pudo abrir el documento.');
+  } finally {
+    abriendo.value = null;
+  }
+}
 const guardandoVence = ref<string | null>(null);
 
 /** El panel de WhatsApp abierto, y el texto editado de cada garante. */
@@ -573,6 +624,14 @@ onMounted(cargar);
         </p>
       </details>
 
+      <!-- Se dice que el desglose se purgó, en vez de esconder el bloque y
+           dejar creyendo que nunca hubo detalle. El veredicto sigue arriba. -->
+      <p v-if="g.bcra.desglosePurgadoEl" class="purgado">
+        El desglose banco por banco se borró el {{ fecha(g.bcra.desglosePurgadoEl) }}
+        por la política de retención de datos personales. El veredicto y su
+        motivo se conservan.
+      </p>
+
       <details v-if="g.bcra.entidades.length">
         <summary>Detalle del BCRA · {{ g.bcra.entidades.length }} entidad(es)</summary>
         <table class="entidades">
@@ -593,10 +652,19 @@ onMounted(cargar);
       <div class="casilleros">
         <div v-for="c in casillerosDe(g)" :key="c.tipo" class="casillero"
           :class="{ cargado: !!docDe(g, c.tipo) }">
-          <a v-if="docDe(g, c.tipo)" :href="docDe(g, c.tipo)!.url" target="_blank"
-            rel="noopener" class="miniatura">
-            <img :src="docDe(g, c.tipo)!.url" :alt="c.etiqueta" loading="lazy" />
-          </a>
+          <!-- Cargado, pero NO en pantalla. El casillero dice que está; verlo
+               es un clic, y ese clic queda registrado. -->
+          <button
+            v-if="docDe(g, c.tipo)"
+            type="button"
+            class="miniatura"
+            :disabled="abriendo === docDe(g, c.tipo)!.id"
+            :title="`Ver ${c.etiqueta} — el acceso queda registrado`"
+            @click="abrirDocumento(docDe(g, c.tipo)!)"
+          >
+            <span class="ojo" aria-hidden="true">👁</span>
+            <span class="ver">{{ abriendo === docDe(g, c.tipo)!.id ? 'Abriendo…' : 'Ver' }}</span>
+          </button>
           <span v-else class="hueco" aria-hidden="true">+</span>
 
           <label class="pie">
@@ -656,6 +724,21 @@ onMounted(cargar);
 .cheques.mal { color: var(--danger); }
 .cheques.aviso { color: var(--warning); }
 .advertencias { margin: 0; padding-left: 1.2em; font-size: 12px; color: var(--warning); }
+.miniatura {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; width: 100%; aspect-ratio: 4 / 3; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--surface-2); color: var(--muted); font: inherit; font-size: 12px;
+}
+.miniatura:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.miniatura:disabled { cursor: progress; }
+.ojo { font-size: 18px; line-height: 1; }
+
+.purgado {
+  margin: var(--s-sm) 0 0; font-size: 12px; color: var(--muted);
+  max-width: 70ch; line-height: 1.6;
+}
+
 .entidades { width: 100%; border-collapse: collapse; margin-top: var(--s-sm); font-size: 13px; }
 .entidades th, .entidades td { padding: var(--s-xs) var(--s-sm); text-align: left; border-bottom: 1px solid var(--line); }
 .entidades thead th { font-size: 12px; color: var(--muted); font-weight: 500; }

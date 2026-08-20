@@ -31,6 +31,13 @@ interface Estado {
   codigosSinUsar: number;
 }
 
+interface Retencion {
+  aniosLegajos: number;
+  mesesBcra: number;
+  legajosVencidos: { documentos: number; garantes: number; contratoMasViejo: string | null };
+  bcraVencidas: number;
+}
+
 const estado = ref<Estado | null>(null);
 const cargando = ref(true);
 const error = ref('');
@@ -46,6 +53,50 @@ const recuperacion = ref<string[]>([]);
 
 const apagando = ref(false);
 const codigoApagar = ref('');
+
+/**
+ * Retención de datos personales.
+ *
+ * Sólo para titular y administración: el back contesta 403 al resto, así que el
+ * bloque no se muestra en vez de ofrecer un botón que va a fallar.
+ */
+const retencion = ref<Retencion | null>(null);
+const purgando = ref(false);
+const purgado = ref('');
+
+async function cargarRetencion() {
+  try {
+    retencion.value = await api<Retencion>('/datos-personales/retencion');
+  } catch {
+    // 403 para asesor y contable: el bloque simplemente no va.
+    retencion.value = null;
+  }
+}
+
+async function purgar() {
+  if (!confirm(
+    'Se borran definitivamente los documentos de garantes de contratos '
+    + 'terminados hace más de ' + retencion.value?.aniosLegajos + ' años, y el '
+    + 'desglose de las consultas al BCRA más viejas. No se puede deshacer.',
+  )) return;
+
+  purgando.value = true;
+  error.value = '';
+  try {
+    const r = await api<{
+      documentosBorrados: number; archivosBorrados: number; consultasBcraPurgadas: number;
+    }>('/datos-personales/retencion/purgar', { method: 'POST' });
+
+    purgado.value = `Se borraron ${r.documentosBorrados} documentos `
+      + `(${r.archivosBorrados} archivos) y se purgó el desglose de `
+      + `${r.consultasBcraPurgadas} consultas al BCRA.`;
+    await cargarRetencion();
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo purgar.';
+  } finally {
+    purgando.value = false;
+  }
+}
 
 async function cargar() {
   cargando.value = true;
@@ -134,7 +185,10 @@ function descargarCodigos() {
   URL.revokeObjectURL(url);
 }
 
-onMounted(cargar);
+onMounted(async () => {
+  await cargar();
+  await cargarRetencion();
+});
 </script>
 
 <template>
@@ -269,6 +323,62 @@ onMounted(cargar);
           </div>
         </template>
       </section>
+
+      <!-- Retención. Sólo lo ven titular y administración: para el resto el
+           back contesta 403 y el bloque no se arma. -->
+      <section v-if="retencion" class="card stack">
+        <header class="cab">
+          <div>
+            <h2>Datos personales que ya no hacen falta</h2>
+            <p class="nota">
+              El legajo de un garante existe para decidir si se lo acepta en un
+              contrato. Terminado ese contrato, la foto de su DNI y sus recibos
+              de sueldo no cumplen ninguna finalidad y siguen siendo un riesgo
+              —para él—. La Ley 25.326 no fija un plazo: fija que el dato no se
+              guarda más allá de para lo que se juntó.
+            </p>
+          </div>
+        </header>
+
+        <p v-if="purgado" class="ok-aviso">{{ purgado }}</p>
+
+        <dl class="cifras">
+          <div>
+            <dt>Documentos de garantes vencidos</dt>
+            <dd class="mono">{{ retencion.legajosVencidos.documentos }}</dd>
+            <span class="pie-dato">
+              de contratos terminados hace más de {{ retencion.aniosLegajos }} años
+            </span>
+          </div>
+          <div>
+            <dt>Consultas al BCRA con desglose</dt>
+            <dd class="mono">{{ retencion.bcraVencidas }}</dd>
+            <span class="pie-dato">
+              con más de {{ retencion.mesesBcra }} meses. Se borra el detalle banco
+              por banco; el veredicto se conserva
+            </span>
+          </div>
+        </dl>
+
+        <template v-if="retencion.legajosVencidos.documentos || retencion.bcraVencidas">
+          <!-- Se dice por qué el sistema no lo hace solo. Un proceso que borra
+               prueba a las tres de la mañana deja a la inmobiliaria sin nada que
+               mostrar si eso se discute justo esa semana. -->
+          <p class="nota">
+            No se borra solo: un legajo es lo que respalda por qué se aceptó a ese
+            garante. La purga la pide una persona y queda registrada con su nombre.
+          </p>
+          <div>
+            <button class="btn secondary" type="button" :disabled="purgando" @click="purgar">
+              {{ purgando ? 'Borrando…' : 'Borrar lo vencido' }}
+            </button>
+          </div>
+        </template>
+
+        <p v-else class="nota">
+          No hay nada vencido. Cuando lo haya, aparece acá.
+        </p>
+      </section>
     </template>
   </div>
 </template>
@@ -303,6 +413,14 @@ h2 { margin: 0; font-size: 15px; }
   margin: 0; font-size: 13px; padding: var(--s-sm) var(--s-md);
   background: var(--warning-tint, var(--surface-2)); border-radius: var(--r-md);
 }
+
+.cifras {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--s-lg); margin: 0;
+}
+.cifras dt { font-size: 12px; color: var(--muted); }
+.cifras dd { margin: var(--s-2xs) 0 0; font-size: 24px; }
+.pie-dato { font-size: 11px; color: var(--muted-2); line-height: 1.5; display: block; }
 
 .campo input {
   font: inherit; padding: 10px var(--s-md); letter-spacing: 0.18em;
