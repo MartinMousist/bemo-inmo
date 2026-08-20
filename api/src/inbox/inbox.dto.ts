@@ -1,6 +1,7 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
-  IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength,
+  ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUUID,
+  MaxLength, MinLength, ValidateNested,
 } from 'class-validator';
 import { PaginacionDto } from '../common/paginacion';
 
@@ -66,4 +67,57 @@ export class EditarCuentaCanalDto {
   /** Cadena vacía BORRA la credencial; ausente la deja como está. */
   @IsOptional() @IsString() @MaxLength(500) secreto?: string;
   @IsOptional() config?: Record<string, unknown>;
+}
+
+// ── Respuestas rápidas ──────────────────────────────────────────────────────
+
+export class CrearRespuestaDto {
+  @IsString() @MinLength(2) @MaxLength(60) nombre!: string;
+  @IsString() @MinLength(1) @MaxLength(2000) cuerpo!: string;
+  /** `null` = sirve para todos los canales. */
+  @IsOptional() @IsIn(CANALES as unknown as string[]) canal?: string | null;
+  @IsOptional() @IsString() @MaxLength(20) atajo?: string | null;
+}
+
+export class EditarRespuestaDto {
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(60) nombre?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(2000) cuerpo?: string;
+  @IsOptional() @IsIn(CANALES as unknown as string[]) canal?: string | null;
+  @IsOptional() @IsString() @MaxLength(20) atajo?: string | null;
+  @IsOptional() @IsBoolean() activa?: boolean;
+}
+
+export class AplicarRespuestaDto {
+  @IsUUID() conversacionId!: string;
+}
+
+// ── Configuración del bot ───────────────────────────────────────────────────
+
+export class ReglaRuteoDto {
+  @IsArray() @IsString({ each: true }) @ArrayMaxSize(40) palabras!: string[];
+  @IsString() @MinLength(2) @MaxLength(40) equipo!: string;
+}
+
+export class GuardarBotDto {
+  @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(60)
+  palabrasDeSalida?: string[];
+
+  @IsOptional() @IsArray() @ArrayMaxSize(20)
+  @ValidateNested({ each: true }) @Type(() => ReglaRuteoDto)
+  ruteo?: ReglaRuteoDto[];
+
+  @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(40)
+  palabrasDeConfirmacion?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(40)
+  palabrasDeCancelacion?: string[];
+
+  @IsOptional() @IsString() @MaxLength(1000) bienvenida?: string;
+  @IsOptional() @IsString() @MaxLength(1000) sinCoincidencia?: string;
+}
+
+export class ProbarBotDto {
+  @IsString() @MinLength(1) @MaxLength(500) mensaje!: string;
+  /** Para ver qué pasa con el PRIMER mensaje de un hilo, que se saluda. */
+  @IsOptional() @IsBoolean() esPrimerMensaje?: boolean;
 }

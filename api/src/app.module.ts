@@ -120,6 +120,9 @@ import { InboxController } from './inbox/inbox.controller';
 import { InboxService } from './inbox/inbox.service';
 import { IngestaService } from './inbox/ingesta.service';
 import { WebhooksController } from './inbox/webhooks.controller';
+import { BotController, RespuestasController } from './inbox/plantillas.controller';
+import { BotService } from './inbox/bot.service';
+import { PlantillasChatService } from './inbox/plantillas.service';
 import { TelegramAdaptador } from './inbox/adaptadores/telegram.adaptador';
 import { TwilioAdaptador } from './inbox/adaptadores/twilio.adaptador';
 import { TotpService } from './auth/totp.service';
@@ -166,6 +169,8 @@ import { CuentaService } from './cuenta/cuenta.service';
     WebhooksController,
     InboxController,
     CanalesController,
+    RespuestasController,
+    BotController,
     EquipoController,
     PersonasController,
     RolesPersonaController,
@@ -254,6 +259,8 @@ import { CuentaService } from './cuenta/cuenta.service';
     CanalesService,
     IngestaService,
     InboxService,
+    PlantillasChatService,
+    BotService,
     { provide: APP_GUARD, useClass: AuthGuard },
     // DESPUÉS del de autenticación, y el orden es la feature: así el contador
     // general puede contar por usuario en vez de por IP, porque `req.actor` ya

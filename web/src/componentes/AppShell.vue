@@ -21,6 +21,12 @@ const grupos = [
     titulo: 'Hoy',
     items: [
       { a: '/inicio', icono: 'monitor', texto: 'Inicio' },
+      // La bandeja va acá y NO bajo «Alquileres»: entra un lead de venta, una
+      // consulta de un propietario y un reclamo de un inquilino por el mismo
+      // lugar. Colgarla de Alquileres decía que era sólo para eso —el lugar en
+      // el menú comunica el alcance— y encima la dejaba en el ítem 8, donde no
+      // se encuentra.
+      { a: '/inbox', icono: 'chat', texto: 'Bandeja' },
       { a: '/tablero', icono: 'grafico', texto: 'Tablero' },
     ],
   },
@@ -57,7 +63,6 @@ const grupos = [
     titulo: 'Alquileres',
     items: [
       { a: '/avisos', icono: 'campana', texto: 'Avisos' },
-      { a: '/inbox', icono: 'chat', texto: 'Bandeja' },
       { a: '/vencimientos', icono: 'calendario', texto: 'Vencimientos' },
       { a: '/contratos', icono: 'documento', texto: 'Contratos' },
       { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
@@ -93,6 +98,7 @@ const grupos = [
       { a: '/importar', icono: 'mas', texto: 'Importar' },
       { a: '/movimientos', icono: 'grafico', texto: 'Movimientos' },
       { a: '/cuenta', icono: 'panel', texto: 'Tu cuenta' },
+      { a: '/bot', icono: 'chat', texto: 'Bot y respuestas' },
       { a: '/seguridad', icono: 'candado', texto: 'Seguridad' },
       { a: '/plan', icono: 'documento', texto: 'Tu plan' },
     ],

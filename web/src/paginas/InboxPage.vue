@@ -63,6 +63,47 @@ const texto = ref('');
 const enviando = ref(false);
 const avisoEnvio = ref('');
 
+/**
+ * Respuestas rápidas.
+ *
+ * Se cargan por canal del hilo abierto: lo que se manda por WhatsApp no es lo
+ * que se manda por mail. Insertan el texto en el cuadro —**no lo envían**— así
+ * que quien contesta ve el resultado final antes de mandarlo.
+ */
+const respuestas = ref<Respuesta[]>([]);
+const listaAbierta = ref(false);
+const avisoPlantilla = ref('');
+
+interface Respuesta { id: string; nombre: string; cuerpo: string; canal: string | null }
+
+async function cargarRespuestas(canal: string) {
+  try {
+    respuestas.value = await api<Respuesta[]>(`/respuestas?canal=${canal}`);
+  } catch {
+    // Sin plantillas se contesta igual: no es motivo para romper la pantalla.
+    respuestas.value = [];
+  }
+}
+
+async function usarRespuesta(r: Respuesta) {
+  if (!abierta.value) return;
+  listaAbierta.value = false;
+  try {
+    const res = await api<{ texto: string; faltantes: string[] }>(
+      `/respuestas/${r.id}/aplicar`,
+      { method: 'POST', body: JSON.stringify({ conversacionId: abierta.value.id }) },
+    );
+    // Se agrega a lo que ya haya escrito, no lo pisa: alguien que empezó a
+    // redactar y busca una plantilla no quiere perder lo que puso.
+    texto.value = texto.value ? `${texto.value}\n${res.texto}` : res.texto;
+    avisoPlantilla.value = res.faltantes.length
+      ? `Faltan datos para: ${res.faltantes.join(', ')}. Completalos antes de enviar.`
+      : '';
+  } catch (e) {
+    avisoPlantilla.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo aplicar.';
+  }
+}
+
 const { valores: filtros } = filtrosRecordados('inbox', {
   estado: 'abierta', canal: '', soloMios: false, noLeidos: false, q: '',
 });
@@ -131,6 +172,7 @@ async function abrir(c: Conversacion) {
     const r = await api<{ conversacion: Conversacion; mensajes: Mensaje[] }>(`/inbox/${c.id}`);
     abierta.value = r.conversacion;
     mensajes.value = r.mensajes;
+    void cargarRespuestas(r.conversacion.canal);
     // Abrirlo lo marcó leído en el back: se refleja acá sin recargar todo.
     const enLista = conversaciones.value.find((x) => x.id === c.id);
     if (enLista) enLista.noLeido = false;
@@ -257,18 +299,12 @@ onMounted(cargar);
         <header class="cab">
           <div>
             <strong>{{ abierta.contacto }}</strong>
-            <span class="dir mono">{{ abierta.direccion }}</span>
+            <span class="dir mono">{{ ETIQUETA_CANAL[abierta.canal] ?? abierta.canal }}</span>
           </div>
-          <div class="acciones">
-            <button class="btn secondary sm" type="button"
-              @click="cambiar('bot', { valor: !abierta.botActivo })">
-              {{ abierta.botActivo ? 'Apagar bot' : 'Prender bot' }}
-            </button>
-            <button v-if="abierta.estado === 'abierta'" class="btn secondary sm" type="button"
-              @click="cambiar('estado', { estado: 'resuelta' })">Resolver</button>
-            <button v-else class="btn secondary sm" type="button"
-              @click="cambiar('estado', { estado: 'abierta' })">Reabrir</button>
-          </div>
+          <button v-if="abierta.estado === 'abierta'" class="btn secondary sm" type="button"
+            @click="cambiar('estado', { estado: 'resuelta' })">Resolver</button>
+          <button v-else class="btn secondary sm" type="button"
+            @click="cambiar('estado', { estado: 'abierta' })">Reabrir</button>
         </header>
 
         <UiSkeleton v-if="cargandoHilo" :filas="3" :alto="40" />
@@ -309,6 +345,36 @@ onMounted(cargar);
           lo que escribas acá va a quedar en cola.
         </p>
 
+        <div class="barra-respuestas">
+          <button
+            class="btn secondary sm"
+            type="button"
+            :disabled="!respuestas.length"
+            @click="listaAbierta = !listaAbierta"
+          >
+            Respuestas rápidas{{ respuestas.length ? ` (${respuestas.length})` : '' }}
+          </button>
+          <RouterLink
+            v-if="!respuestas.length && (auth.rol === 'owner' || auth.rol === 'admin')"
+            class="crear-plantilla" to="/bot">
+            Crear la primera
+          </RouterLink>
+
+          <!-- La plantilla INSERTA, no envía. Quien contesta ve el texto final
+               antes de mandarlo, que es donde se nota si no aplica a ese
+               cliente. -->
+          <ul v-if="listaAbierta" class="plantillas">
+            <li v-for="r in respuestas" :key="r.id">
+              <button type="button" @click="usarRespuesta(r)">
+                <strong>{{ r.nombre }}</strong>
+                <span>{{ r.cuerpo }}</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <p v-if="avisoPlantilla" class="aviso-plantilla">{{ avisoPlantilla }}</p>
+
         <form class="responder" @submit.prevent="responder">
           <textarea
             v-model="texto" rows="3" required maxlength="4000"
@@ -327,6 +393,74 @@ onMounted(cargar);
       <section v-else class="hilo card vacio">
         <p class="nota">Elegí una conversación de la izquierda.</p>
       </section>
+
+      <!-- Tercera columna: lo que se HACE con la conversación, separado de lo
+           que se DICE. En el video de referencia esto está a la derecha y es lo
+           que evita que la cabecera del chat se llene de botones. -->
+      <aside v-if="abierta" class="panel card stack">
+        <div>
+          <span class="et">Contacto</span>
+          <p class="valor">{{ abierta.contacto }}</p>
+          <p class="valor mono chico">{{ abierta.direccion }}</p>
+        </div>
+
+        <div>
+          <span class="et">Canal</span>
+          <p class="valor">{{ ETIQUETA_CANAL[abierta.canal] ?? abierta.canal }} · {{ abierta.cuenta }}</p>
+        </div>
+
+        <div>
+          <span class="et">A cargo</span>
+          <select
+            class="sel"
+            :value="abierta.asignadoA ?? ''"
+            @change="cambiar('asignado', {
+              usuarioId: ($event.target as HTMLSelectElement).value || null,
+            })"
+          >
+            <option value="">Sin asignar</option>
+            <option v-if="auth.usuario" :value="auth.usuario.id">Yo ({{ auth.usuario.nombre }})</option>
+            <option
+              v-if="abierta.asignadoA && abierta.asignadoA !== auth.usuario?.id"
+              :value="abierta.asignadoA">
+              {{ abierta.asignadoNombre }}
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <span class="et">Bot automático</span>
+          <label class="switch">
+            <input
+              type="checkbox"
+              :checked="abierta.botActivo"
+              @change="cambiar('bot', { valor: ($event.target as HTMLInputElement).checked })" />
+            <span>{{ abierta.botActivo ? 'Contesta solo' : 'Apagado en este chat' }}</span>
+          </label>
+          <!-- Se explica porque las dos formas de silenciarlo son distintas y
+               no se nota mirando el interruptor. -->
+          <p class="nota chico">
+            Apagado a mano no vuelve solo. Cuando contestás vos, se calla 15
+            minutos y se reactiva.
+          </p>
+        </div>
+
+        <div>
+          <span class="et">Estado</span>
+          <div class="botones-estado">
+            <button class="btn secondary sm" type="button"
+              @click="cambiar('estado', { estado: 'archivada' })">Archivar</button>
+            <button class="btn secondary sm" type="button"
+              @click="cambiar('leido', { valor: false })">Marcar sin leer</button>
+            <button class="btn secondary sm" type="button"
+              @click="cambiar('estado', { estado: 'bloqueada' })">Bloquear</button>
+          </div>
+        </div>
+
+        <p v-if="!abierta.puedeResponderLibre" class="nota chico">
+          Fuera de la ventana de 24 h: sólo entra una plantilla aprobada.
+        </p>
+      </aside>
     </div>
   </div>
 </template>
@@ -340,7 +474,20 @@ onMounted(cargar);
 .buscar { min-width: 200px; }
 .check { display: inline-flex; align-items: center; gap: var(--s-2xs); font-size: 13px; }
 
-.tablero { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: var(--s-md); align-items: start; }
+/* Tres columnas: la cola, la conversación y lo que se HACE con ella.
+   Separar el panel de acciones del hilo es lo que evita que la cabecera del
+   chat se llene de botones y que contestar y administrar se pisen. */
+.tablero {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) 240px;
+  gap: var(--s-md);
+  align-items: start;
+}
+/* En pantallas medianas cae el panel primero: la conversación importa más. */
+@media (max-width: 1180px) {
+  .tablero { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+  .panel { display: none; }
+}
 @media (max-width: 900px) { .tablero { grid-template-columns: 1fr; } }
 
 .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 70vh; overflow-y: auto; }
@@ -396,4 +543,48 @@ onMounted(cargar);
 .atajo { font-size: 11px; color: var(--muted-2); }
 .nota-cola { margin: 0; font-size: 12px; color: var(--muted); }
 .nota { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* ── Respuestas rápidas ── */
+.barra-respuestas { position: relative; display: flex; align-items: center; gap: var(--s-sm); }
+.crear-plantilla { font-size: 12px; color: var(--muted); }
+.plantillas {
+  position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 20;
+  list-style: none; margin: 0; padding: var(--s-2xs);
+  width: min(420px, 90vw); max-height: 260px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); box-shadow: var(--sombra-menu, 0 8px 24px rgb(0 0 0 / 12%));
+}
+.plantillas button {
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  background: none; border: 0; padding: var(--s-xs) var(--s-sm);
+  border-radius: var(--r-sm); display: flex; flex-direction: column; gap: 2px;
+}
+.plantillas button:hover { background: var(--surface-2); }
+.plantillas strong { font-size: 13px; }
+.plantillas span {
+  font-size: 12px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.aviso-plantilla {
+  margin: 0; font-size: 12px; color: var(--warning);
+  padding: var(--s-2xs) var(--s-sm); background: var(--warning-tint, var(--surface-2));
+  border-radius: var(--r-sm);
+}
+
+/* ── Panel de acciones ── */
+.panel { gap: var(--s-md); position: sticky; top: var(--s-md); }
+.panel .et {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted-2); display: block;
+}
+.panel .valor { margin: 2px 0 0; font-size: 13px; word-break: break-word; }
+.panel .chico { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.sel {
+  font: inherit; font-size: 13px; width: 100%; margin-top: 4px;
+  padding: 5px var(--s-sm); border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); background: var(--surface); color: var(--ink);
+}
+.switch { display: flex; align-items: center; gap: var(--s-xs); font-size: 13px; margin-top: 4px; }
+.switch input { accent-color: var(--accent); }
+.botones-estado { display: flex; flex-direction: column; gap: var(--s-2xs); margin-top: 4px; }
 </style>
