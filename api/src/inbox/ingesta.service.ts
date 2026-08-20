@@ -5,6 +5,7 @@ import type { CuentaCanal, MensajeEntrante } from './adaptadores/tipos';
 import {
   decidir, REGLAS_POR_DEFECTO, type Decision, type EstadoHilo, type ReglasBot,
 } from './bot.motor';
+import { detectarPropiedad } from './propiedad.motor';
 
 /**
  * Lo que pasa cuando entra un mensaje.
@@ -77,6 +78,7 @@ export class IngestaService {
       if (!mensajeId) return { conv, mensajeId: null, duplicado: true, ignorar: true };
 
       await this.actualizarHilo(ej, cuenta, conv.id, m, conv.estado);
+      await this.vincularPropiedad(ej, cuenta, conv, m.cuerpo);
       return { conv, mensajeId, duplicado: false, ignorar: false };
     });
 
@@ -114,7 +116,7 @@ export class IngestaService {
        VALUES ($1,$2,$3,$4)
        ON CONFLICT (tenant_id, canal_cuenta_id, contacto_externo) DO UPDATE
          SET contacto_nombre = coalesce(EXCLUDED.contacto_nombre, conversacion.contacto_nombre)
-       RETURNING id, estado, bot_activo, bot_pausado_hasta, asignado_a,
+       RETURNING id, estado, propiedad_id, bot_activo, bot_pausado_hasta, asignado_a,
                  (SELECT count(*) FROM mensaje ms WHERE ms.conversacion_id = conversacion.id)::int
                    AS mensajes`,
       [cuenta.tenantId, cuenta.id, m.contactoExterno, m.contactoNombre],
@@ -171,6 +173,70 @@ export class IngestaService {
        WHERE id = $1`,
       [conversacionId, estado, m.recibidoEl, ventana],
     );
+  }
+
+  /**
+   * Engancha la conversación a la propiedad de la que habla, y la deriva a
+   * quien la captó.
+   *
+   * ── Las dos reglas que la hacen segura ──
+   *
+   * **No pisa un vínculo que ya existe.** Si el asesor la corrigió a mano, esa
+   * corrección manda: el detector se equivoca y la persona no. Sin esto,
+   * corregir sería inútil —el próximo mensaje lo volvería a romper—.
+   *
+   * **Sólo deriva desde el número GENERAL.** Si el cliente le escribió al
+   * número personal de Ana, la conversación es de Ana aunque la propiedad la
+   * haya captado Diego: el cliente eligió a quién escribirle y el sistema no
+   * está para redirigirlo.
+   *
+   * Y sólo si no hay nadie a cargo todavía: derivar una conversación que
+   * alguien ya está atendiendo es sacársela de las manos a mitad de camino.
+   */
+  private async vincularPropiedad(
+    ej: Ejecutor,
+    cuenta: CuentaCanal,
+    conv: FilaHilo,
+    texto: string,
+  ): Promise<void> {
+    if (conv.propiedad_id) return;
+
+    const d = detectarPropiedad(texto);
+    if (!d.codigo && !d.id) return;
+
+    const { rows } = await ej.query<{ id: string; captador: string | null }>(
+      `SELECT id, agente_captador_id AS captador FROM propiedad
+        WHERE ($1::uuid IS NULL OR id = $1)
+          AND ($2::int  IS NULL OR codigo = $2)
+        LIMIT 1`,
+      [d.id ?? null, d.codigo ?? null],
+    );
+    const prop = rows[0];
+    // El código puede no existir —alguien tipeó PROP-9999— y ahí no se
+    // engancha nada. Es el caso normal de un detector, no un error.
+    if (!prop) return;
+
+    const derivar = !cuenta.usuarioId && !conv.asignado_a && prop.captador;
+
+    await ej.query(
+      `UPDATE conversacion
+          SET propiedad_id = $2,
+              asignado_a = CASE WHEN $3::uuid IS NOT NULL THEN $3 ELSE asignado_a END
+        WHERE id = $1`,
+      [conv.id, prop.id, derivar ? prop.captador : null],
+    );
+
+    if (derivar) {
+      await ej.query(
+        `INSERT INTO mensaje
+           (tenant_id, conversacion_id, direccion, autor_tipo, cuerpo, estado)
+         VALUES ($1,$2,'saliente','sistema',$3,'recibido')`,
+        [
+          cuenta.tenantId, conv.id,
+          'Se derivó automáticamente a quien captó la propiedad.',
+        ],
+      );
+    }
   }
 
   /**
@@ -318,6 +384,7 @@ export class IngestaService {
 interface FilaHilo {
   id: string;
   estado: string;
+  propiedad_id: string | null;
   bot_activo: boolean;
   bot_pausado_hasta: Date | null;
   asignado_a: string | null;

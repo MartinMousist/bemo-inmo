@@ -36,6 +36,8 @@ export interface MensajeEntrante {
 export interface CuentaCanal {
   id: string;
   tenantId: string;
+  /** `null` = canal de la inmobiliaria. Con valor, es el número de esa persona. */
+  usuarioId?: string | null;
   canal: string;
   proveedor: string;
   identificador: string;

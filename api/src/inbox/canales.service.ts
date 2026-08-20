@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { DbService, type Ejecutor } from '../database/db.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import { loadEnv } from '../config/env';
+import type { Rol } from '../auth/tokens.service';
 import { RegistroAdaptadores } from './adaptadores/registro';
 import { IngestaService } from './ingesta.service';
 import type { CuentaCanal } from './adaptadores/tipos';
@@ -34,6 +35,11 @@ export interface CuentaVisible {
   detalle: string;
   /** `true` si tiene credencial cargada. NUNCA cuál. */
   tieneSecreto: boolean;
+  /** `null` = canal de la inmobiliaria. Con valor, el número de esa persona. */
+  usuarioId: string | null;
+  usuarioNombre: string | null;
+  /** `false` = cargado y esperando que el titular lo habilite. */
+  aprobada: boolean;
   config: Record<string, unknown>;
   /** La URL a la que el proveedor tiene que pegarle. */
   rutaWebhook: string;
@@ -54,12 +60,27 @@ export class CanalesService {
     return loadEnv().CANALES_SECRETO;
   }
 
-  async listar(tenantId: string): Promise<CuentaVisible[]> {
+  /**
+   * Los canales que esta persona puede ver.
+   *
+   * Titular y administración ven todos. El resto ve los de la inmobiliaria y
+   * **el suyo**: el número de un compañero no es asunto de nadie más, y su
+   * credencial menos.
+   */
+  async listar(tenantId: string, rol?: Rol, usuarioId?: string): Promise<CuentaVisible[]> {
+    const todos = !rol || rol === 'owner' || rol === 'admin';
+
     const filas = await this.db.withTenant(tenantId, async (ej) => {
       const { rows } = await ej.query<FilaCuenta>(
-        `SELECT id, tenant_id, canal, proveedor, nombre, identificador, config,
-                activa, webhook_token, created_at, (secreto IS NOT NULL) AS tiene_secreto
-           FROM canal_cuenta ORDER BY canal, nombre`,
+        `SELECT cc.id, cc.tenant_id, cc.canal, cc.proveedor, cc.nombre, cc.identificador,
+                cc.config, cc.activa, cc.webhook_token, cc.created_at, cc.usuario_id,
+                cc.aprobada_el, u.nombre AS usuario_nombre,
+                (cc.secreto IS NOT NULL) AS tiene_secreto
+           FROM canal_cuenta cc
+           LEFT JOIN usuario u ON u.id = cc.usuario_id
+          WHERE ($1::uuid IS NULL OR cc.usuario_id IS NULL OR cc.usuario_id = $1)
+          ORDER BY cc.usuario_id NULLS FIRST, cc.canal, cc.nombre`,
+        [todos ? null : usuarioId],
       );
       return rows;
     });
@@ -83,7 +104,8 @@ export class CanalesService {
     const f = await this.db.withTenant(tenantId, async (ej) => {
       const { rows } = await ej.query<FilaCuenta>(
         `SELECT id, tenant_id, canal, proveedor, nombre, identificador, config,
-                activa, webhook_token, created_at, (secreto IS NOT NULL) AS tiene_secreto
+                activa, webhook_token, created_at, usuario_id,
+                (secreto IS NOT NULL) AS tiene_secreto
            FROM canal_cuenta WHERE id = $1`,
         [cuentaId],
       );
@@ -94,6 +116,7 @@ export class CanalesService {
     return {
       id: f.id,
       tenantId: f.tenant_id,
+      usuarioId: f.usuario_id ?? null,
       canal: f.canal,
       proveedor: f.proveedor,
       identificador: f.identificador,
@@ -119,19 +142,27 @@ export class CanalesService {
     const f = filas[0];
     if (!f || !f.activa) return null;
 
-    const ident = await this.db.withTenant(f.tenant_id, async (ej) => {
-      const { rows } = await ej.query<{ identificador: string }>(
-        'SELECT identificador FROM canal_cuenta WHERE id = $1', [f.id],
+    const extra = await this.db.withTenant(f.tenant_id, async (ej) => {
+      const { rows } = await ej.query<{
+        identificador: string; usuario_id: string | null; aprobada_el: Date | null;
+      }>(
+        'SELECT identificador, usuario_id, aprobada_el FROM canal_cuenta WHERE id = $1',
+        [f.id],
       );
-      return rows[0]?.identificador ?? '';
+      return rows[0];
     });
+
+    // Un canal cargado y todavía sin aprobar NO recibe. Aprobar a medias —que
+    // igual entren los mensajes— no es aprobar, es un cartel.
+    if (!extra?.aprobada_el) return null;
 
     return {
       id: f.id,
       tenantId: f.tenant_id,
+      usuarioId: extra.usuario_id ?? null,
       canal: f.canal,
       proveedor: f.proveedor,
-      identificador: ident,
+      identificador: extra.identificador,
       config: f.config ?? {},
       secreto: await this.descifrar(f.id),
     };
@@ -142,7 +173,10 @@ export class CanalesService {
     dto: {
       canal: string; proveedor: string; nombre: string;
       identificador: string; secreto?: string; config?: Record<string, unknown>;
+      /** Sólo titular/administración pueden mandarlo. */
+      usuarioId?: string | null;
     },
+    actor?: { rol: Rol; usuarioId: string },
   ): Promise<CuentaVisible> {
     const adaptador = this.registro.de(dto.proveedor);
     if (!adaptador) {
@@ -173,15 +207,33 @@ export class CanalesService {
     const config: Record<string, unknown> = { ...(dto.config ?? {}) };
     if (!config.webhookSecret) config.webhookSecret = randomBytes(24).toString('base64url');
 
+    // Quién es el dueño y si nace aprobado.
+    //
+    // Un asesor sólo puede cargar SU número, y queda esperando: un canal es una
+    // credencial que habilita a escribirle a los clientes en nombre de la
+    // inmobiliaria. Que cualquiera lo prenda solo es demasiado; que el titular
+    // tenga que cargar diez tokens ajenos es demasiado poco.
+    const esJefe = !actor || actor.rol === 'owner' || actor.rol === 'admin';
+    const dueno = esJefe ? (dto.usuarioId ?? null) : actor.usuarioId;
+    const naceAprobado = esJefe;
+
     const id = await this.db.withTenant(tenantId, async (ej) => {
       try {
         const { rows } = await ej.query<{ id: string }>(
           `INSERT INTO canal_cuenta
-             (tenant_id, canal, proveedor, nombre, identificador, config, webhook_token)
-           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+             (tenant_id, canal, proveedor, nombre, identificador, config,
+              webhook_token, usuario_id, aprobada_el, aprobada_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8::uuid,
+                   CASE WHEN $9::boolean THEN now() ELSE NULL END,
+                   -- El cast es obligatorio: dentro de un CASE con NULL en la
+                   -- otra rama, Postgres no puede inferir el tipo del parámetro
+                   -- y lo toma como text, que no entra en una columna uuid.
+                   CASE WHEN $9::boolean THEN $10::uuid ELSE NULL END)
+           RETURNING id`,
           [
             tenantId, dto.canal, dto.proveedor, dto.nombre, dto.identificador,
-            JSON.stringify(config), webhookToken,
+            JSON.stringify(config), webhookToken, dueno,
+            naceAprobado, actor?.usuarioId ?? null,
           ],
         );
         return rows[0].id;
@@ -198,8 +250,52 @@ export class CanalesService {
 
     if (dto.secreto) await this.guardarSecreto(id, dto.secreto);
 
+    const listadas = await this.listar(tenantId, actor?.rol, actor?.usuarioId);
+    return listadas.find((c) => c.id === id)!;
+  }
+
+  /**
+   * El titular habilita un canal cargado por alguien del equipo.
+   *
+   * Hasta acá el canal no recibe ni envía: `porWebhook()` lo rechaza. Aprobar
+   * es lo que lo enciende.
+   */
+  async aprobar(tenantId: string, id: string, usuarioId: string): Promise<CuentaVisible> {
+    await this.db.withTenant(tenantId, async (ej) => {
+      const { rowCount } = await ej.query(
+        `UPDATE canal_cuenta SET aprobada_el = now(), aprobada_por = $2
+          WHERE id = $1 AND aprobada_el IS NULL`,
+        [id, usuarioId],
+      );
+      if (!rowCount) {
+        throw new AppError(
+          422, ErrorCode.ESTADO_INVALIDO,
+          'Ese canal no existe o ya estaba aprobado.', 'Unprocessable Entity',
+        );
+      }
+    });
     const listadas = await this.listar(tenantId);
     return listadas.find((c) => c.id === id)!;
+  }
+
+  /**
+   * ¿Puede esta persona tocar este canal?
+   *
+   * Titular y administración, cualquiera. El resto, sólo el suyo — y el de la
+   * inmobiliaria no, que es de todos y de nadie.
+   */
+  async puedeAdministrar(
+    tenantId: string,
+    id: string,
+    actor: { rol: Rol; usuarioId: string },
+  ): Promise<boolean> {
+    if (actor.rol === 'owner' || actor.rol === 'admin') return true;
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{ usuario_id: string | null }>(
+        'SELECT usuario_id FROM canal_cuenta WHERE id = $1', [id],
+      );
+      return rows[0]?.usuario_id === actor.usuarioId;
+    });
   }
 
   async editar(
@@ -375,9 +471,16 @@ export class CanalesService {
       nombre: f.nombre,
       identificador: f.identificador,
       activa: f.activa,
-      disponible: estado.ok && f.activa,
-      detalle: f.activa ? estado.detalle : 'Desactivada',
+      // Sin aprobar no está disponible, diga lo que diga el adaptador: el
+      // token puede ser perfecto y el canal seguir apagado.
+      disponible: estado.ok && f.activa && f.aprobada_el != null,
+      detalle: f.aprobada_el == null
+        ? 'Esperando que el titular lo habilite'
+        : (f.activa ? estado.detalle : 'Desactivada'),
       tieneSecreto: f.tiene_secreto,
+      usuarioId: f.usuario_id ?? null,
+      usuarioNombre: f.usuario_nombre ?? null,
+      aprobada: f.aprobada_el !== null && f.aprobada_el !== undefined,
       config: sinSecretos(f.config ?? {}),
       rutaWebhook: `/v1/webhooks/${f.webhook_token}`,
       creadaEl: f.created_at.toISOString(),
@@ -388,6 +491,9 @@ export class CanalesService {
 interface FilaCuenta {
   id: string;
   tenant_id: string;
+  usuario_id?: string | null;
+  usuario_nombre?: string | null;
+  aprobada_el?: Date | null;
   canal: string;
   proveedor: string;
   nombre: string;

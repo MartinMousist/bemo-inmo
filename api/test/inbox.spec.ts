@@ -159,8 +159,13 @@ describe('Inbox omnicanal', () => {
       expect(r.body[0].detalle).toContain('BotFather');
     });
 
-    it('el asesor no puede conectar canales', async () => {
-      await http().get('/v1/canales').set(...como(inmo, 'agente')).expect(403);
+    it('el asesor ve los canales de la inmobiliaria, no el de un compañero', async () => {
+      // Este test decía «el asesor no puede conectar canales» y era cierto
+      // hasta que se decidió que cada uno carga SU número. Cambió la política,
+      // no el código: ahora lista, y lo que no puede es tocar el ajeno. El
+      // detalle fino está en `canal-del-agente.spec.ts`.
+      const r = await http().get('/v1/canales').set(...como(inmo, 'agente')).expect(200);
+      expect(r.body.every((c: { usuarioId: string | null }) => c.usuarioId === null)).toBe(true);
     });
 
     it('rechaza un par canal/proveedor imposible', async () => {

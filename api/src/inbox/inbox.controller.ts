@@ -3,7 +3,8 @@ import {
 } from '@nestjs/common';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 import {
-  AsignarDto, BanderaDto, EstadoConversacionDto, FiltroConversacionesDto, ResponderDto,
+  AsignarDto, BanderaDto, EstadoConversacionDto, FiltroConversacionesDto,
+  ResponderDto, VincularPropiedadDto,
 } from './inbox.dto';
 import { InboxService } from './inbox.service';
 
@@ -28,7 +29,7 @@ export class InboxController {
   @Get(':id')
   @Roles('owner', 'admin', 'agente', 'contable')
   hilo(@ActorActual() a: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.inbox.hilo(a.tenantId, a.rol, id);
+    return this.inbox.hilo(a.tenantId, a.rol, a.usuarioId, id);
   }
 
   /**
@@ -76,6 +77,25 @@ export class InboxController {
     @Body() dto: BanderaDto,
   ) {
     await this.inbox.marcarLeido(a.tenantId, id, dto.valor);
+    return { ok: true };
+  }
+
+  /**
+   * Vincular o desvincular la propiedad de la que habla la conversación.
+   *
+   * El detector la engancha sola cuando el cliente escribe el código, pero se
+   * equivoca: `null` la desvincula y un id la corrige. **La corrección manda**
+   * —la ingesta no vuelve a pisar un vínculo existente— porque si el próximo
+   * mensaje lo rompiera, corregir no serviría de nada.
+   */
+  @Patch(':id/propiedad')
+  @Roles('owner', 'admin', 'agente', 'contable')
+  async propiedad(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VincularPropiedadDto,
+  ) {
+    await this.inbox.vincularPropiedad(a.tenantId, id, dto.propiedadId ?? null);
     return { ok: true };
   }
 

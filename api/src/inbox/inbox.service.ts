@@ -78,8 +78,30 @@ export class InboxService {
     const pag = { pagina: f.pagina ?? 1, porPagina: f.porPagina ?? 25 };
 
     return this.db.withTenant(tenantId, async (ej) => {
+      // ── La tercera excepción declarada a «el filtro NO es un permiso» ──
+      //
+      // Las otras dos las fija `common/filtro-agente.ts`: los leads y el
+      // desglose de comisiones. Ésta es la del número personal.
+      //
+      // Si el canal es de una persona, sus conversaciones son suyas: los
+      // clientes de Ana no los lee Diego. Las ve Ana, las ve titular y
+      // administración —hacen falta para dar continuidad si Ana se enferma o se
+      // va, y acá se maneja plata de terceros— y las ve quien esté asignado,
+      // para que derivar un cliente funcione sin abrirle la bandeja entera.
+      //
+      // El canal de la inmobiliaria (`usuario_id IS NULL`) no cambia: lo ve el
+      // equipo como siempre.
+      // `$7` es NULL para titular y administración —sin restricción— y el id de
+      // la persona para el resto. Va como PARÁMETRO y no interpolado en el
+      // texto del SQL: el valor sale del token y hoy es confiable, pero
+      // interpolar es el patrón que después alguien copia con un valor que no
+      // lo es.
       const where = `
         WHERE ($1::text IS NULL OR c.estado = $1)
+          AND ($7::uuid IS NULL
+               OR cc.usuario_id IS NULL
+               OR cc.usuario_id = $7
+               OR c.asignado_a = $7)
           AND ($2::text IS NULL OR cc.canal = $2)
           AND ($3::uuid IS NULL OR c.canal_cuenta_id = $3)
           AND ($4::uuid IS NULL OR c.asignado_a = $4)
@@ -95,6 +117,7 @@ export class InboxService {
         f.soloMios ? usuarioId : (f.asignadoA ?? null),
         f.noLeidos ?? null,
         f.q ?? null,
+        rol === 'owner' || rol === 'admin' ? null : usuarioId,
       ];
 
       const { rows: total } = await ej.query<{ n: string }>(
@@ -122,7 +145,7 @@ export class InboxService {
            ${where}
           -- Primero los que esperan, y de esos el que espera hace MÁS tiempo.
           ORDER BY (c.no_leido) DESC, c.ultimo_entrante_el ASC NULLS LAST
-          LIMIT $7 OFFSET $8`,
+          LIMIT $8 OFFSET $9`,
         [...params, pag.porPagina, offset(pag)],
       );
 
@@ -131,9 +154,19 @@ export class InboxService {
     });
   }
 
+  /**
+   * El hilo completo.
+   *
+   * Lleva la MISMA restricción de visibilidad que el listado, y no por
+   * prolijidad: filtrar la lista y dejar abierto el detalle es exactamente el
+   * agujero que apareció en la etapa 17 con el portal del inquilino —la lista
+   * estaba bien y `vista()` no chequeaba el rol—. Un asesor que escribe la URL
+   * de un hilo ajeno tiene que recibir un 404, no la conversación.
+   */
   async hilo(
     tenantId: string,
     rol: Rol,
+    usuarioId: string,
     id: string,
   ): Promise<{ conversacion: ConversacionLista; mensajes: MensajeHilo[] }> {
     return this.db.withTenant(tenantId, async (ej) => {
@@ -145,9 +178,14 @@ export class InboxService {
            FROM conversacion c
            JOIN canal_cuenta cc ON cc.id = c.canal_cuenta_id
            LEFT JOIN usuario u ON u.id = c.asignado_a
-          WHERE c.id = $1`,
-        [id],
+          WHERE c.id = $1
+            AND ($2::uuid IS NULL
+                 OR cc.usuario_id IS NULL
+                 OR cc.usuario_id = $2
+                 OR c.asignado_a = $2)`,
+        [id, rol === 'owner' || rol === 'admin' ? null : usuarioId],
       );
+      // 404 y no 403: decir «existe pero no es tuya» ya confirma que existe.
       if (!rows.length) throw AppError.notFound('No se encontró esa conversación.');
 
       const { rows: mensajes } = await ej.query<FilaMensaje>(
@@ -213,6 +251,15 @@ export class InboxService {
 
     const cuenta = await this.canales.paraAdaptador(tenantId, datos.cuenta_id);
     return this.ingesta.responder(cuenta, id, datos.contacto, texto, 'agente', usuarioId);
+  }
+
+  /** Vincula o desvincula la propiedad. `null` la saca. */
+  async vincularPropiedad(
+    tenantId: string,
+    id: string,
+    propiedadId: string | null,
+  ): Promise<void> {
+    await this.actualizar(tenantId, id, 'propiedad_id = $2', [propiedadId]);
   }
 
   async asignar(tenantId: string, id: string, usuarioId: string | null): Promise<void> {

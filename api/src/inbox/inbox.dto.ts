@@ -46,11 +46,22 @@ export class EstadoConversacionDto {
   @IsIn(ESTADOS_CONVERSACION as unknown as string[]) estado!: string;
 }
 
+export class VincularPropiedadDto {
+  /** `null` desvincula. */
+  @IsOptional() @IsUUID() propiedadId?: string | null;
+}
+
 export class BanderaDto {
   @IsBoolean() valor!: boolean;
 }
 
 export class CrearCuentaCanalDto {
+  /**
+   * A quién pertenece el número. Sólo lo puede mandar titular o administración;
+   * al resto se le fuerza el propio, así que mandarlo no sirve de nada.
+   */
+  @IsOptional() @IsUUID() usuarioId?: string | null;
+
   @IsIn(CANALES as unknown as string[]) canal!: string;
   @IsIn(PROVEEDORES as unknown as string[]) proveedor!: string;
   @IsString() @MinLength(2) @MaxLength(60) nombre!: string;
