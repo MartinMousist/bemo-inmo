@@ -257,6 +257,15 @@ Nada pendiente acá. Lo que hay que saber para no romperlo:
 - **Nest 11 + Express 5** desde esta sesión. Si tocás rutas: nada de comodines
   al estilo Express 4 (`*`), y el parser de query es `simple`, no `extended`.
 
+**Y la lección más cara de la etapa**, que no es de seguridad: la migración 035
+pasó los 1087 tests en desarrollo y **rompió el CI**. No por un error de SQL,
+sino porque en desarrollo se aplicó como DELTA sobre una base con datos, y sus
+disparadores nunca vieron el orden en que el seed carga las cosas. Contra una
+base vacía —lo único que hace el CI— se caía.
+
+> **Una migración probada sólo como delta no está probada.**
+> Antes de pushear una migración nueva: `./scripts/verificar-desde-cero.sh`
+
 ### Etapa 18 — Inbox omnicanal
 
 Está diseñada en el roadmap, con su dependencia externa anotada ARRIBA para que

@@ -1286,6 +1286,13 @@ Un legajo de garante es dato sensible bajo la Ley 25.326.
       con tenant pasan a ser **compuestas con `tenant_id`**, y las cuatro
       columnas que apuntan a `usuario` van por disparador contra `membresia`.
       Estructuralmente imposible, sin código que se pueda olvidar.
+      **Y costó una lección**: los disparadores nacieron `BEFORE`, exigiendo la
+      membresía en el instante del INSERT. Eso pasó los 1087 tests en desarrollo
+      y rompió el CI, porque el seed carga los usuarios temprano y sus
+      membresías después. La 037 los pasa a `CONSTRAINT TRIGGER … DEFERRABLE`:
+      la invariante real es «al cerrar la transacción», no «en este instante».
+      Una migración probada sólo como delta no está probada —de ahí
+      `scripts/verificar-desde-cero.sh`—.
 - [x] **Un test que falle si alguien agrega un endpoint sin `@Roles`**
       (`superficie.spec.ts`). No es un inventario de las 199 rutas: 70 no llevan
       `@Roles` y casi todas son GET, y una lista de 70 líneas se actualiza en
