@@ -30,7 +30,7 @@ docker compose up -d          # db + s3 (MinIO) + api + web
 
 ```bash
 docker compose exec api npm test           # 801 tests contra Postgres real
-docker compose exec web npm test           # 139 tests de front (Vitest)
+docker compose exec web npm test           # 197 tests de front (Vitest)
 docker compose exec api npx tsc --noEmit   # typecheck backend
 docker compose exec web npx vue-tsc --noEmit
 
@@ -53,7 +53,7 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 |---|---|
 | Commits | 56 |
 | Migraciones | 34 (la última: `034_aviso_visita.sql`) |
-| Tests | **1020 de API** contra Postgres real + **194 de front**. Todo en verde |
+| Tests | **1087 de API** contra Postgres real + **197 de front**. Todo en verde |
 | Pantallas | 49 |
 | CI | ✅ **Verde en los cuatro jobs** — `api`, `web`, `secretos`, `dependencias` |
 
@@ -235,20 +235,27 @@ no publicaba.
 **Etapa 17 — el resto del sellado de seguridad**, que es lo único con trabajo de
 código pendiente además de la 18:
 
-### Seguridad — lo que falta de la etapa 17
+### Seguridad — la etapa 17 quedó CERRADA
 
-- **17.2 · Datos personales.** Un legajo de garante es dato sensible bajo la Ley
-  25.326 y hoy se guarda sin política de retención y sin forma de borrarlo.
-  Falta también auditar quién mira un DNI.
-- **17.4 · Superficie.** CSP propia (helmet sólo pone sus defaults), rate limit
-  fuera de `/auth` —hoy sólo el login tiene techo—, 2FA para el titular.
-- **17.5 · Aislamiento contra un atacante**, no contra un test amable: ids de
-  otro tenant en el cuerpo de un PATCH, en un filtro, en un import CSV. Y un
-  test que falle si alguien agrega un endpoint sin `@Roles`.
-- **Nest 10 → 11.** Es el fix de los dos `high` de `npm audit` que quedan en
-  producción. Uno (multer, DoS) **no es alcanzable** —no se parsea multipart en
-  ningún lado—; el otro es express/body-parser transitivo. Migración mayor sobre
-  967 tests: va sola, no adentro de un `audit fix --force`.
+Nada pendiente acá. Lo que hay que saber para no romperlo:
+
+- **Las claves foráneas entre tablas con tenant son COMPUESTAS** con `tenant_id`
+  (migración 035). Si agregás una tabla nueva con `tenant_id`, sus FK van igual
+  o queda abierta la puerta que la 17.5 cerró: los chequeos de integridad de
+  Postgres pasan por encima de RLS, así que una FK simple acepta el id de otra
+  inmobiliaria. Las cuatro columnas que apuntan a `usuario` van por disparador
+  (`app_verificar_agente_del_tenant`).
+- **Toda ruta que escribe declara `@Roles`**, aunque sean los cuatro roles, y la
+  lista de rutas públicas es cerrada. Lo verifica `test/superficie.spec.ts` y
+  te va a fallar si te olvidás. No lo silencies: escribí el decorador.
+- **El guard de límites es global.** Un endpoint que llame a un tercero lleva
+  `@LimiteDeTercero()`: se cuenta por INMOBILIARIA, porque la cuota del BCRA la
+  comparte todo el despliegue.
+- **Mirar el DNI de un garante se audita.** El listado NO firma URLs; se piden
+  de a una por `GET /garantes/documentos/:id`. Si volvés a firmar en el listado,
+  la auditoría deja de significar algo.
+- **Nest 11 + Express 5** desde esta sesión. Si tocás rutas: nada de comodines
+  al estilo Express 4 (`*`), y el parser de query es `simple`, no `extended`.
 
 ### Etapa 18 — Inbox omnicanal
 
@@ -346,16 +353,19 @@ Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
 docs/roadmap.md.
 
-Estado (2026-08-19): 34 migraciones, 1020 tests de API contra Postgres real y
-194 de front, todo en verde. El CI corre y está verde en los cuatro jobs.
+Estado (2026-08-20): 36 migraciones, 1087 tests de API contra Postgres real y
+197 de front, todo en verde. El CI corre y está verde en los cuatro jobs.
 Entrás con owner@andes.test / unaclavelarga1.
 
-Lo último que se cerró: los **tres sprints completos**. La etapa 16 quedó
-cerrada entera y de la 15 sólo falta ARCA, que espera un trámite y no código.
+Lo último que se cerró: la **etapa 17 entera** —17.2 datos personales, 17.3
+cadena de suministro, 17.4 superficie, 17.5 aislamiento hostil— y la migración
+a **Nest 11 con Express 5**. Antes de eso, los tres sprints y la etapa 16.
+De la 15 sólo falta ARCA, que espera un trámite y no código.
 
-Lo que sigue es el **resto de la etapa 17** (17.2 datos personales, 17.4 CSP y
-rate limit, 17.5 aislamiento hostil, y la migración Nest 10→11) y después la
-etapa 18, el inbox omnicanal.
+Lo que sigue es la **etapa 18, el inbox omnicanal**. Leé primero la advertencia
+de dependencia externa que tiene anotada arriba en el roadmap: enviar por email
+necesita un proveedor configurado y WhatsApp/Meta necesitan verificación de
+negocio. No es algo que se resuelva escribiendo código.
 
 Antes de escribir código, verificá el estado real en vez de creerle a este
 documento: `git log --oneline -5`, `gh run list --limit 3` y

@@ -41,7 +41,7 @@ jobs:
       S3_PUBLIC_URL: http://localhost:9000/bemo-inmo-ci
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # MinIO va con `docker run` y no como `service`: la imagen necesita el
       # comando `server /data`, y los `services` de Actions no permiten
@@ -80,7 +80,7 @@ jobs:
 
       # Node 20, no la última: Node 26 inyecta un localStorage experimental que
       # rompe la suite del frontend con errores que no son bugs reales.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -113,8 +113,8 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -135,7 +135,7 @@ jobs:
   secretos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       # El pre-commit se puede saltear con --no-verify; esto no.
@@ -165,8 +165,8 @@ jobs:
   dependencias:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
 

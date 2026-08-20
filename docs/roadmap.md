@@ -1216,25 +1216,30 @@ Un legajo de garante es dato sensible bajo la Ley 25.326.
       **Quinta nota de estado de este archivo que envejeció hasta volverse
       mentira.** El patrón ya es el hallazgo, no la anécdota.
 
-### 17.3 · La cadena de suministro y el CI que nunca corrió
+### 17.3 · La cadena de suministro y el CI que nunca corrió ✅ CERRADA
 
 - [x] **El CI corre y está verde**, con los cuatro jobs: `api`, `web`,
       `secretos` y `dependencias`. Lo que el roadmap afirmaba —«existe y nunca
       corrió»— era falso: venía corriendo desde el 06/08 y nadie lo miraba.
       **La lección no es sobre el CI**: una nota de estado que nadie vuelve a
       verificar envejece hasta volverse mentira, y este archivo tenía tres.
-- [ ] Los jobs avisan de la deprecación de Node 20 en las actions
-      (`checkout@v4`, `setup-node@v4`, `gitleaks-action@v2`). No rompe hoy;
-      va a romper solo.
+- [x] `checkout` y `setup-node` a `v5`. `gitleaks-action` sigue en `v2`: es la
+      última que publican, así que ese aviso no se puede sacar desde acá.
 - [x] `npm audit` en el CI. Corta en CRITICAL sobre lo que se despacha
       (`--omit=dev`) e informa los `high` sin romper: un gate que arranca en
       rojo se aprende a ignorar. Web tenía un `high` real (nanoid) y ya está.
 - [x] gitleaks ya corría en CI además del pre-commit — otra nota que este
       archivo daba por pendiente y estaba hecha.
-- [ ] **Nest 10 → 11.** Es el fix de los dos `high` que quedan en producción.
-      Uno de ellos (multer, DoS) **no es alcanzable** —no se parsea multipart
-      en ningún lado—; el otro es express/body-parser transitivo. Migración
-      mayor sobre 955 tests: va sola, no adentro de un `audit fix --force`.
+- [x] **Nest 10 → 11, con Express 4 → 5.** Los dos `high` desaparecieron; queda
+      un `moderate` en `sanitize-html`.
+      **No hubo que tocar una línea de código**, y eso no era previsible: se
+      revisaron antes las cuatro cosas que Express 5 rompe —comodines en rutas
+      (no hay), mutación de `req.query` (no se hace), query anidada (no se usa)
+      y el parser `simple` en vez de `extended`—. La última salvó
+      `listaDesdeQuery`, que ya aceptaba array O string con comas por otra razón.
+      Verificado en el navegador además de los 1087 tests: `orientacion=norte`
+      filtra a 10 de 34, dos valores dan 14 tanto repetidos como separados por
+      coma, y un parámetro inventado sigue dando 400.
 
 ### 17.4 · Superficie de la aplicación ✅ CERRADA
 
@@ -1297,8 +1302,18 @@ Siete tests en `bucket-privado.spec.ts`, y las dos afirmaciones que sostienen
 el gate corren en TODOS los entornos: son peticiones anónimas, así que no
 dependen del host público y se pueden hacer contra el endpoint interno.
 
-**Gate de la etapa completa**: un tercero con acceso al bucket y a la API sin
-credenciales no obtiene ni un dato personal. Falta lo de 17.2 en adelante.
+**Gate de la etapa completa — CERRADO.** Un tercero con acceso al bucket y a la
+API sin credenciales no obtiene ni un dato personal, y ahora además: un usuario
+CON credenciales de otra inmobiliaria tampoco puede escribir una referencia
+cruzada (17.5), no puede recorrer la base a máquina (17.4), y **mirar el DNI de
+alguien deja rastro con nombre y fecha** (17.2).
+
+Lo que esta etapa enseñó, y no es sobre seguridad: **cinco de sus propias notas
+de estado estaban vencidas** —el CI que «nunca corrió» venía corriendo hace dos
+semanas, la CSP que «faltaba» existía desde la etapa 14, el borrado que «no
+purgaba el bucket» sí purgaba, y dos más—. Un documento que nadie vuelve a
+verificar envejece hasta volverse mentira, y este archivo es la prueba. Por eso
+cada ítem de arriba dice **cómo** se verificó, no sólo que se hizo.
 
 ---
 
