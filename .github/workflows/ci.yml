@@ -139,7 +139,7 @@ jobs:
         with:
           fetch-depth: 0
       # El pre-commit se puede saltear con --no-verify; esto no.
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

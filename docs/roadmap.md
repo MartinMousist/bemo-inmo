@@ -1223,8 +1223,11 @@ Un legajo de garante es dato sensible bajo la Ley 25.326.
       corrió»— era falso: venía corriendo desde el 06/08 y nadie lo miraba.
       **La lección no es sobre el CI**: una nota de estado que nadie vuelve a
       verificar envejece hasta volverse mentira, y este archivo tenía tres.
-- [x] `checkout` y `setup-node` a `v5`. `gitleaks-action` sigue en `v2`: es la
-      última que publican, así que ese aviso no se puede sacar desde acá.
+- [x] `checkout` y `setup-node` a `v5`, `gitleaks-action` a `v3`.
+      Casi lo dejo en `v2` afirmando que era la última publicada — **y no lo
+      era**: `v3.0.0` salió en mayo de 2026. Lo agarré consultando la API de
+      releases en vez de escribirlo de memoria, que es literalmente lo que esta
+      etapa vino a aprender.
 - [x] `npm audit` en el CI. Corta en CRITICAL sobre lo que se despacha
       (`--omit=dev`) e informa los `high` sin romper: un gate que arranca en
       rojo se aprende a ignorar. Web tenía un `high` real (nanoid) y ya está.
