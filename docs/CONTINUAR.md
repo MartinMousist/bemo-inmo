@@ -362,7 +362,7 @@ Seguimos con Bemo INMO, en ~/Documents/bemo-inmo.
 Leé docs/CONTINUAR.md y después CLAUDE.md, PLAYBOOK.md, DESIGN.md y
 docs/roadmap.md.
 
-Estado (2026-08-20): 36 migraciones, 1087 tests de API contra Postgres real y
+Estado (2026-08-20): 37 migraciones, 1087 tests de API contra Postgres real y
 197 de front, todo en verde. El CI corre y está verde en los cuatro jobs.
 Entrás con owner@andes.test / unaclavelarga1.
 
