@@ -111,6 +111,11 @@ import { CuentaController } from './cuenta/cuenta.controller';
 import { SeguridadController } from './cuenta/seguridad.controller';
 import { RetencionController } from './datos-personales/retencion.controller';
 import { RetencionService } from './datos-personales/retencion.service';
+import { EmailAdaptador } from './inbox/adaptadores/email.adaptador';
+import { MetaAdaptador } from './inbox/adaptadores/meta.adaptador';
+import { RegistroAdaptadores } from './inbox/adaptadores/registro';
+import { TelegramAdaptador } from './inbox/adaptadores/telegram.adaptador';
+import { TwilioAdaptador } from './inbox/adaptadores/twilio.adaptador';
 import { TotpService } from './auth/totp.service';
 import { CuentaService } from './cuenta/cuenta.service';
 
@@ -232,6 +237,11 @@ import { CuentaService } from './cuenta/cuenta.service';
     // Si fuera opt-in, un endpoint nuevo sin decorador quedaría abierto.
     TotpService,
     RetencionService,
+    TelegramAdaptador,
+    TwilioAdaptador,
+    MetaAdaptador,
+    EmailAdaptador,
+    RegistroAdaptadores,
     { provide: APP_GUARD, useClass: AuthGuard },
     // DESPUÉS del de autenticación, y el orden es la feature: así el contador
     // general puede contar por usuario en vez de por IP, porque `req.actor` ya
