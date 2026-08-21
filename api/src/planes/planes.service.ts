@@ -19,20 +19,39 @@ export class PlanesService {
   async catalogo() {
     const filas = await this.db.query<{
       codigo: string; nombre: string; orden: number;
+      resumen: string | null; para_quien: string | null;
+      precio_usd: string | null;
       max_usuarios: number | null; max_propiedades: number | null;
-      max_portales: number | null; modulos: string[];
+      max_portales: number | null; max_contratos: number | null;
+      max_sucursales: number | null; max_canales: number | null;
+      max_envios_mes: number | null; max_red_compartidas: number | null;
+      modulos: string[];
     }>('SELECT * FROM plan ORDER BY orden');
 
     return filas.map((f) => ({
       codigo: f.codigo,
       nombre: f.nombre,
+      resumen: f.resumen,
+      paraQuien: f.para_quien,
       maxUsuarios: f.max_usuarios,
       maxPropiedades: f.max_propiedades,
       maxPortales: f.max_portales,
+      maxContratos: f.max_contratos,
+      maxSucursales: f.max_sucursales,
+      maxCanales: f.max_canales,
+      maxEnviosMes: f.max_envios_mes,
+      maxRedCompartidas: f.max_red_compartidas,
       modulos: f.modulos,
-      // Sin precio: el gate de la etapa 0 es que alguien diga un número
-      // concreto. Publicar uno inventado sería justamente lo que no se hace.
-      precio: null,
+      /**
+       * El precio sale de la BASE, y hoy está vacío.
+       *
+       * El gate de la etapa 0 es que alguien diga un número concreto; hasta
+       * entonces la página dice «A convenir». Antes esto era un `null` escrito a
+       * mano en el código, así que ni siquiera cargando la columna aparecía
+       * nada: la propuesta está en docs/planes.md con su UPDATE listo, y ahora
+       * ese UPDATE alcanza para publicarlo.
+       */
+      precio: f.precio_usd === null ? null : Number(f.precio_usd),
     }));
   }
 

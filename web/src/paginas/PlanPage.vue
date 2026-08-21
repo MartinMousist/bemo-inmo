@@ -13,8 +13,12 @@ interface Estado {
   cobro: { integrado: boolean; detalle: string };
 }
 interface Plan {
-  codigo: string; nombre: string; maxUsuarios: number | null;
-  maxPropiedades: number | null; modulos: string[]; precio: number | null;
+  codigo: string; nombre: string;
+  resumen: string | null; paraQuien: string | null;
+  maxUsuarios: number | null; maxPropiedades: number | null;
+  maxContratos: number | null; maxCanales: number | null;
+  maxEnviosMes: number | null; maxRedCompartidas: number | null;
+  modulos: string[]; precio: number | null;
 }
 
 const mio = ref<Estado | null>(null);
@@ -22,13 +26,42 @@ const catalogo = ref<Plan[]>([]);
 const cargando = ref(true);
 const error = ref('');
 
-const RECURSO: Record<string, string> = { usuarios: 'Usuarios', propiedades: 'Propiedades' };
-const MODULO: Record<string, string> = {
-  propiedades: 'Cartera', personas: 'Personas', oportunidades: 'Leads',
-  contratos: 'Contratos', ajustes: 'Ajustes por índice', cobranzas: 'Cobranzas',
-  liquidaciones: 'Liquidaciones', plantillas: 'Plantillas', comisiones: 'Comisiones',
-  recordatorios: 'Recordatorios', multisucursal: 'Multi-sucursal',
-  campanias: 'Campañas', api: 'API pública', marca_blanca: 'Marca blanca',
+const RECURSO: Record<string, string> = {
+  usuarios: 'Usuarios', propiedades: 'Propiedades', contratos: 'Contratos vigentes',
+  sucursales: 'Sucursales', canales: 'Canales de la bandeja',
+  envios_mes: 'Envíos este mes', red_compartidas: 'Compartidas en la Red',
+};
+
+/**
+ * Cómo se llama cada módulo EN CASTELLANO.
+ *
+ * Este mapa estaba desactualizado y las claves que no encontraba caían al valor
+ * crudo: la página de planes mostraba «bandeja», «arca», «marca_blanca». Un
+ * nombre interno en una pantalla de precios le pide a quien la lee que adivine
+ * de qué le están hablando.
+ *
+ * El detalle NO es la definición del módulo: es lo que se pierde sin él, que es
+ * la única pregunta que alguien se hace mirando planes.
+ */
+const MODULO: Record<string, { nombre: string; detalle: string }> = {
+  leads: { nombre: 'Leads', detalle: 'Quién preguntó por qué propiedad y en qué anda' },
+  ventas: { nombre: 'Ventas', detalle: 'Reserva, boleto y escritura' },
+  reservas: { nombre: 'Reservas', detalle: 'Señas tomadas y su vencimiento' },
+  comisiones: { nombre: 'Comisiones', detalle: 'El reparto entre la casa y cada agente' },
+  publicaciones: { nombre: 'Publicaciones', detalle: 'El aviso y el feed a los portales' },
+  liquidaciones: { nombre: 'Liquidaciones', detalle: 'La rendición mensual al propietario' },
+  portal: { nombre: 'Portales', detalle: 'Propietario e inquilino ven lo suyo sin llamar' },
+  bandeja: { nombre: 'Bandeja de mensajes', detalle: 'WhatsApp, Instagram y mail en un lugar, con tus plantillas' },
+  bot: { nombre: 'Respuestas automáticas', detalle: 'El bot que contesta y cuándo llama a una persona' },
+  red: { nombre: 'La Red', detalle: 'Propiedades entre inmobiliarias, con comisión compartida' },
+  documentos: { nombre: 'Documentos', detalle: 'Plantillas de la casa y pre-contratos' },
+  emprendimientos: { nombre: 'Emprendimientos', detalle: 'Ventas en pozo, planes de pago y calculadoras' },
+  conciliacion: { nombre: 'Conciliación bancaria', detalle: 'El extracto cruzado contra los cobros' },
+  actas: { nombre: 'Actas', detalle: 'Estado de la propiedad al entregar y al recibir' },
+  multisucursal: { nombre: 'Multi-sucursal', detalle: 'Más de una oficina, con su cartera' },
+  api: { nombre: 'API y webhooks', detalle: 'Conectarlo con lo que ya usás' },
+  marca_blanca: { nombre: 'Marca blanca', detalle: 'Tu logo en lo que ve el cliente' },
+  arca: { nombre: 'ARCA', detalle: 'Facturación electrónica' },
 };
 
 async function cargar() {
@@ -46,6 +79,36 @@ async function cargar() {
 
 function pct(l: Limite): number {
   return l.maximo ? Math.min(100, Math.round((l.usado / l.maximo) * 100)) : 0;
+}
+
+/**
+ * Lo que trae ESTE plan y no traía el anterior.
+ *
+ * Antes cada columna repetía la lista entera, así que el plan Total mostraba
+ * diecisiete renglones y la comparación —que es la única razón por la que
+ * alguien mira tres planes juntos— había que hacerla a ojo, cruzando columnas.
+ *
+ * Mostrando sólo la diferencia, la tabla dice lo que uno vino a preguntar: qué
+ * gano si subo.
+ */
+function nuevosEn(i: number): string[] {
+  const propios = catalogo.value[i]?.modulos ?? [];
+  if (i === 0) return propios;
+  const previos = new Set(catalogo.value[i - 1].modulos);
+  return propios.filter((m) => !previos.has(m));
+}
+
+/** Los topes en una línea, sin los que no aplican. */
+function topesDe(p: Plan): string[] {
+  const t: string[] = [];
+  t.push(`${p.maxUsuarios ?? 'Sin límite de'} usuarios`);
+  t.push(`${p.maxPropiedades ? numero(p.maxPropiedades) : 'sin límite de'} propiedades`);
+  if (p.maxContratos) t.push(`${p.maxContratos} contratos vigentes`);
+  if (p.maxCanales === 0) t.push('sin canales de bandeja');
+  else if (p.maxCanales) t.push(`${p.maxCanales} canales`);
+  if (p.maxEnviosMes) t.push(`${p.maxEnviosMes} envíos por mes`);
+  if (p.maxRedCompartidas) t.push(`${p.maxRedCompartidas} propiedades en la Red`);
+  return t;
 }
 
 onMounted(cargar);
@@ -99,18 +162,40 @@ onMounted(cargar);
       <section class="stack">
         <h2>Los planes</h2>
         <div class="grid">
-          <article v-for="p in catalogo" :key="p.codigo" class="card plan"
+          <article v-for="(p, i) in catalogo" :key="p.codigo" class="card plan"
                    :class="{ actual: p.codigo === mio.plan.codigo }">
             <div class="row entre">
               <h3 class="text-lg">{{ p.nombre }}</h3>
               <StatusChip v-if="p.codigo === mio.plan.codigo" texto="Tu plan" tono="acento" />
             </div>
-            <p class="tope-txt mono">
-              {{ p.maxUsuarios ?? '∞' }} usuarios · {{ p.maxPropiedades ?? '∞' }} propiedades
+
+            <p v-if="p.resumen" class="resumen">{{ p.resumen }}</p>
+
+            <!-- El precio sale de la base. Mientras esté vacío dice «A
+                 convenir»: no se publica un número que nadie decidió. -->
+            <p class="precio">
+              <template v-if="p.precio !== null">USD {{ numero(p.precio) }}<small> por mes</small></template>
+              <template v-else>A convenir</template>
             </p>
-            <p class="precio">A convenir</p>
-            <ul>
-              <li v-for="m in p.modulos" :key="m">{{ MODULO[m] ?? m }}</li>
+
+            <p v-if="p.paraQuien" class="para-quien">{{ p.paraQuien }}</p>
+
+            <ul class="topes">
+              <li v-for="t in topesDe(p)" :key="t">{{ t }}</li>
+            </ul>
+
+            <!-- Sólo la diferencia con el plan anterior. Repetir la lista
+                 entera hacía que el plan de arriba tuviera diecisiete
+                 renglones y que comparar fuera trabajo del lector. -->
+            <p class="delta-cab">
+              <template v-if="i === 0">Incluye</template>
+              <template v-else>Todo lo de {{ catalogo[i - 1].nombre }}, más</template>
+            </p>
+            <ul class="modulos">
+              <li v-for="m in nuevosEn(i)" :key="m">
+                <b>{{ MODULO[m]?.nombre ?? m }}</b>
+                <span v-if="MODULO[m]">{{ MODULO[m].detalle }}</span>
+              </li>
             </ul>
           </article>
         </div>
@@ -136,6 +221,20 @@ onMounted(cargar);
 .plan.actual { border-color: var(--accent-line); }
 .tope-txt { margin: var(--s-xs) 0 0; font-size: 12px; color: var(--muted); }
 .precio { margin: var(--s-sm) 0; font-family: var(--font-title); font-size: 20px; color: var(--ink); }
+.plan { display: flex; flex-direction: column; gap: var(--s-sm); }
+.resumen { margin: 0; font-size: 13px; color: var(--ink-2); }
+.para-quien { margin: 0; font-size: 12px; color: var(--muted); }
+.precio small { font-size: 12px; font-family: var(--font-body); color: var(--muted); }
+
 .plan ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.plan li { font-size: 12px; color: var(--muted); }
+.topes { padding-top: var(--s-sm); border-top: 1px solid var(--line); }
+.topes li { font-size: 12px; color: var(--muted); }
+.delta-cab {
+  margin: var(--s-sm) 0 0; font-size: 11px; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted);
+}
+.modulos { gap: var(--s-sm); }
+.modulos li { display: grid; font-size: 12px; }
+.modulos b { font-weight: 600; color: var(--ink-2); }
+.modulos span { color: var(--muted); }
 </style>

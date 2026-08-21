@@ -26,7 +26,7 @@ const grupos = [
       // lugar. Colgarla de Alquileres decía que era sólo para eso —el lugar en
       // el menú comunica el alcance— y encima la dejaba en el ítem 8, donde no
       // se encuentra.
-      { a: '/inbox', icono: 'chat', texto: 'Bandeja' },
+      { a: '/inbox', icono: 'chat', texto: 'Bandeja', modulo: 'bandeja' },
       { a: '/tablero', icono: 'grafico', texto: 'Tablero' },
     ],
   },
@@ -65,11 +65,11 @@ const grupos = [
       { a: '/avisos', icono: 'campana', texto: 'Avisos' },
       { a: '/vencimientos', icono: 'calendario', texto: 'Vencimientos' },
       { a: '/contratos', icono: 'documento', texto: 'Contratos' },
-      { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones' },
+      { a: '/liquidaciones', icono: 'moneda', texto: 'Liquidaciones', modulo: 'liquidaciones' },
       { a: '/caja', icono: 'sena', texto: 'Caja' },
       // Al lado de Caja porque es la misma pregunta desde el otro lado: Caja es
       // lo que el sistema dice que entró, Conciliación es lo que el banco dice.
-      { a: '/conciliacion', icono: 'moneda', texto: 'Conciliación' },
+      { a: '/conciliacion', icono: 'moneda', texto: 'Conciliación', modulo: 'conciliacion' },
       // Reclamos y gastos van en Alquileres y no en un grupo propio: son el día
       // a día de administrar, y quien los usa ya está mirando esta columna.
       { a: '/reclamos', icono: 'campana', texto: 'Reclamos' },
@@ -84,24 +84,24 @@ const grupos = [
       // Con el módulo Leads: una visita cuelga de una oportunidad, así que en
       // una cuenta sin embudo la agenda estaría siempre vacía.
       { a: '/agenda', icono: 'calendario', texto: 'Agenda', modulo: 'leads' },
-      { a: '/emprendimientos', icono: 'edificio', texto: 'Emprendimientos' },
+      { a: '/emprendimientos', icono: 'edificio', texto: 'Emprendimientos', modulo: 'emprendimientos' },
       { a: '/reservas', icono: 'sena', texto: 'Reservas', modulo: 'reservas' },
       { a: '/ventas', icono: 'grafico', texto: 'Ventas', modulo: 'ventas' },
       { a: '/publicaciones', icono: 'mapa', texto: 'Publicaciones', modulo: 'publicaciones' },
       { a: '/envios', icono: 'documento', texto: 'Envíos a clientes' },
-      { a: '/red', icono: 'mapa', texto: 'La Red' },
+      { a: '/red', icono: 'mapa', texto: 'La Red', modulo: 'red' },
     ],
   },
   {
     titulo: 'Administración',
     items: [
-      { a: '/plantillas', icono: 'documento', texto: 'Pre-contratos' },
+      { a: '/plantillas', icono: 'documento', texto: 'Pre-contratos', modulo: 'documentos' },
       { a: '/equipo', icono: 'equipo', texto: 'Equipo' },
       { a: '/comisiones', icono: 'moneda', texto: 'Comisiones', modulo: 'comisiones' },
       { a: '/importar', icono: 'mas', texto: 'Importar' },
       { a: '/movimientos', icono: 'grafico', texto: 'Movimientos' },
       { a: '/cuenta', icono: 'panel', texto: 'Tu cuenta' },
-      { a: '/bot', icono: 'chat', texto: 'Bot y respuestas' },
+      { a: '/bot', icono: 'chat', texto: 'Respuestas automáticas', modulo: 'bot' },
       { a: '/seguridad', icono: 'candado', texto: 'Seguridad' },
       { a: '/plan', icono: 'documento', texto: 'Tu plan' },
     ],

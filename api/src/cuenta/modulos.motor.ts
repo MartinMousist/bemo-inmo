@@ -114,9 +114,19 @@ export const MODULOS: Modulo[] = [
   },
   {
     clave: 'bandeja',
-    nombre: 'Bandeja omnicanal',
-    detalle: 'WhatsApp, Telegram, Instagram y mail en un solo lugar, con bot y respuestas.',
-    rutas: ['/inbox', '/bot'],
+    nombre: 'Bandeja de mensajes',
+    detalle: 'WhatsApp, Telegram, Instagram y mail en un solo lugar, con tus plantillas a mano.',
+    rutas: ['/inbox'],
+    fijo: true,
+  },
+  {
+    // Separado de `bandeja` a propósito: centralizar mensajes es
+    // infraestructura y sirve desde el primer día; que algo conteste solo es
+    // una decisión, y hay quien no la quiere ni gratis.
+    clave: 'bot',
+    nombre: 'Respuestas automáticas',
+    detalle: 'El bot que contesta, sus palabras de salida y cuándo llama a una persona.',
+    rutas: ['/bot'],
     fijo: true,
   },
   {

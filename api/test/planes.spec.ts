@@ -80,9 +80,12 @@ describe('Planes, límites y API', () => {
   it('el catálogo es público y NO trae precios inventados', async () => {
     const res = await request(app.getHttpServer()).get('/v1/planes').expect(200);
 
-    // Tres, no cuatro: «A medida» era una cuarta fila que nadie usaba y que en
-    // una página de precios se lee como «llamanos», no como un plan.
-    expect(res.body).toHaveLength(3);
+    // Cuatro: Gestión, Base, Inmobiliaria y Total. «A medida» —que era una
+    // quinta fila que nadie usaba y que en una página de precios se lee como
+    // «llamanos», no como un plan— ya no está.
+    expect(res.body).toHaveLength(4);
+    expect(res.body.map((p: { codigo: string }) => p.codigo))
+      .toEqual(['gestion', 'base', 'inmobiliaria', 'total']);
     // El gate de la etapa 0 es que alguien diga un número concreto. Hasta
     // entonces, precio null y no una cifra puesta a ojo. La columna
     // `precio_usd` ya existe (migración 044) y arranca vacía justamente por
@@ -147,37 +150,77 @@ describe('Planes, límites y API', () => {
   describe('el plan se hace valer, no sólo se declara', () => {
     afterEach(async () => { await ponerPlan(inmo.tenantId, 'inmobiliaria'); });
 
-    it('con plan Base no se puede emitir una liquidación', async () => {
-      await ponerPlan(inmo.tenantId, 'base');
-      const res = await http().post('/v1/liquidaciones/generar').set(...como(inmo))
-        .send({ periodo: '2026-08-01' })
-        .expect(403);
+    /**
+     * El plan de entrada TIENE liquidaciones, que es lo más caro de construir.
+     *
+     * Sin ellas no administra nada, y un plan barato al que le falta el trabajo
+     * entero de quien lo compra no es barato: es inútil. Lo que se reserva para
+     * arriba es lo comercial, que es lo que un gestor no hace.
+     */
+    it('el plan Gestión SÍ liquida: es el trabajo de quien lo compra', async () => {
+      await ponerPlan(inmo.tenantId, 'gestion');
+      await http().get('/v1/liquidaciones').set(...como(inmo)).expect(200);
+    });
+
+    it('pero no vende ni reparte comisiones', async () => {
+      await ponerPlan(inmo.tenantId, 'gestion');
+
+      // Con ESCRITURAS y no con lecturas: `ventas` y `comisiones` llevan
+      // `lecturaLibre`, así que un GET pasa a propósito —lo ya registrado sigue
+      // siendo suyo—. Lo que el plan corta es registrar algo nuevo.
+      //
+      // El guard corre antes que el ValidationPipe, así que el cuerpo vacío no
+      // llega a validarse: el 403 gana al 400.
+      const res = await http().post('/v1/ventas').set(...como(inmo)).send({}).expect(403);
       expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
-      expect(res.body.detail).toContain('liquidaciones');
+
+      await http().post('/v1/comisiones/externas').set(...como(inmo)).send({}).expect(403);
     });
 
     /**
      * El caso que separa un límite de plan de un secuestro de datos.
      *
-     * Quien baja de plan deja de EMITIR liquidaciones. Las que ya emitió son
-     * suyas y las sigue viendo. Cortarle el acceso a dos años de rendiciones
-     * para presionarlo a pagar no es un límite comercial.
+     * Quien baja de plan deja de EMITIR. Lo que ya emitió es suyo y lo sigue
+     * viendo. Cortarle el acceso a dos años de registros para presionarlo a
+     * pagar no es un límite comercial.
      */
-    it('pero SÍ puede leer las que ya había emitido', async () => {
-      await ponerPlan(inmo.tenantId, 'base');
+    it('bajar de plan corta emitir, no leer lo ya hecho', async () => {
+      await ponerPlan(inmo.tenantId, 'gestion');
+      // Las liquidaciones ya emitidas se siguen leyendo, aunque el plan no
+      // incluyera el módulo: es el trabajo de esta inmobiliaria, no nuestro.
       await http().get('/v1/liquidaciones').set(...como(inmo)).expect(200);
     });
 
     it('la Red se corta entera, también para leer: ahí leer ES el servicio', async () => {
-      await ponerPlan(inmo.tenantId, 'base');
+      await ponerPlan(inmo.tenantId, 'gestion');
       const res = await http().get('/v1/red').set(...como(inmo)).expect(403);
       expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
     });
 
-    it('la bandeja también: un plan Base no la abre', async () => {
-      await ponerPlan(inmo.tenantId, 'base');
-      await http().get('/v1/inbox').set(...como(inmo)).expect(403);
-      await http().get('/v1/canales').set(...como(inmo)).expect(403);
+    /**
+     * La separación que pidió el producto: centralizar sí, contestar solo no.
+     *
+     * Centralizar mensajes es infraestructura y sirve desde el primer día. Que
+     * algo conteste solo es una decisión —palabras de salida, escalado,
+     * confirmaciones— y mal configurada le contesta cualquier cosa a un
+     * inquilino. Son dos cosas y se compran por separado.
+     */
+    it('Gestión abre la bandeja pero NO el bot', async () => {
+      await ponerPlan(inmo.tenantId, 'gestion');
+
+      await http().get('/v1/inbox').set(...como(inmo)).expect(200);
+      await http().get('/v1/canales').set(...como(inmo)).expect(200);
+
+      // `/respuestas` es la mitad «contesta solo» de la bandeja y va con el
+      // módulo `bot`, igual que la configuración del bot en sí.
+      const res = await http().get('/v1/respuestas').set(...como(inmo)).expect(403);
+      expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
+      expect(res.body.detail).toContain('bot');
+    });
+
+    it('el bot llega recién con el plan Inmobiliaria', async () => {
+      await ponerPlan(inmo.tenantId, 'inmobiliaria');
+      await http().get('/v1/respuestas').set(...como(inmo)).expect(200);
     });
 
     it('los emprendimientos son del plan Total', async () => {

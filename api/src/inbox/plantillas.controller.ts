@@ -17,7 +17,7 @@ import { BotService } from './bot.service';
  * borrarlas es de titular y administración: una plantilla mal escrita se manda
  * a cien clientes antes de que alguien la lea.
  */
-@Modulo('bandeja')
+@Modulo('bot')
 @Controller('respuestas')
 export class RespuestasController {
   constructor(private readonly plantillas: PlantillasChatService) {}
@@ -90,7 +90,7 @@ export class RespuestasController {
  * Sólo titular y administración: define qué se le contesta solo a un cliente y
  * cuándo se avisa a una persona. No es una preferencia personal.
  */
-@Modulo('bandeja')
+@Modulo('bot')
 @Controller('bot')
 export class BotController {
   constructor(private readonly bot: BotService) {}
