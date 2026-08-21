@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import { useUi } from '../stores/ui';
+import { senalesComunes, senalesPropias } from '../dominio/senales-conciliacion';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiEmpty from '../componentes/UiEmpty.vue';
@@ -64,15 +65,18 @@ const conSugerencia = computed(() => movimientos.value.filter((m) => m.cruce.sug
 const sinSugerencia = computed(() => movimientos.value.filter((m) => !m.cruce.sugerencias.length));
 
 /**
- * Las señales, menos la que ya muestra el chip.
+ * Los tres envoltorios de `dominio/senales-conciliacion`.
  *
- * Con cinco cuotas empatadas —el caso normal de un inquilino con varios meses
- * impagos— todas dicen «Monto exacto», y repetirlo en el chip y abajo llena la
- * fila de texto idéntico justo donde hay que encontrar la diferencia.
+ * La lógica vive afuera porque tiene casos —una sola candidata, ninguna
+ * coincidencia, el orden del motor— que se prueban en una mesa y no mirando un
+ * navegador. Acá quedan sólo las firmas que la plantilla necesita.
  */
-function otrasSenales(s: Sugerencia): string[] {
-  return s.exacto ? s.senales.filter((x) => x !== 'Monto exacto') : s.senales;
-}
+const comunesDe = (m: Movimiento) => senalesComunes(m.cruce.sugerencias);
+const propiasDe = (m: Movimiento, s: Sugerencia) => senalesPropias(m.cruce.sugerencias, s);
+
+/** ¿El chip de «Monto exacto» aporta algo, o lo dicen todas? */
+const chipExacto = (m: Movimiento, s: Sugerencia) =>
+  s.exacto && !comunesDe(m).includes('Monto exacto');
 
 async function cargar() {
   cargando.value = true; error.value = '';
@@ -183,19 +187,40 @@ onMounted(cargar);
     <PageHeader
       titulo="Conciliación"
       bajada="Subís el extracto del banco y el sistema propone a qué cuota va cada transferencia. Imputar lo confirmás vos.">
-      <label class="btn" :class="{ ocupado: importando }">
-        {{ importando ? 'Leyendo…' : 'Importar extracto' }}
-        <input type="file" accept=".csv,text/csv,text/plain" :disabled="importando"
-          @change="importar" />
-      </label>
+      <!--
+        `#acciones` y no un hijo suelto.
+
+        `PageHeader` tiene UN slot y se llama `acciones`: un hijo por fuera cae
+        en el slot por defecto, que no existe, y Vue lo descarta sin decir nada.
+        Así estuvo este botón — que es la ÚNICA forma de meter datos en esta
+        pantalla— completamente invisible. La pantalla explicaba en su estado
+        vacío cómo importar un CSV y no había con qué.
+      -->
+      <template #acciones>
+        <label class="btn" :class="{ ocupado: importando }">
+          {{ importando ? 'Leyendo…' : 'Importar extracto' }}
+          <input type="file" accept=".csv,text/csv,text/plain" :disabled="importando"
+            @change="importar" />
+        </label>
+      </template>
     </PageHeader>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <UiSkeleton v-if="cargando" :filas="3" :alto="96" />
 
+    <!-- El estado vacío lleva la acción, no sólo la explicación. Es donde está
+         parado quien abre esto por primera vez, y mandarlo a buscar el botón a
+         la esquina de arriba después de leer tres renglones sobre CSVs es
+         pedirle un paso de más. -->
     <UiEmpty v-else-if="!movimientos.length"
       titulo="No hay movimientos para revisar"
-      detalle="Importá el CSV que baja tu homebanking. Se leen las columnas de fecha, importe, concepto y CUIT o CBU del ordenante; el archivo repetido no se duplica." />
+      detalle="Importá el CSV que baja tu homebanking. Se leen las columnas de fecha, importe, concepto y CUIT o CBU del ordenante; el archivo repetido no se duplica.">
+      <label class="btn" :class="{ ocupado: importando }">
+        {{ importando ? 'Leyendo…' : 'Importar extracto' }}
+        <input type="file" accept=".csv,text/csv,text/plain" :disabled="importando"
+          @change="importar" />
+      </label>
+    </UiEmpty>
 
     <template v-else>
       <section v-if="conSugerencia.length" class="stack">
@@ -218,6 +243,12 @@ onMounted(cargar);
             preseleccionó ninguna a propósito: elegí vos cuál es.
           </p>
 
+          <!-- Lo que comparten todas, dicho una vez. Ver `senalesComunes()`. -->
+          <p v-if="comunesDe(m).length" class="comunes">
+            Las {{ m.cruce.sugerencias.length }} coinciden en:
+            <span v-for="sen in comunesDe(m)" :key="sen" class="senal">{{ sen }}</span>
+          </p>
+
           <ul class="opciones">
             <li v-for="s in m.cruce.sugerencias" :key="s.cuotaId">
               <label class="opcion" :class="{ elegida: elegida[m.id] === s.cuotaId }">
@@ -228,11 +259,11 @@ onMounted(cargar);
                     <strong>{{ mesDe(s.cuota.periodo) }}</strong>
                     <span>{{ s.cuota.inquilino }}</span>
                     <span class="mono cod">{{ s.cuota.etiquetaPropiedad }}</span>
-                    <StatusChip v-if="s.exacto" texto="Monto exacto" tono="ok" />
+                    <StatusChip v-if="chipExacto(m, s)" texto="Monto exacto" tono="ok" />
                   </span>
                   <span class="motivo">Vencía el {{ fecha(s.cuota.venceEl) }}</span>
                   <span class="senales">
-                    <span v-for="sen in otrasSenales(s)" :key="sen" class="senal">{{ sen }}</span>
+                    <span v-for="sen in propiasDe(m, s)" :key="sen" class="senal">{{ sen }}</span>
                   </span>
                 </span>
                 <span class="saldo mono">{{ money(s.cuota.saldo, s.cuota.moneda) }}</span>
@@ -302,6 +333,10 @@ onMounted(cargar);
 .cod { font-size: 12px; color: var(--muted); }
 .motivo { font-size: 12px; color: var(--ink-2); }
 .senales { display: flex; gap: var(--s-xs); flex-wrap: wrap; margin-top: 2px; }
+.comunes {
+  display: flex; align-items: center; gap: var(--s-xs); flex-wrap: wrap;
+  margin: 0 0 var(--s-sm); font-size: 12px; color: var(--muted);
+}
 .senal { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
 .saldo { flex: none; font-size: 13px; }
 .acciones { display: flex; gap: var(--s-sm); }

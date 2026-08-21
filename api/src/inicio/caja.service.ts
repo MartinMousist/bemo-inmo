@@ -77,6 +77,23 @@ export class CajaService {
         params,
       );
 
+      /*
+       * El orden es por la FECHA del cobro, que es la columna que la pantalla
+       * muestra.
+       *
+       * Ordenaba por `created_at`, que es cuándo se CARGÓ la fila. Los dos
+       * datos divergen apenas alguien registra el lunes el cobro del viernes
+       * —que es lo normal— y la lista salía 13/08, 14/08, 08/08, 05/08, 12/08.
+       * Una caja que no está en orden de fecha no se puede recorrer, y peor:
+       * parece que faltaran movimientos.
+       *
+       * `created_at` queda como desempate: dos cobros del mismo día se muestran
+       * en el orden en que se registraron, que es el único orden que existe
+       * entre ellos.
+       *
+       * (El comentario va ACÁ y no adentro del SQL: un backtick dentro de un
+       * template literal lo termina, y este repo ya lo pagó dos veces.)
+       */
       const { rows } = await ej.query<Fila>(
         `SELECT co.id, co.fecha, co.monto, co.moneda, co.medio, co.imputacion,
                 co.comprobante, u.nombre AS registrado_por,
@@ -93,7 +110,8 @@ export class CajaService {
            JOIN propiedad pr ON pr.id = c.propiedad_id
            LEFT JOIN usuario u ON u.id = co.registrado_por
          ${donde}
-          ORDER BY co.created_at DESC
+          -- Ver el comentario de arriba: se ordena por la FECHA del cobro.
+          ORDER BY co.fecha DESC, co.created_at DESC
           LIMIT $4`,
         [...params, f.porPagina],
       );
