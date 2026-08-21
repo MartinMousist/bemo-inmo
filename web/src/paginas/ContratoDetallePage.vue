@@ -447,14 +447,20 @@ onMounted(cargar);
             :tono="proximidad(c.fechaFin).tono === 'neutro' ? 'neutro' : proximidad(c.fechaFin).tono === 'warn' ? 'warn' : 'err'" />
         </template>
 
+        <!--
+          Sin «Alquiler vigente» ni «Vence»: los dos están en el `#resumen` de
+          arriba, que se ve TAMBIÉN con el bloque abierto. Abrirlo mostraba el
+          mismo importe dos veces separado por veinte píxeles, y el mismo plazo
+          otras dos.
+
+          Y no era sólo repetir: «ARS 240.000,00» a 20px no entraba en una
+          columna de 140px, así que se partía en dos renglones y desalineaba la
+          fila entera. El arreglo de la grilla y el de la duplicación eran el
+          mismo.
+        -->
         <div class="resumen">
-          <div><span class="et">Alquiler vigente</span><span class="mono grande">{{ money(c.montoVigente, c.moneda) }}</span></div>
           <div><span class="et">Inicial</span><span class="mono">{{ money(c.montoInicial, c.moneda) }}</span></div>
           <div><span class="et">Honorarios</span><span class="mono">{{ c.honorariosPct }}%</span></div>
-          <div><span class="et">Vence</span>
-            <StatusChip :texto="proximidad(c.fechaFin).texto"
-              :tono="proximidad(c.fechaFin).tono === 'neutro' ? 'neutro' : proximidad(c.fechaFin).tono === 'warn' ? 'warn' : 'err'" />
-          </div>
           <div><span class="et">Locador</span><span>{{ c.locadores.map((l) => l.nombre).join(', ') || '—' }}</span></div>
           <div><span class="et">Inquilino</span><span>{{ c.locatarios.map((l) => l.nombre).join(', ') || '—' }}</span></div>
         </div>
@@ -677,7 +683,10 @@ onMounted(cargar);
 .control { display: flex; align-items: center; gap: var(--s-md); }
 
 .resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s-lg); }
-.resumen > div { display: flex; flex-direction: column; gap: 2px; }
+/* `align-items: flex-start` para que un chip no se estire a todo el ancho de su
+   columna: estirado se lee como un campo de formulario deshabilitado, no como
+   una etiqueta. */
+.resumen > div { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .et { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); }
 .grande { font-size: 20px; color: var(--ink); }
 /* `--muted` sobre `--surface`: 5,87 en claro y 6,42 en oscuro. Medido, no

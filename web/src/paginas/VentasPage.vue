@@ -36,8 +36,43 @@ const POR_PAGINA = 25;
 
 const router = useRouter();
 const auth = useAuth();
+/**
+ * Lo que suman las ventas de la lista, por moneda.
+ *
+ * ── Por qué ──
+ *
+ * La pantalla contestaba «qué se vendió» y no «cuánto entró de comisión». Ese
+ * es el número por el que se abre la pantalla a fin de mes, y había que sumar
+ * una columna a mano.
+ *
+ * **Las CAÍDAS no suman.** Una operación caída tiene precio de cierre y no
+ * dejó un peso: meterla en el total daría una cifra que no existe. Se cuentan
+ * aparte, porque tampoco hay que esconderlas.
+ *
+ * Por moneda, y no en un total único: sumar pesos con dólares da un número que
+ * no es plata de nada.
+ */
 const items = ref<Venta[]>([]);
 const total = ref(0);
+
+const resumen = computed(() => {
+  const por = new Map<string, { cierre: number; comision: number; casa: number }>();
+  let caidas = 0;
+
+  for (const v of items.value) {
+    if (v.estado === 'caida') { caidas += 1; continue; }
+    const a = por.get(v.moneda) ?? { cierre: 0, comision: 0, casa: 0 };
+    a.cierre += v.precioCierre;
+    a.comision += v.totales.operacion;
+    a.casa += v.totales.casa;
+    por.set(v.moneda, a);
+  }
+
+  return {
+    caidas,
+    monedas: [...por.entries()].map(([moneda, x]) => ({ moneda, ...x })),
+  };
+});
 const paginas = ref(1);
 const pagina = ref(1);
 const q = ref('');
@@ -125,7 +160,24 @@ onMounted(cargar);
       />
       <UiEmpty v-else-if="!items.length" titulo="Todavía no hay ventas"
         detalle="Una venta se abre desde la operación de la propiedad, con el precio de cierre. Después se reparte la comisión en sus tres niveles." />
-      <div v-else class="table-wrap">
+      <!-- El resumen ARRIBA de la tabla: es lo que se viene a buscar a fin de
+           mes, y al pie de una lista paginada no está garantizado que se vea. -->
+      <div v-if="items.length && resumen.monedas.length" class="resumen-ventas">
+        <div v-for="m in resumen.monedas" :key="m.moneda" class="grupo">
+          <span><b class="mono">{{ money(m.cierre, m.moneda) }}</b> vendido</span>
+          <span><b class="mono">{{ money(m.comision, m.moneda) }}</b> de comisión</span>
+          <span><b class="mono">{{ money(m.casa, m.moneda) }}</b> para la casa</span>
+        </div>
+        <!-- Las caídas se dicen, no se esconden: son parte de lo que pasó ese
+             mes aunque no sumen un peso. -->
+        <span v-if="resumen.caidas" class="caidas">
+          {{ resumen.caidas }} {{ resumen.caidas === 1 ? 'caída' : 'caídas' }}, sin contar
+        </span>
+      </div>
+
+      <div v-else-if="!items.length" />
+
+      <div v-if="items.length" class="table-wrap">
         <table class="table-clicable">
           <thead>
             <tr><th>Propiedad</th><th>Comprador</th><th class="der">Cierre</th>
@@ -174,4 +226,14 @@ onMounted(cargar);
 .captador { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-2); }
 .criterio { margin: 0; font-size: 12px; color: var(--muted); max-width: 76ch; line-height: 1.5; }
 .criterio strong { color: var(--ink-2); font-weight: 500; }
+
+.resumen-ventas {
+  display: flex; align-items: center; gap: var(--s-lg) var(--s-xl); flex-wrap: wrap;
+  padding: var(--s-md) var(--s-lg);
+  background: var(--surface-2); border-radius: var(--r-md);
+}
+.resumen-ventas .grupo { display: flex; gap: var(--s-lg); flex-wrap: wrap; }
+.resumen-ventas span { font-size: 13px; color: var(--muted); }
+.resumen-ventas b { font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.resumen-ventas .caidas { margin-left: auto; }
 </style>

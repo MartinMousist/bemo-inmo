@@ -437,6 +437,17 @@ async function quitar(g: Garante) {
 }
 
 onMounted(cargar);
+/**
+ * Los pendientes que ESTE bloque tiene que mostrar.
+ *
+ * Enmarcado por fuera (`marco: false`), el primero ya lo muestra el envoltorio
+ * al lado del título; acá van del segundo en adelante. Con marco propio, van
+ * todos, porque la cabecera de acá sólo pone el chip.
+ */
+const pendientesPropios = computed(() => {
+  const p = verificacion.value?.pendientes ?? [];
+  return props.marco ? p : p.slice(1);
+});
 </script>
 
 <template>
@@ -455,8 +466,20 @@ onMounted(cargar);
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
-    <ul v-if="verificacion && verificacion.pendientes.length" class="pendientes">
-      <li v-for="p in verificacion.pendientes" :key="p">{{ p }}</li>
+    <!--
+      Sin el primer pendiente cuando el bloque va enmarcado por fuera.
+
+      Con `marco: false` el `BloqueColapsable` que lo envuelve ya muestra el
+      chip Y el primer pendiente al lado del título. Repetirlo acá abajo hacía
+      que «Faltan garantes: hay 0 y el mínimo es 2» apareciera dos veces con
+      cuarenta píxeles de diferencia, y que el bloque abierto no dijera nada que
+      el cerrado no dijera.
+
+      Es la misma regla que las señales de la conciliación: lo que ya está
+      dicho no se vuelve a decir.
+    -->
+    <ul v-if="pendientesPropios.length" class="pendientes">
+      <li v-for="p in pendientesPropios" :key="p">{{ p }}</li>
     </ul>
 
     <p v-if="!cargando && !garantes.length" class="vacio">
