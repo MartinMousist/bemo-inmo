@@ -126,6 +126,16 @@ export interface Propiedad {
    */
   redCompartida: boolean;
   redComisionPct: number | null;
+  /**
+   * Fotos que el importador dejó encoladas y todavía no bajó.
+   *
+   * Sin esto, quien importa una cartera ve las propiedades sin fotos y cree que
+   * no entraron. Están: se están bajando de a poco, y decirlo cuesta un número.
+   */
+  fotosPendientes: number;
+  /** Las que se dieron por perdidas, con el motivo de la primera. */
+  fotosFallidas: number;
+  motivoFotoFallida: string | null;
   tipo: string;
   supTotal: number | null;
   supCubierta: number | null;
@@ -993,6 +1003,9 @@ interface FilaPropiedad {
   geocode_el: Date | null;
   red_compartida: boolean;
   red_comision_pct: string | null;
+  fotos_pendientes: string | null;
+  fotos_fallidas: string | null;
+  motivo_foto_fallida: string | null;
   tipo: string;
   sup_total: string | null;
   sup_cubierta: string | null;
@@ -1031,6 +1044,17 @@ interface FilaPropiedad {
 const selectPropiedad = (incluirCerradas = false): string => `
   SELECT p.*,
     cap.nombre AS captador_nombre,
+    -- Las fotos que el importador dejó encoladas. Sin este número, quien
+    -- importa una cartera ve las propiedades sin fotos y cree que no entraron.
+    (SELECT count(*) FROM foto_pendiente q
+      WHERE q.propiedad_id = p.id AND q.estado = 'pendiente') AS fotos_pendientes,
+    (SELECT count(*) FROM foto_pendiente q
+      WHERE q.propiedad_id = p.id AND q.estado = 'fallida') AS fotos_fallidas,
+    -- El motivo de UNA, no de todas: cuando fallan ocho fotos de la misma
+    -- propiedad, el motivo es el mismo ocho veces.
+    (SELECT q.ultimo_error FROM foto_pendiente q
+      WHERE q.propiedad_id = p.id AND q.estado = 'fallida'
+      ORDER BY q.orden LIMIT 1) AS motivo_foto_fallida,
     -- La portada, para la cartera en tarjetas.
     --
     -- Es un ORDER BY y no un WHERE es_portada: el índice único parcial
@@ -1135,6 +1159,9 @@ function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
     geocodeEl: f.geocode_el ? f.geocode_el.toISOString() : null,
     redCompartida: f.red_compartida === true,
     redComisionPct: num(f.red_comision_pct),
+    fotosPendientes: Number(f.fotos_pendientes ?? 0),
+    fotosFallidas: Number(f.fotos_fallidas ?? 0),
+    motivoFotoFallida: f.motivo_foto_fallida ?? null,
     tipo: f.tipo,
     supTotal: num(f.sup_total),
     supCubierta: num(f.sup_cubierta),

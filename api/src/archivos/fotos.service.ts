@@ -11,7 +11,7 @@ export interface Foto {
 }
 
 /** Un aviso con más de 30 fotos no lo mira nadie, y el bucket no es infinito. */
-const MAX_POR_PROPIEDAD = 30;
+export const MAX_POR_PROPIEDAD = 30;
 
 @Injectable()
 export class FotosService {

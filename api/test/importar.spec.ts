@@ -378,5 +378,92 @@ describe('Importación desde CSV', () => {
         expect(r.text).toContain('moneda');
       });
     });
+
+    /**
+     * El propietario, que es lo que convierte una lista de direcciones en una
+     * cartera administrable: sin titular no hay a quién liquidarle.
+     */
+    describe('el propietario', () => {
+      it('ata la propiedad al dueño que YA existe, buscándolo por documento', async () => {
+        await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'personas', csv: 'nombre;apellido;dni\nMarta;Quiroga;16777333\n' })
+          .expect(201);
+
+        const csv =
+          'calle;localidad;tipo;titular_doc\n' +
+          'Con Dueña;Ciudad;casa;16.777.333\n';
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+        expect(r.body.importadas).toBe(1);
+
+        const lista = await http().get('/v1/propiedades?q=Con Dueña').set(...como()).expect(200);
+        const det = await http().get(`/v1/propiedades/${lista.body.items[0].id}`)
+          .set(...como()).expect(200);
+        expect(det.body.titulares).toHaveLength(1);
+        expect(det.body.titulares[0].nombre).toContain('Quiroga');
+        expect(det.body.titulares[0].porcentaje).toBe(100);
+      });
+
+      it('el documento se compara sin puntos: la planilla los escribe como quiere', async () => {
+        // «16.777.333» y «16777333» son la misma persona. Sin normalizar, la
+        // segunda propiedad crearía una Marta Quiroga duplicada.
+        const csv = 'calle;localidad;tipo;titular_doc\nSin Puntos;Ciudad;casa;16777333\n';
+        await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+
+        const r = await http().get('/v1/personas?q=16777333').set(...como()).expect(200);
+        expect(r.body.items).toHaveLength(1);
+      });
+
+      it('si el dueño no existe se crea, y doce propiedades suyas no lo duplican', async () => {
+        const csv =
+          'calle;localidad;tipo;titular_doc;titular\n' +
+          'Nueva Uno;Ciudad;casa;20999888;Ernesto Ballester\n' +
+          'Nueva Dos;Ciudad;casa;20999888;Ernesto Ballester\n' +
+          'Nueva Tres;Ciudad;casa;20999888;Ernesto Ballester\n';
+
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+        expect(r.body.importadas).toBe(3);
+
+        // UNA persona, no tres: la segunda fila ya lo encuentra por documento.
+        const p = await http().get('/v1/personas?q=20999888').set(...como()).expect(200);
+        expect(p.body.items).toHaveLength(1);
+        expect(p.body.items[0].nombre).toBe('Ernesto');
+        expect(p.body.items[0].apellido).toBe('Ballester');
+        expect(p.body.items[0].docTipo).toBe('dni');
+      });
+
+      it('once dígitos se cargan como CUIT y no como DNI', async () => {
+        const csv =
+          'calle;localidad;tipo;titular_doc;titular\n' +
+          'De Sociedad;Ciudad;local;30712345670;Inversora del Oeste SRL\n';
+        await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+
+        const p = await http().get('/v1/personas?q=30712345670').set(...como()).expect(200);
+        expect(p.body.items[0].docTipo).toBe('cuit');
+      });
+
+      it('un documento que no existe y sin nombre no crea a nadie', async () => {
+        // Una persona con documento y sin nombre es una fila que después nadie
+        // sabe qué es. La propiedad entra igual, sin titular.
+        const csv = 'calle;localidad;tipo;titular_doc\nHuerfana;Ciudad;casa;27000111\n';
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+        expect(r.body.importadas).toBe(1);
+
+        const p = await http().get('/v1/personas?q=27000111').set(...como()).expect(200);
+        expect(p.body.items).toHaveLength(0);
+      });
+
+      it('sin columnas de titular no pasa nada: la mayoría de las planillas no lo trae', async () => {
+        const csv = 'calle;localidad;tipo\nSin Titular;Ciudad;casa\n';
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+        expect(r.body.importadas).toBe(1);
+        expect(r.body.problemas).toHaveLength(0);
+      });
+    });
   });
 });

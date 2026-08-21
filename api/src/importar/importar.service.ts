@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DbService, type Ejecutor } from '../database/db.service';
+import { MAX_POR_PROPIEDAD } from '../archivos/fotos.service';
 import { AppError, ErrorCode } from '../common/app-error';
 import {
   fechaFlexible,
@@ -70,6 +71,19 @@ const ALIAS: Record<Recurso, Record<string, string[]>> = {
     // Faltaban, y sin ellos una migración desde otro sistema dejaba la cartera
     // cargada y SIN UN PRECIO: doscientas propiedades y ni un número. La
     // planilla que exporta cualquier CRM del rubro los trae.
+    // ── El propietario ──
+    //
+    // Se busca por DOCUMENTO, que es lo único que identifica a una persona sin
+    // ambigüedad: «Juan Pérez» hay tres en cualquier cartera.
+    titularDoc: ['titular_doc', 'propietario_doc', 'titular_dni', 'propietario_dni',
+                 'titular_cuit', 'propietario_cuit', 'dni_propietario'],
+    titularNombre: ['titular', 'propietario', 'titular_nombre', 'propietario_nombre',
+                    'dueno', 'dueño'],
+    // Las URLs de las fotos, separadas por `|` o por espacios. No por coma: una
+    // planilla exportada de Excel ya usa la coma para separar columnas, y una
+    // lista de URLs con comas adentro de un campo entrecomillado es exactamente
+    // donde se rompen los parsers ajenos que después le pasan el archivo a otro.
+    fotos: ['fotos', 'imagenes', 'imagen', 'foto', 'photos', 'fotos_url'],
     operacion: ['operacion', 'tipo_operacion', 'op', 'modalidad'],
     precio: ['precio', 'valor', 'importe', 'precio_venta', 'precio_alquiler'],
     moneda: ['moneda', 'currency', 'divisa'],
@@ -295,6 +309,9 @@ export class ImportarService {
       lat: numeroFlexible(v('lat')),
       lng: numeroFlexible(v('lng')),
       ...this.operacionDeLaFila(v, nroFila, problemas),
+      titularDoc: (v('titularDoc') ?? '').replace(/\D/g, '') || null,
+      titularNombre: v('titularNombre') || null,
+      fotos: (v('fotos') ?? '').split(/[|\s]+/).map((x) => x.trim()).filter(Boolean),
     };
   }
 
@@ -406,6 +423,9 @@ export class ImportarService {
       ],
     );
 
+    await this.vincularTitular(ej, tenantId, prop[0].id, d);
+    await this.encolarFotos(ej, tenantId, prop[0].id, d);
+
     // La operación va en la MISMA transacción que la propiedad: si el precio
     // rebota por lo que sea, no queda una propiedad huérfana sin él — que es
     // exactamente el estado que esto vino a evitar.
@@ -417,6 +437,118 @@ export class ImportarService {
         [tenantId, prop[0].id, d.operacion, d.precio, d.moneda, d.expensas ?? null],
       );
     }
+  }
+
+  /**
+   * Ata la propiedad a su dueño.
+   *
+   * ── Se busca por DOCUMENTO y no por nombre ──
+   *
+   * «Juan Pérez» hay tres en cualquier cartera, y atar una propiedad al Juan
+   * equivocado manda la liquidación a la persona equivocada. El documento es lo
+   * único que identifica sin ambigüedad, y ya es único por inmobiliaria.
+   *
+   * ── Si no existe, se crea ──
+   *
+   * La alternativa era rechazar y pedir que primero se importen las personas.
+   * Suena prolijo y en la práctica es una migración en dos pasos donde el
+   * segundo falla por un documento escrito distinto. Se crea con lo que la fila
+   * trae —nombre y documento— y se avisa en la lista de problemas: quien mira
+   * el resultado ve exactamente a quién se creó.
+   *
+   * Con doce propiedades del mismo dueño se crea UNA persona: la segunda fila ya
+   * lo encuentra por documento.
+   *
+   * ── El 100% es un default, no una afirmación ──
+   *
+   * La planilla no trae porcentajes de condominio. Se pone 100 porque es el caso
+   * de la enorme mayoría y porque `titularidad.porcentaje` no admite nulo; el
+   * condominio se corrige en la ficha, que es donde se ve.
+   */
+  private async vincularTitular(
+    ej: Ejecutor,
+    tenantId: string,
+    propiedadId: string,
+    d: Record<string, unknown>,
+  ): Promise<void> {
+    const doc = d.titularDoc as string | null;
+    const nombre = d.titularNombre as string | null;
+    if (!doc && !nombre) return;
+
+    let personaId: string | null = null;
+
+    if (doc) {
+      const { rows } = await ej.query<{ id: string }>(
+        'SELECT id FROM persona WHERE doc_numero = $1 LIMIT 1',
+        [doc],
+      );
+      personaId = rows[0]?.id ?? null;
+    }
+
+    if (!personaId) {
+      // Sin nombre no se puede crear a nadie: una persona con documento y sin
+      // nombre es una fila que después nadie sabe qué es.
+      if (!nombre) return;
+
+      const partes = nombre.trim().split(/\s+/);
+      const apellido = partes.length > 1 ? partes.slice(1).join(' ') : null;
+
+      const { rows } = await ej.query<{ id: string }>(
+        `INSERT INTO persona (tenant_id, nombre, apellido, doc_tipo, doc_numero)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [tenantId, partes[0], apellido, doc ? (doc.length === 11 ? 'cuit' : 'dni') : null, doc],
+      );
+      personaId = rows[0].id;
+    }
+
+    await ej.query(
+      `INSERT INTO titularidad (tenant_id, propiedad_id, persona_id, porcentaje)
+       VALUES ($1, $2, $3, 100)
+       ON CONFLICT (propiedad_id, persona_id) DO NOTHING`,
+      [tenantId, propiedadId, personaId],
+    );
+  }
+
+  /**
+   * Deja las fotos anotadas para que las baje el worker.
+   *
+   * ── Por qué NO se bajan acá ──
+   *
+   * Doscientas propiedades con ocho fotos son mil seiscientos pedidos a un
+   * servidor ajeno. Adentro de esta transacción, eso muere por timeout y
+   * mientras tanto tiene una conexión del pool esperando a un tercero.
+   *
+   * Acá sólo se escriben filas —rápido, y adentro de la misma transacción que
+   * la propiedad, así que no quedan fotos apuntando a una propiedad que no
+   * entró—. El resto lo hace `FotosColaService`.
+   *
+   * La URL NO se valida en este punto. Se valida al bajarla, que es cuando
+   * importa: guardar una fila con una URL mala cuesta nada y deja el motivo
+   * escrito donde el usuario lo puede leer, en vez de descartarla en silencio
+   * durante la importación.
+   */
+  private async encolarFotos(
+    ej: Ejecutor,
+    tenantId: string,
+    propiedadId: string,
+    d: Record<string, unknown>,
+  ): Promise<void> {
+    const urls = (d.fotos as string[] | undefined) ?? [];
+    if (!urls.length) return;
+
+    // El tope se IMPORTA de `fotos.service`, no se copia. La primera versión lo
+    // escribió a mano —20 donde el real era 30— y el comentario decía «el mismo
+    // tope». Un número duplicado se despega; un comentario que afirma que no,
+    // miente.
+    const aEncolar = urls.slice(0, MAX_POR_PROPIEDAD);
+
+    await ej.query(
+      `INSERT INTO foto_pendiente (tenant_id, propiedad_id, url, orden)
+       SELECT $1, $2, u.url, u.orden
+         FROM unnest($3::text[]) WITH ORDINALITY AS u(url, orden)
+       ON CONFLICT (propiedad_id, url) DO NOTHING`,
+      [tenantId, propiedadId, aEncolar],
+    );
   }
 
   /** Traduce el error de Postgres a algo que le sirva a quien mira la planilla. */
@@ -449,7 +581,7 @@ export const PLANTILLAS: Record<Recurso, string> = {
   // cartera importada sirva. Sin ellos entran doscientas propiedades y ni un
   // número, y quien migró tiene que cargar los precios a mano igual.
   propiedades:
-    'calle;numero;piso;depto;localidad;provincia;tipo;superficie total;ambientes;dormitorios;banos;cocheras;operacion;precio;moneda;expensas;descripcion\r\n' +
-    'Arístides Villanueva;345;3;B;Ciudad;Mendoza;departamento;78;3;2;1;1;alquiler;480000;ARS;62000;"Luminoso, con balcón"\r\n' +
-    'San Martín;1200;;;Godoy Cruz;Mendoza;casa;210;5;3;2;2;venta;185000;USD;;"Con parque y pileta"\r\n',
+    'calle;numero;piso;depto;localidad;provincia;tipo;superficie total;ambientes;dormitorios;banos;cocheras;operacion;precio;moneda;expensas;descripcion;titular_doc;titular;fotos\r\n' +
+    'Arístides Villanueva;345;3;B;Ciudad;Mendoza;departamento;78;3;2;1;1;alquiler;480000;ARS;62000;"Luminoso, con balcón";20345678901;Marta Quiroga;https://ejemplo.com/1.jpg|https://ejemplo.com/2.jpg\r\n' +
+    'San Martín;1200;;;Godoy Cruz;Mendoza;casa;210;5;3;2;2;venta;185000;USD;;"Con parque y pileta";16777333;Ernesto Ballester;\r\n',
 };

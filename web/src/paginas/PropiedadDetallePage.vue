@@ -43,6 +43,7 @@ interface Propiedad {
   geocodeFuente: string | null;
   geocodeEl: string | null;
   redCompartida: boolean; redComisionPct: number | null;
+  fotosPendientes: number; fotosFallidas: number; motivoFotoFallida: string | null;
   supTotal: number | null; supCubierta: number | null;
   ambientes: number | null; dormitorios: number | null; banos: number | null; cocheras: number | null;
   antiguedad: number | null; descripcion: string | null;
@@ -311,6 +312,23 @@ async function alternarRed(compartida: boolean) {
       </PageHeader>
 
       <p v-if="error" class="alert" role="alert">{{ error }}</p>
+
+      <!--
+        Las fotos que quedaron encolando.
+
+        Quien acaba de importar su cartera abre una ficha y la ve sin fotos.
+        Están: se están bajando de a poco, en segundo plano, y decirlo cuesta un
+        renglón. Sin esto la conclusión razonable es «no entraron».
+      -->
+      <p v-if="p.fotosPendientes" class="nota-fotos">
+        {{ p.fotosPendientes === 1 ? 'Falta bajar 1 foto' : `Faltan bajar ${p.fotosPendientes} fotos` }}
+        de la importación. Aparecen solas en unos minutos.
+      </p>
+      <p v-if="p.fotosFallidas" class="nota-fotos falla">
+        {{ p.fotosFallidas === 1 ? 'No se pudo bajar 1 foto' : `No se pudieron bajar ${p.fotosFallidas} fotos` }}.
+        <template v-if="p.motivoFotoFallida">{{ p.motivoFotoFallida }}</template>
+        Se pueden subir a mano desde acá.
+      </p>
 
       <div class="cols">
         <div class="stack">
@@ -796,4 +814,13 @@ async function alternarRed(compartida: boolean) {
 .pct { color: var(--muted); }
 .vacio { margin: 0; color: var(--muted-2); font-size: 13px; }
 .volver { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--s-xs); }
+
+.nota-fotos {
+  margin: 0; padding: var(--s-sm) var(--s-md);
+  background: var(--surface-2); border-radius: var(--r-md);
+  font-size: 13px; color: var(--ink-2);
+}
+/* El ámbar es para lo que quedó mal y pide una acción — subirlas a mano —, no
+   para lo que simplemente todavía no terminó. */
+.nota-fotos.falla { background: var(--warning-tint); color: var(--warning-ink); }
 </style>
