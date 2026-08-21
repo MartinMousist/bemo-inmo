@@ -193,6 +193,27 @@ export function armarPresupuesto(
     });
   }
 
+  /**
+   * La deriva del redondeo la absorbe la ÚLTIMA cuota.
+   *
+   * Redondear 40 líneas a dos decimales no vuelve a dar el precio: una unidad
+   * de USD 105.500 daba un total de 105.500,08. Ocho centavos no cambian nada
+   * en la vida real, pero en un presupuesto que el cliente imprime se leen como
+   * un error —y este producto está anclado en «exacto»—.
+   *
+   * Se ajusta la última cuota y no el anticipo ni la entrega: esos dos son
+   * números redondos que las dos partes acordaron y que aparecen en el boleto.
+   * La última cuota es donde la amortización pone siempre el resto.
+   */
+  const bruto = lineas.reduce((a, l) => a + l.monto, 0);
+  const deriva = r2(precio - bruto);
+
+  if (deriva !== 0) {
+    const ultimaCuota = [...lineas].reverse().find((l) => l.concepto === 'cuota');
+    const aAjustar = ultimaCuota ?? lineas[lineas.length - 1];
+    if (aAjustar) aAjustar.monto = r2(aAjustar.monto + deriva);
+  }
+
   const total = r2(lineas.reduce((a, l) => a + l.monto, 0));
   const contraEntrega = r2(precio * plan.contraEntregaPct / 100);
   const anticipo = r2(precio * plan.anticipoPct / 100);

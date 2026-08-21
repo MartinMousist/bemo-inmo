@@ -123,6 +123,8 @@ const router = createRouter({
     { path: '/inbox', component: () => import('./paginas/InboxPage.vue') },
     { path: '/canales', component: () => import('./paginas/CanalesPage.vue') },
     { path: '/bot', component: () => import('./paginas/BotConfigPage.vue') },
+    { path: '/emprendimientos', component: () => import('./paginas/EmprendimientosPage.vue') },
+    { path: '/emprendimientos/:id', component: () => import('./paginas/EmprendimientoDetallePage.vue') },
     { path: '/importar', component: () => import('./paginas/ImportarPage.vue') },
 
     { path: '/:resto(.*)*', component: () => import('./paginas/NoEncontradaPage.vue') },

@@ -23,14 +23,41 @@ const PLAN: PlanPago = {
 
 describe('Plan de pago en pozo — motor', () => {
   describe('la invariante del 100%', () => {
-    it('las líneas suman EXACTAMENTE el precio', () => {
+    it('las líneas suman EXACTAMENTE el precio, al centavo', () => {
       // Es lo único que no puede fallar. Si suman 98, la desarrolladora regala
       // dos puntos sin enterarse; si suman 102, el comprador lo descubre en la
       // cuota doce.
       const p = armarPresupuesto(100_000, PLAN, '2026-03-10');
-      const suma = p.lineas.reduce((a, l) => a + l.monto, 0);
-      expect(Math.abs(suma - 100_000)).toBeLessThan(0.5);
-      expect(p.total).toBeCloseTo(100_000, 0);
+
+      // Se redondea la SUMA antes de comparar, y no es una concesión: sumar 40
+      // números en coma flotante acumula error de IEEE-754 aunque cada línea sea
+      // exacta al centavo (da 99999.99999999999). Lo que se le muestra a alguien
+      // es `total`, que sí está redondeado, y eso es lo que tiene que dar justo.
+      // La alternativa real sería guardar centavos enteros en toda la app, que
+      // es otro refactor y no el de hoy.
+      const suma = Math.round(p.lineas.reduce((a, l) => a + l.monto, 0) * 100) / 100;
+      expect(suma).toBe(100_000);
+      expect(p.total).toBe(100_000);
+    });
+
+    it('un precio que no divide exacto tampoco deja deriva', () => {
+      // USD 105.500 entre 36 cuotas daba un total de 105.500,08: ocho centavos
+      // que en un presupuesto impreso se leen como un error. Los absorbe la
+      // última cuota, que es donde la amortización pone siempre el resto.
+      for (const precio of [105_500, 87_333, 62_001, 149_999]) {
+        const p = armarPresupuesto(precio, PLAN, '2026-03-10');
+        const suma = Math.round(p.lineas.reduce((a, l) => a + l.monto, 0) * 100) / 100;
+        expect(suma).toBe(precio);
+        expect(p.total).toBe(precio);
+      }
+    });
+
+    it('la deriva NO la absorbe el anticipo ni la entrega', () => {
+      // Son números redondos que las dos partes acordaron y que aparecen en el
+      // boleto: moverlos por un centavo de redondeo sería cambiar lo pactado.
+      const p = armarPresupuesto(105_500, PLAN, '2026-03-10');
+      expect(p.lineas.find((l) => l.concepto === 'anticipo')!.monto).toBe(31_650);
+      expect(p.lineas.find((l) => l.concepto === 'contra_entrega')!.monto).toBe(10_550);
     });
 
     it('rechaza un plan cuyos fijos pasan el 100%', () => {
