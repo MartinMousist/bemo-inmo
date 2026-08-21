@@ -19,35 +19,13 @@ export function guardarPlegado(plegado: boolean): void {
   localStorage.setItem(CLAVE, plegado ? '1' : '0');
 }
 
-const CLAVE_GRUPOS = 'bemo-inmo:sidebar:cerrados';
 
-/**
- * Qué grupos del menú están plegados.
- *
- * ── Por qué se guardan los CERRADOS y no los abiertos ──
- *
- * Para que un grupo nuevo nazca visible. Si guardáramos los abiertos, la
- * sección que se agregue el mes que viene no estaría en la lista de nadie y
- * quedaría escondida para todos los que ya usan el sistema —una feature nueva
- * que nadie encuentra—. Con los cerrados, lo que no se conoce se muestra.
- *
- * `null` significa «nunca eligió nada»: ahí manda el default, que es dejar
- * abierto sólo el grupo de la pantalla actual. Son 32 entradas en 6 secciones y
- * abiertas de una no entran en pantalla; el ítem 8 exige scrollear para
- * encontrarlo, que es exactamente cómo se pierde una pantalla nueva.
- */
-export function leerGruposCerrados(): Set<string> | null {
-  const crudo = localStorage.getItem(CLAVE_GRUPOS);
-  if (crudo === null) return null;
-  try {
-    const arr = JSON.parse(crudo) as unknown;
-    return Array.isArray(arr) ? new Set(arr.map(String)) : new Set();
-  } catch {
-    // Un valor corrupto no puede dejar el menú inutilizable: se cae al default.
-    return null;
-  }
-}
-
-export function guardarGruposCerrados(cerrados: Set<string>): void {
-  localStorage.setItem(CLAVE_GRUPOS, JSON.stringify([...cerrados]));
-}
+// Acá vivían `leerGruposCerrados()` y `guardarGruposCerrados()`.
+//
+// Guardaban qué grupos del menú estaban plegados, y era una idea que se rompía
+// sola: nadie pliega un grupo a mano —sólo los abre para navegar— así que cada
+// navegación borraba uno del conjunto guardado hasta dejarlo vacío, y el menú
+// volvía a mostrar sus treinta y cinco entradas para siempre.
+//
+// Ahora el estado es de la sesión y lo calcula `AppShell`: abierto el grupo
+// donde estás, más los que abras en esta visita.

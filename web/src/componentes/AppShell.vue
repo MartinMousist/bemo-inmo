@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuth } from '../stores/auth';
 import {
-  guardarGruposCerrados, guardarPlegado, leerGruposCerrados, leerPlegado,
+  guardarPlegado, leerPlegado,
 } from '../dominio/sidebar';
 import UiIcon from './UiIcon.vue';
 import BemoLogo from './BemoLogo.vue';
@@ -134,16 +134,28 @@ const paletaAbierta = ref(false);
  *
  * ── Por qué hizo falta ──
  *
- * Son 32 entradas en 6 secciones. Abiertas todas de una no entran en pantalla,
- * así que la número 8 —«Bandeja»— sólo se encuentra scrolleando. Una pantalla
- * que hay que buscar es una pantalla que no existe: pasó, y por eso esto está.
+ * Son más de treinta entradas en seis secciones. Abiertas todas de una no
+ * entran en pantalla, así que la número ocho —«Bandeja»— sólo se encuentra
+ * scrolleando. Una pantalla que hay que buscar es una pantalla que no existe.
  *
- * La primera vez queda abierto SÓLO el grupo de la pantalla actual. Después
- * manda lo que el usuario elija, que se recuerda.
+ * ── Por qué NO se recuerda, aunque parezca que debería ──
+ *
+ * La primera versión guardaba qué grupos estaban CERRADOS. Se degradaba sola:
+ * nadie cierra un grupo a mano —sólo los abre para navegar— y cada navegación
+ * borraba uno del conjunto guardado. Después de recorrer las seis secciones una
+ * vez, quedaba vacío PARA SIEMPRE y el menú volvía a mostrar las treinta y
+ * cinco entradas. La función estaba diseñada para dejar de funcionar, y así
+ * llegó a manos del usuario: se descubrió mirando el `localStorage` de una
+ * cuenta de uso real, que tenía `[]`.
+ *
+ * Ahora no se guarda nada. Abierto está el grupo donde estás parado, más los
+ * que hayas abierto en ESTA visita. Recargar vuelve a la vista limpia, que es
+ * el estado que uno quiere al empezar el día — y no puede acumularse hasta
+ * dejar de servir.
  */
-const cerrados = ref<Set<string>>(new Set());
+const abiertosAMano = ref<Set<string>>(new Set());
 
-/** El grupo al que pertenece la ruta actual. Nunca se pliega solo. */
+/** El grupo al que pertenece la ruta actual. Siempre abierto. */
 const grupoActivo = computed(() => {
   const p = ruta.path;
   // Se elige la coincidencia MÁS LARGA: `/propiedades/venta` tiene que ganarle
@@ -163,39 +175,24 @@ function abierto(titulo: string): boolean {
   // Plegada a iconos no hay títulos donde tocar: si además se plegaran los
   // grupos, la barra quedaría sin forma de navegar.
   if (plegado.value) return true;
-  return !cerrados.value.has(titulo);
+  return titulo === grupoActivo.value || abiertosAMano.value.has(titulo);
 }
 
 function alternar(titulo: string) {
-  const s = new Set(cerrados.value);
+  // El grupo activo no se pliega: dejaría la pantalla en la que estás sin su
+  // entrada marcada, y el menú sin decir dónde estás parado.
+  if (titulo === grupoActivo.value) return;
+
+  const s = new Set(abiertosAMano.value);
   if (s.has(titulo)) s.delete(titulo);
   else s.add(titulo);
-  cerrados.value = s;
-  guardarGruposCerrados(s);
+  abiertosAMano.value = s;
 }
 
-onMounted(() => {
-  const guardado = leerGruposCerrados();
-  if (guardado) {
-    cerrados.value = guardado;
-    return;
-  }
-  // Primera vez: todo plegado menos donde está parado.
-  cerrados.value = new Set(
-    gruposVisibles.value.map((g) => g.titulo).filter((t) => t !== grupoActivo.value),
-  );
-});
-
-// Al entrar a una pantalla, su grupo se abre. Sin esto, navegar por la paleta
-// (⌘K) o por un enlace dejaba el menú mostrando un grupo que no es donde estás.
-watch(grupoActivo, (t) => {
-  if (t && cerrados.value.has(t)) {
-    const s = new Set(cerrados.value);
-    s.delete(t);
-    cerrados.value = s;
-    guardarGruposCerrados(s);
-  }
-});
+// Al cambiar de sección, lo abierto a mano se suelta. Si no, abrir tres grupos
+// buscando algo los dejaría abiertos el resto de la sesión y se llegaría al
+// mismo menú de treinta y cinco entradas, sólo que más despacio.
+watch(grupoActivo, () => { abiertosAMano.value = new Set(); });
 
 /**
  * Barra lateral plegada.

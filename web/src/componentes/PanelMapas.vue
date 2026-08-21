@@ -242,13 +242,24 @@ onMounted(cargar);
 </template>
 
 <style scoped>
+/* Neutro, no ámbar.
+ *
+ * «Sin configurar» no es un problema: es algo que todavía no se hizo, y que no
+ * impide trabajar —el mapa de la ficha anda igual, lo que falta es resolver una
+ * dirección a coordenadas sola—. Pintado de ámbar, este panel gritaba en la
+ * pantalla más usada del sistema, en cada carga, para siempre. Un color de
+ * alarma que no se puede apagar deja de significar alarma: se aprende a
+ * saltearlo, y el día que algo SÍ esté mal, ya nadie lo mira.
+ *
+ * El color queda reservado para `.roto`: una key configurada que falla sí es un
+ * problema, y ése tiene arreglo. */
 .panel {
   display: flex;
   flex-direction: column;
   gap: var(--s-md);
   align-items: flex-start;
-  background: var(--warning-tint);
-  border-color: var(--warning-line);
+  background: var(--surface-2);
+  border-color: var(--line);
 }
 .panel.roto { background: var(--danger-tint); border-color: var(--danger-line); }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api, ApiError } from '../api/cliente';
+import { agruparMorosos } from '../dominio/morosos';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
 import UiSkeleton from '../componentes/UiSkeleton.vue';
@@ -259,17 +260,21 @@ onMounted(cargar);
           <p v-if="!d.impagas.total" class="nada">Nada en mora. Está todo al día.</p>
 
           <ul v-else class="lista">
-            <li v-for="c in d.impagas.items" :key="c.id">
-              <RouterLink :to="`/contratos/${c.contratoId}`">
+            <li v-for="m in agruparMorosos(d.impagas.items)" :key="`${m.contratoId}:${m.moneda}`">
+              <RouterLink :to="`/contratos/${m.contratoId}`">
                 <span class="linea1">
-                  <span class="mono cod">{{ c.etiquetaPropiedad }}</span>
-                  <span class="ref">{{ c.inquilino ?? c.referencia }}</span>
+                  <span class="mono cod">{{ m.etiquetaPropiedad }}</span>
+                  <span class="ref">{{ m.quien }}</span>
                 </span>
                 <span class="linea2 mono">
-                  Saldo <b>{{ money(c.saldo, c.moneda) }}</b> · vencía el {{ fecha(c.venceEl) }}
+                  <b>{{ money(m.saldo, m.moneda) }}</b>
+                  <!-- «1 cuota» no se dice: con una sola, la fecha ya lo cuenta
+                       todo y el número es ruido. -->
+                  <template v-if="m.cuotas > 1"> en {{ m.cuotas }} cuotas</template>
+                  · desde el {{ fecha(m.venceEl) }}
                 </span>
               </RouterLink>
-              <StatusChip :texto="`${c.diasDeMora} d de mora`" tono="err" />
+              <StatusChip :texto="`${m.diasDeMora} d de mora`" tono="err" />
             </li>
           </ul>
 
@@ -278,7 +283,7 @@ onMounted(cargar);
             class="ver-todo"
             to="/vencimientos"
           >
-            Ver las {{ d.impagas.total }}
+            Ver las {{ d.impagas.total }} cuotas
           </RouterLink>
         </section>
 
