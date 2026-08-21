@@ -25,7 +25,7 @@ describe('Planes, límites y API', () => {
     await limpiarFixtures();
     app = await crearApp();
     inmo = await crearInmobiliaria('planes', app.get(TokensService));
-    await ponerPlan(inmo.tenantId, 'inmobiliaria');
+    await ponerPlan(inmo.tenantId, 'inmo_medio');
   }, 60_000);
 
   afterAll(async () => {
@@ -53,7 +53,7 @@ describe('Planes, límites y API', () => {
   }
 
   /**
-   * Cambia el tope del plan Base y devuelve el que había.
+   * Cambia el tope del plan Inmobiliaria · Básico y devuelve el que había.
    *
    * Devuelve el anterior en vez de que el `finally` restaure una constante: la
    * primera versión restauraba un 100 escrito a mano y el día que el plan pasó
@@ -68,9 +68,9 @@ describe('Planes, límites y API', () => {
       // con subconsulta daría el valor viejo por el snapshot de la sentencia,
       // pero eso es demasiado sutil para dejarlo escrito en un test.
       const { rows } = await c.query<{ max_propiedades: number | null }>(
-        `SELECT max_propiedades FROM plan WHERE codigo = 'base'`,
+        `SELECT max_propiedades FROM plan WHERE codigo = 'inmo_basico'`,
       );
-      await c.query(`UPDATE plan SET max_propiedades = $1 WHERE codigo = 'base'`, [n]);
+      await c.query(`UPDATE plan SET max_propiedades = $1 WHERE codigo = 'inmo_basico'`, [n]);
       return rows[0]?.max_propiedades ?? null;
     } finally {
       await c.end();
@@ -80,33 +80,40 @@ describe('Planes, límites y API', () => {
   it('el catálogo es público y NO trae precios inventados', async () => {
     const res = await request(app.getHttpServer()).get('/v1/planes').expect(200);
 
-    // Cuatro: Gestión, Base, Inmobiliaria y Total. «A medida» —que era una
-    // quinta fila que nadie usaba y que en una página de precios se lee como
-    // «llamanos», no como un plan— ya no está.
-    expect(res.body).toHaveLength(4);
-    expect(res.body.map((p: { codigo: string }) => p.codigo))
-      .toEqual(['gestion', 'base', 'inmobiliaria', 'total']);
+    // Cinco, en DOS familias: no son cinco tamaños del mismo producto.
+    // Gestión primero, que es la puerta de entrada.
+    expect(res.body).toHaveLength(5);
+    expect(res.body.map((p: { codigo: string }) => p.codigo)).toEqual([
+      'gestion_esencial', 'gestion_dia',
+      'inmo_basico', 'inmo_medio', 'inmo_total',
+    ]);
+    expect(res.body.map((p: { familia: string }) => p.familia)).toEqual([
+      'gestion', 'gestion', 'inmobiliaria', 'inmobiliaria', 'inmobiliaria',
+    ]);
     // El gate de la etapa 0 es que alguien diga un número concreto. Hasta
     // entonces, precio null y no una cifra puesta a ojo. La columna
     // `precio_usd` ya existe (migración 044) y arranca vacía justamente por
     // esto: la propuesta está en docs/planes.md, sin publicar.
     expect(res.body.every((p: { precio: null }) => p.precio === null)).toBe(true);
 
-    const inicial = res.body.find((p: { codigo: string }) => p.codigo === 'base');
-    expect(inicial.maxPropiedades).toBe(150);
-    const pro = res.body.find((p: { codigo: string }) => p.codigo === 'total');
+    // El plan de entrada de VERDAD es el más chico de Gestión, no el de
+    // Inmobiliaria: compite con una planilla, no con Tokko.
+    const entrada = res.body.find((p: { codigo: string }) => p.codigo === 'gestion_esencial');
+    expect(entrada.maxPropiedades).toBe(40);
+    expect(entrada.modulos).toEqual(['liquidaciones']);
+    const pro = res.body.find((p: { codigo: string }) => p.codigo === 'inmo_total');
     expect(pro.maxPropiedades).toBeNull();   // sin límite
   });
 
   it('mi-plan dice el estado REAL del cobro, sin simularlo', async () => {
     const res = await http().get('/v1/planes/mi-plan').set(...como(inmo)).expect(200);
 
-    expect(res.body.plan.codigo).toBe('inmobiliaria');
+    expect(res.body.plan.codigo).toBe('inmo_medio');
     expect(res.body.cobro.integrado).toBe(false);
     expect(res.body.cobro.detalle).toContain('medio de pago');
     // Y los límites vienen con lo usado de verdad.
     const props = res.body.limites.find((l: { recurso: string }) => l.recurso === 'propiedades');
-    expect(props.maximo).toBe(1000);
+    expect(props.maximo).toBe(1500);
     expect(typeof props.usado).toBe('number');
   });
 
@@ -117,7 +124,9 @@ describe('Planes, límites y API', () => {
     // pase.
     const topeOriginal = await topeDePropiedades(2);
     try {
-      await ponerPlan(inmo.tenantId, 'base');
+      // El MISMO plan que toca `topeDePropiedades`. Moverle el tope a un plan
+      // y probar con otro deja el test verde por accidente.
+      await ponerPlan(inmo.tenantId, 'inmo_basico');
 
       await http().post('/v1/propiedades').set(...como(inmo))
         .send({ calle: 'Una', tipo: 'casa' }).expect(201);
@@ -135,7 +144,7 @@ describe('Planes, límites y API', () => {
       expect(res.body.detail).toContain('plan superior');
     } finally {
       await topeDePropiedades(topeOriginal);
-      await ponerPlan(inmo.tenantId, 'inmobiliaria');
+      await ponerPlan(inmo.tenantId, 'inmo_medio');
     }
   });
 
@@ -148,7 +157,7 @@ describe('Planes, límites y API', () => {
    * es lo que hace que dejen de ser una promesa.
    */
   describe('el plan se hace valer, no sólo se declara', () => {
-    afterEach(async () => { await ponerPlan(inmo.tenantId, 'inmobiliaria'); });
+    afterEach(async () => { await ponerPlan(inmo.tenantId, 'inmo_medio'); });
 
     /**
      * El plan de entrada TIENE liquidaciones, que es lo más caro de construir.
@@ -158,12 +167,12 @@ describe('Planes, límites y API', () => {
      * arriba es lo comercial, que es lo que un gestor no hace.
      */
     it('el plan Gestión SÍ liquida: es el trabajo de quien lo compra', async () => {
-      await ponerPlan(inmo.tenantId, 'gestion');
+      await ponerPlan(inmo.tenantId, 'gestion_esencial');
       await http().get('/v1/liquidaciones').set(...como(inmo)).expect(200);
     });
 
     it('pero no vende ni reparte comisiones', async () => {
-      await ponerPlan(inmo.tenantId, 'gestion');
+      await ponerPlan(inmo.tenantId, 'gestion_esencial');
 
       // Con ESCRITURAS y no con lecturas: `ventas` y `comisiones` llevan
       // `lecturaLibre`, así que un GET pasa a propósito —lo ya registrado sigue
@@ -185,14 +194,14 @@ describe('Planes, límites y API', () => {
      * pagar no es un límite comercial.
      */
     it('bajar de plan corta emitir, no leer lo ya hecho', async () => {
-      await ponerPlan(inmo.tenantId, 'gestion');
+      await ponerPlan(inmo.tenantId, 'gestion_esencial');
       // Las liquidaciones ya emitidas se siguen leyendo, aunque el plan no
       // incluyera el módulo: es el trabajo de esta inmobiliaria, no nuestro.
       await http().get('/v1/liquidaciones').set(...como(inmo)).expect(200);
     });
 
     it('la Red se corta entera, también para leer: ahí leer ES el servicio', async () => {
-      await ponerPlan(inmo.tenantId, 'gestion');
+      await ponerPlan(inmo.tenantId, 'gestion_esencial');
       const res = await http().get('/v1/red').set(...como(inmo)).expect(403);
       expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
     });
@@ -205,8 +214,8 @@ describe('Planes, límites y API', () => {
      * confirmaciones— y mal configurada le contesta cualquier cosa a un
      * inquilino. Son dos cosas y se compran por separado.
      */
-    it('Gestión abre la bandeja pero NO el bot', async () => {
-      await ponerPlan(inmo.tenantId, 'gestion');
+    it('«Al día» abre la bandeja pero NO el bot', async () => {
+      await ponerPlan(inmo.tenantId, 'gestion_dia');
 
       await http().get('/v1/inbox').set(...como(inmo)).expect(200);
       await http().get('/v1/canales').set(...como(inmo)).expect(200);
@@ -219,17 +228,17 @@ describe('Planes, límites y API', () => {
     });
 
     it('el bot llega recién con el plan Inmobiliaria', async () => {
-      await ponerPlan(inmo.tenantId, 'inmobiliaria');
+      await ponerPlan(inmo.tenantId, 'inmo_medio');
       await http().get('/v1/respuestas').set(...como(inmo)).expect(200);
     });
 
     it('los emprendimientos son del plan Total', async () => {
-      await ponerPlan(inmo.tenantId, 'inmobiliaria');
+      await ponerPlan(inmo.tenantId, 'inmo_medio');
       await http().post('/v1/emprendimientos').set(...como(inmo))
         .send({ nombre: 'Torre', calle: 'Alguna' })
         .expect(403);
 
-      await ponerPlan(inmo.tenantId, 'total');
+      await ponerPlan(inmo.tenantId, 'inmo_total');
       await http().post('/v1/emprendimientos').set(...como(inmo))
         .send({ nombre: 'Torre', calle: 'Alguna' })
         .expect(201);
@@ -244,7 +253,7 @@ describe('Planes, límites y API', () => {
      * un controlador con módulo siguen andando.
      */
     it('una ruta pública dentro de un módulo no se corta', async () => {
-      await ponerPlan(inmo.tenantId, 'base');
+      await ponerPlan(inmo.tenantId, 'inmo_basico');
       // Sin token: no hay actor, así que no hay plan que consultar. Da 404 por
       // el token inventado, NO 403.
       await request(app.getHttpServer()).get('/v1/feed/tokeninventado.xml').expect(404);
@@ -252,17 +261,17 @@ describe('Planes, límites y API', () => {
   });
 
   it('un módulo fuera del plan devuelve 403 con el motivo', async () => {
-    await ponerPlan(inmo.tenantId, 'base');
+    await ponerPlan(inmo.tenantId, 'inmo_basico');
 
     const res = await http().get('/v1/sucursales').set(...como(inmo)).expect(403);
     expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
     expect(res.body.detail).toContain('multisucursal');
 
-    await ponerPlan(inmo.tenantId, 'inmobiliaria');
+    await ponerPlan(inmo.tenantId, 'inmo_medio');
   });
 
   it('con el plan Pro, multisucursal y API funcionan', async () => {
-    await ponerPlan(inmo.tenantId, 'total');
+    await ponerPlan(inmo.tenantId, 'inmo_total');
 
     await http().post('/v1/sucursales').set(...como(inmo))
       .send({ nombre: 'Centro' }).expect(201);
@@ -282,7 +291,7 @@ describe('Planes, límites y API', () => {
   });
 
   it('en la base sólo queda el hash de la clave, nunca la clave', async () => {
-    await ponerPlan(inmo.tenantId, 'total');
+    await ponerPlan(inmo.tenantId, 'inmo_total');
     const clave = await http().post('/v1/api-keys').set(...como(inmo))
       .send({ nombre: 'Otra' }).expect(201);
 
@@ -300,7 +309,7 @@ describe('Planes, límites y API', () => {
   });
 
   it('revocar una clave dos veces no funciona', async () => {
-    await ponerPlan(inmo.tenantId, 'total');
+    await ponerPlan(inmo.tenantId, 'inmo_total');
     const clave = await http().post('/v1/api-keys').set(...como(inmo))
       .send({ nombre: 'Revocable' }).expect(201);
 
@@ -309,7 +318,7 @@ describe('Planes, límites y API', () => {
   });
 
   it('sólo el titular administra sucursales y claves', async () => {
-    await ponerPlan(inmo.tenantId, 'total');
+    await ponerPlan(inmo.tenantId, 'inmo_total');
     await http().post('/v1/sucursales').set(...como(inmo, 'admin'))
       .send({ nombre: 'Sur' }).expect(403);
     await http().get('/v1/api-keys').set(...como(inmo, 'admin')).expect(403);

@@ -113,6 +113,16 @@ export const MODULOS: Modulo[] = [
     fijo: true,
   },
   {
+    clave: 'avisos',
+    nombre: 'Avisos de vencimiento',
+    detalle: 'La bandeja que se genera sola: qué contrato vence, qué aumento toca, qué garantía se cae.',
+    // Vencimientos NO está acá: mirar qué se viene es núcleo y es la razón por
+    // la que alguien deja el Excel. Lo que este módulo agrega es que el sistema
+    // lo levante solo y lleve la cuenta de lo visto.
+    rutas: ['/avisos'],
+    fijo: true,
+  },
+  {
     clave: 'bandeja',
     nombre: 'Bandeja de mensajes',
     detalle: 'WhatsApp, Telegram, Instagram y mail en un solo lugar, con tus plantillas a mano.',

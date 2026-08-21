@@ -1,121 +1,129 @@
-# Los tres planes
+# Los planes
 
-> Definidos en la migración `044_tres_planes.sql`. Este documento explica **por
+> Definidos en `046_dos_familias_de_planes.sql`. Este documento explica **por
 > qué** son así; la migración es la fuente de verdad de **qué** incluye cada uno.
 
-## El problema que había
+## Dos familias, no una escalera
 
-La migración 011 dejó cuatro planes con trece nombres de módulo. De esos trece,
-el código exigía **dos** (`multisucursal` y `api`) y el front escondía cinco. Los
-otros seis eran texto: el plan «Inicial» declaraba no incluir liquidaciones, y
-las liquidaciones funcionaban igual.
+```
+Gestión de alquileres      Esencial · Al día
+Inmobiliaria               Básico · Medio · Todo
+```
 
-Peor todavía: el catálogo se escribió antes de las etapas 12 a 19. Bandeja
-omnicanal, portal, conciliación bancaria, actas, emprendimientos en pozo y la Red
-no figuraban en ningún plan, así que los tenía cualquiera.
+Quien administra veinte departamentos **no es una inmobiliaria chica**. No capta,
+no vende, no reparte comisiones entre agentes y no publica en portales — y no va
+a hacerlo nunca. Ponerlo como el escalón de abajo de una escalera de
+inmobiliarias le dice, cada vez que abre la página de precios, que está en el
+peldaño más bajo de algo que no quiere subir.
 
-Definir los planes «a la perfección» era, entonces, dos trabajos: **declararlos**
-y **hacerlos valer**. La 044 hace el primero; el `ModuloGuard` hace el segundo.
-
----
-
-## 1 · Base
-
-**Para quien trabaja solo o son dos, y hoy tiene la cartera en un Excel y las
-consultas en el WhatsApp personal.**
-
-La idea es que entre sin pensarlo. Por eso **no le falta ninguna pieza del flujo
-de su día**: carga propiedades, recibe consultas, hace seguimiento, firma un
-contrato, cobra el alquiler y ajusta por índice. Todo eso anda.
-
-Lo que tiene son **techos**, no agujeros:
-
-| | |
-|---|---|
-| Propiedades | 150 |
-| Contratos vigentes | 25 |
-| Usuarios | 2 |
-| Envíos a clientes | 10 por mes |
-
-Y lo que no incluye es lo que **todavía no necesita**: liquidarle a propietarios
-de terceros, repartir comisiones entre agentes, publicar en portales, atender por
-seis canales.
-
-> **La decisión de fondo.** Un plan de entrada al que le falta un paso del flujo
-> se abandona antes de terminar de cargar la cartera: la persona descubre a mitad
-> de camino que no puede hacer lo que vino a hacer. Un tope, en cambio, se
-> descubre cuando el sistema ya le sirve, y ese es el momento en que subir de
-> plan es una buena noticia y no un rescate.
+Son dos productos que comparten un motor.
 
 ---
 
-## 2 · Inmobiliaria
+## Familia Gestión — compite con el Excel
 
-**Para la oficina con equipo que además administra alquileres de terceros.**
+Y el Excel es **gratis y ya lo saben usar**. Así que el precio tiene que ser tan
+bajo que la pregunta no sea «¿me conviene?» sino «¿por qué no?».
 
-Acá aparece lo que más tiempo ahorra y lo que reparte plata:
+### Esencial
 
-- **Liquidaciones** al propietario, con honorarios, gastos y retenciones
-- **Portales** de propietario y de inquilino — el enlace que corta los llamados
-- **Comisiones** de la casa y de cada agente
-- **Publicaciones** y feed XML a los portales inmobiliarios
-- **Bandeja omnicanal** — hasta 2 canales
-- **Documentos y pre-contratos**
-- **La Red** — buscar sin límite, ofrecer hasta 20 propiedades
+**Los contratos, el ajuste que corresponde y la rendición al propietario.**
 
-Topes: 1.000 propiedades, 10 usuarios, contratos y envíos sin límite.
+Lo que trae es exactamente lo que una planilla no puede hacer:
 
-> **Por qué la Red viene capada y no completa.** Ofrecer 20 propiedades alcanza
-> para ver si la Red le trae algo. Si le trae, va a querer poner las 200.
+- Calcular bien el ajuste por **IPC, ICL, UVA o Casa Propia** el mes que toca
+- Armar la **liquidación al propietario** con honorarios, gastos y retenciones
+- Ver qué vence, quién debe y cuánto
+
+Topes: 1 usuario, 40 propiedades, 25 contratos vigentes.
+
+> **La liquidación va en el plan más barato aunque sea lo más caro de
+> construir.** Sin eso no le gana a una planilla, y un plan de entrada que no le
+> gana a lo que la persona ya tiene no es barato: es inútil.
+
+### Al día
+
+**Todo lo de Esencial, más que el sistema te avise y puedas contestar.**
+
+- **Avisos de vencimiento** que se generan solos: qué contrato vence, qué aumento
+  toca, qué garantía se cae
+- **Bandeja de mensajes**: WhatsApp, Instagram y mail en un lugar, con las
+  plantillas de contratos a mano
+- **Portales** de propietario e inquilino
+
+Topes: 3 usuarios, 120 propiedades, 80 contratos, 1 canal.
+
+> **El corte entre los dos es «mirar» contra «que te avise».** Esencial es entrar
+> y ver. Al día es que el sistema lo levante solo y que puedas responder sin
+> salir del sistema.
+
+⚠️ **Los avisos NO salen del sistema todavía.** Llegan a una bandeja adentro de
+la aplicación. `recordatorios.service.ts` declara `email` y `whatsapp` como no
+disponibles: falta el proveedor de correo y la verificación de negocio de Meta.
+**Este plan no se vende como «te avisamos por WhatsApp»** hasta que eso exista.
 
 ---
 
-## 3 · Total
+## Familia Inmobiliaria — compite con Tokko
 
-**Para quien administra a escala, desarrolla emprendimientos o tiene más de una
-sucursal.**
+Hace lo que hace Tokko, y además administra lo que ya se vendió.
 
-Todo lo anterior **sin un solo techo**, más:
+### Básico
+**Administrar alquileres y además captar y vender.**
+Todo lo de «Al día» + leads, ventas, reservas y publicaciones.
+3 usuarios · 250 propiedades · 30 envíos por mes.
 
-- **Conciliación bancaria** — el extracto cruzado contra los cobros
-- **Emprendimientos en pozo** — unidades por planilla, planes de pago,
-  calculadora de cuotas y de inversión
-- **Actas** de inicio y cierre con fotos
-- **Multisucursal**
-- **API y webhooks**
-- **Marca blanca**
-- **ARCA**
+### Medio
+**Más el equipo, la Red y las respuestas automáticas.**
++ comisiones, documentos y pre-contratos, la Red (30 propiedades) y el bot.
+10 usuarios · 1.500 propiedades · 2 sucursales · 3 canales.
+
+### Todo
+**El sistema entero, sin límites.**
++ emprendimientos en pozo, conciliación bancaria, actas, multisucursal, API,
+marca blanca y ARCA.
+
+---
+
+## El bot se compra aparte de la bandeja
+
+Centralizar mensajes es **infraestructura**: sirve desde el primer día y no hay
+nada que configurar. Va desde «Al día».
+
+Que algo **conteste solo** es una decisión: palabras de salida, escalado a una
+persona, confirmaciones. Mal configurado le contesta cualquier cosa a un
+inquilino, y hay quien no lo quiere ni gratis. Va recién en Medio.
 
 ---
 
 ## El precio
 
-**Todavía no está decidido, y por eso la columna `precio_usd` está vacía.** El
-catálogo público dice «A convenir» hasta que alguien escriba un número. Es la
-regla que este repo tiene desde la etapa 0 y que un test cuida: no se publica un
-precio que nadie decidió.
+**No está decidido, y por eso `precio_usd` está vacía.** El catálogo dice «A
+convenir» hasta que alguien escriba un número. Es la regla que este repo tiene
+desde la etapa 0 y que un test cuida: no se publica un precio que nadie decidió.
 
 ### Lo que se propone
 
-| Plan | Propuesta | Referencia |
+| Plan | Propuesta | Contra qué se mide |
 |---|---|---|
-| Base | **USD 25 / mes** | Menos que una publicación destacada en un portal |
-| Inmobiliaria | **USD 79 / mes** | Alrededor de la mitad de lo que sale Tokko |
-| Total | **USD 199 / mes** | Más barato que Tokko y hace lo que Tokko no hace |
+| Gestión · Esencial | **USD 9 / mes** | Una planilla. Tiene que doler menos que pensarlo |
+| Gestión · Al día | **USD 19 / mes** | Lo que cuesta que se te pase un aumento una vez |
+| Inmobiliaria · Básico | **USD 39 / mes** | Menos que una publicación destacada en un portal |
+| Inmobiliaria · Medio | **USD 89 / mes** | Alrededor de la mitad de Tokko |
+| Inmobiliaria · Todo | **USD 199 / mes** | Más barato que Tokko y hace lo que Tokko no hace |
 
 **En dólares y no en pesos**: un número en pesos queda viejo solo. Se cobra el
 equivalente del día.
 
-**Cómo se carga**, cuando esté decidido:
-
 ```sql
-UPDATE plan SET precio_usd = 25  WHERE codigo = 'base';
-UPDATE plan SET precio_usd = 79  WHERE codigo = 'inmobiliaria';
-UPDATE plan SET precio_usd = 199 WHERE codigo = 'total';
+UPDATE plan SET precio_usd = 9   WHERE codigo = 'gestion_esencial';
+UPDATE plan SET precio_usd = 19  WHERE codigo = 'gestion_dia';
+UPDATE plan SET precio_usd = 39  WHERE codigo = 'inmo_basico';
+UPDATE plan SET precio_usd = 89  WHERE codigo = 'inmo_medio';
+UPDATE plan SET precio_usd = 199 WHERE codigo = 'inmo_total';
 ```
 
-Vive en la base y no en el código justamente para que cambiarlo no sea un
-despliegue.
+Vive en la base y no en el código para que cambiarlo no sea un despliegue.
 
 ---
 
@@ -127,7 +135,8 @@ liquidaciones y sus propiedades.
 
 **Bajar de plan no esconde el trabajo hecho.** El `ModuloGuard` acepta
 `lecturaLibre`, y los módulos que guardan registros —liquidaciones, ventas,
-comisiones, actas, documentos— lo usan: se deja de **emitir**, no de **leer**.
+comisiones, actas, documentos, avisos— lo usan: se deja de **emitir**, no de
+**leer**.
 
 Los que no lo usan son aquellos donde leer **es** el servicio: la Red y la
 bandeja. Ahí un GET libre regalaría justo lo que se cobra.

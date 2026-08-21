@@ -2,7 +2,11 @@ import { Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/comm
 import { RecordatoriosService } from './recordatorios.service';
 import { FiltroAvisosDto } from './recordatorios.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
+import { Modulo } from '../planes/modulo.guard';
 
+// `lecturaLibre`: los avisos ya generados se siguen leyendo si el plan baja.
+// Lo que se corta es que el sistema genere más.
+@Modulo('avisos', { lecturaLibre: true })
 @Controller('avisos')
 export class RecordatoriosController {
   constructor(private readonly rec: RecordatoriosService) {}

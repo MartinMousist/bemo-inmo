@@ -18,7 +18,7 @@ export class PlanesService {
 
   async catalogo() {
     const filas = await this.db.query<{
-      codigo: string; nombre: string; orden: number;
+      codigo: string; familia: string; nombre: string; orden: number;
       resumen: string | null; para_quien: string | null;
       precio_usd: string | null;
       max_usuarios: number | null; max_propiedades: number | null;
@@ -26,10 +26,15 @@ export class PlanesService {
       max_sucursales: number | null; max_canales: number | null;
       max_envios_mes: number | null; max_red_compartidas: number | null;
       modulos: string[];
-    }>('SELECT * FROM plan ORDER BY orden');
+    // Gestión primero: alfabéticamente sale antes que «inmobiliaria», y además
+    // es el orden correcto — es la puerta de entrada al sistema.
+    }>('SELECT * FROM plan ORDER BY familia, orden');
 
     return filas.map((f) => ({
       codigo: f.codigo,
+      // `gestion` o `inmobiliaria`. No son cuatro tamaños del mismo producto:
+      // son dos productos, y la página de precios los muestra separados.
+      familia: f.familia,
       nombre: f.nombre,
       resumen: f.resumen,
       paraQuien: f.para_quien,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { api, ApiError } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
 import StatusChip from '../componentes/StatusChip.vue';
@@ -13,7 +13,7 @@ interface Estado {
   cobro: { integrado: boolean; detalle: string };
 }
 interface Plan {
-  codigo: string; nombre: string;
+  codigo: string; familia: 'gestion' | 'inmobiliaria'; nombre: string;
   resumen: string | null; paraQuien: string | null;
   maxUsuarios: number | null; maxPropiedades: number | null;
   maxContratos: number | null; maxCanales: number | null;
@@ -53,6 +53,7 @@ const MODULO: Record<string, { nombre: string; detalle: string }> = {
   portal: { nombre: 'Portales', detalle: 'Propietario e inquilino ven lo suyo sin llamar' },
   bandeja: { nombre: 'Bandeja de mensajes', detalle: 'WhatsApp, Instagram y mail en un lugar, con tus plantillas' },
   bot: { nombre: 'Respuestas automáticas', detalle: 'El bot que contesta y cuándo llama a una persona' },
+  avisos: { nombre: 'Avisos de vencimiento', detalle: 'La bandeja que se genera sola: qué vence y qué aumento toca' },
   red: { nombre: 'La Red', detalle: 'Propiedades entre inmobiliarias, con comisión compartida' },
   documentos: { nombre: 'Documentos', detalle: 'Plantillas de la casa y pre-contratos' },
   emprendimientos: { nombre: 'Emprendimientos', detalle: 'Ventas en pozo, planes de pago y calculadoras' },
@@ -82,7 +83,32 @@ function pct(l: Limite): number {
 }
 
 /**
- * Lo que trae ESTE plan y no traía el anterior.
+ * Las dos familias, cada una con sus planes.
+ *
+ * No son cinco tamaños del mismo producto: son dos productos. Quien administra
+ * veinte departamentos no es una inmobiliaria chica y no va a captar ni a
+ * vender nunca; ponerlo como el escalón de abajo de una escalera de
+ * inmobiliarias le dice, cada vez que abre esta pantalla, que está en el
+ * peldaño más bajo de algo que no quiere subir.
+ */
+const FAMILIA: Record<string, { titulo: string; bajada: string }> = {
+  gestion: {
+    titulo: 'Gestión de alquileres',
+    bajada: 'Para quien administra alquileres —propios o de terceros— y no trabaja con ventas.',
+  },
+  inmobiliaria: {
+    titulo: 'Inmobiliaria',
+    bajada: 'Para quien además capta, vende y tiene equipo.',
+  },
+};
+
+const familias = computed(() =>
+  (['gestion', 'inmobiliaria'] as const)
+    .map((f) => ({ clave: f, ...FAMILIA[f], planes: catalogo.value.filter((p) => p.familia === f) }))
+    .filter((f) => f.planes.length > 0));
+
+/**
+ * Lo que trae ESTE plan y no traía el anterior DE SU FAMILIA.
  *
  * Antes cada columna repetía la lista entera, así que el plan Total mostraba
  * diecisiete renglones y la comparación —que es la única razón por la que
@@ -91,10 +117,12 @@ function pct(l: Limite): number {
  * Mostrando sólo la diferencia, la tabla dice lo que uno vino a preguntar: qué
  * gano si subo.
  */
-function nuevosEn(i: number): string[] {
-  const propios = catalogo.value[i]?.modulos ?? [];
+function nuevosEn(planes: Plan[], i: number): string[] {
+  const propios = planes[i]?.modulos ?? [];
+  // Contra el anterior de SU familia, no contra el anterior de la lista: el
+  // primer plan de Inmobiliaria no es «el siguiente» del último de Gestión.
   if (i === 0) return propios;
-  const previos = new Set(catalogo.value[i - 1].modulos);
+  const previos = new Set(planes[i - 1].modulos);
   return propios.filter((m) => !previos.has(m));
 }
 
@@ -159,10 +187,13 @@ onMounted(cargar);
         <p>{{ mio.cobro.detalle }}</p>
       </div>
 
-      <section class="stack">
-        <h2>Los planes</h2>
+      <section v-for="f in familias" :key="f.clave" class="stack">
+        <div>
+          <h2>{{ f.titulo }}</h2>
+          <p class="bajada-familia">{{ f.bajada }}</p>
+        </div>
         <div class="grid">
-          <article v-for="(p, i) in catalogo" :key="p.codigo" class="card plan"
+          <article v-for="(p, i) in f.planes" :key="p.codigo" class="card plan"
                    :class="{ actual: p.codigo === mio.plan.codigo }">
             <div class="row entre">
               <h3 class="text-lg">{{ p.nombre }}</h3>
@@ -189,10 +220,10 @@ onMounted(cargar);
                  renglones y que comparar fuera trabajo del lector. -->
             <p class="delta-cab">
               <template v-if="i === 0">Incluye</template>
-              <template v-else>Todo lo de {{ catalogo[i - 1].nombre }}, más</template>
+              <template v-else>Todo lo de {{ f.planes[i - 1].nombre }}, más</template>
             </p>
             <ul class="modulos">
-              <li v-for="m in nuevosEn(i)" :key="m">
+              <li v-for="m in nuevosEn(f.planes, i)" :key="m">
                 <b>{{ MODULO[m]?.nombre ?? m }}</b>
                 <span v-if="MODULO[m]">{{ MODULO[m].detalle }}</span>
               </li>
@@ -221,6 +252,7 @@ onMounted(cargar);
 .plan.actual { border-color: var(--accent-line); }
 .tope-txt { margin: var(--s-xs) 0 0; font-size: 12px; color: var(--muted); }
 .precio { margin: var(--s-sm) 0; font-family: var(--font-title); font-size: 20px; color: var(--ink); }
+.bajada-familia { margin: var(--s-2xs) 0 0; color: var(--muted); font-size: 13px; }
 .plan { display: flex; flex-direction: column; gap: var(--s-sm); }
 .resumen { margin: 0; font-size: 13px; color: var(--ink-2); }
 .para-quien { margin: 0; font-size: 12px; color: var(--muted); }
