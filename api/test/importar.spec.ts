@@ -255,15 +255,128 @@ describe('Importación desde CSV', () => {
       expect(res.text.charCodeAt(0)).toBe(0xfeff);
 
       // La plantilla que el sistema entrega tiene que poder volver a entrar.
+      //
+      // Dos filas y no una: la plantilla muestra un ALQUILER en pesos y una
+      // VENTA en dólares, porque la moneda por defecto depende de la operación
+      // y con un solo ejemplo eso no se ve.
       const prev = await http().post('/v1/importar/previsualizar').set(...como())
         .send({ recurso: 'propiedades', csv: res.text }).expect(201);
-      expect(prev.body.aImportar).toBe(1);
+      expect(prev.body.aImportar).toBe(2);
       expect(prev.body.problemas.filter((p: { grave: boolean }) => p.grave)).toHaveLength(0);
     });
 
     it('el asesor no puede importar', async () => {
       await http().post('/v1/importar').set(...como('agente'))
         .send({ recurso: 'personas', csv: 'nombre\nX\n' }).expect(403);
+    });
+
+    /**
+     * Migrar una cartera desde otro sistema.
+     *
+     * Antes el importador tomaba la propiedad y NO el precio: entraban
+     * doscientas fichas y ni un número, así que quien migraba tenía que cargar
+     * los precios a mano igual. La planilla que exporta cualquier CRM del rubro
+     * trae operación y precio; ahora se leen.
+     */
+    describe('la operación y su precio', () => {
+      it('importa la propiedad CON su precio, lista para verse en la cartera', async () => {
+        const csv =
+          'calle;numero;localidad;tipo;operacion;precio;moneda;expensas\n' +
+          'Belgrano;1240;Ciudad;departamento;alquiler;480000;ARS;62000\n' +
+          'San Martín;1200;Godoy Cruz;casa;venta;185000;USD;\n';
+
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+        expect(r.body.importadas).toBe(2);
+
+        const lista = await http().get('/v1/propiedades?q=Belgrano').set(...como()).expect(200);
+        const p = lista.body.items[0];
+        expect(p.operaciones).toHaveLength(1);
+        expect(p.operaciones[0]).toMatchObject({
+          tipo: 'alquiler', precio: 480000, moneda: 'ARS',
+          // `disponible` y no `borrador`: quien migra su cartera quiere verla
+          // publicada, no revisar doscientos borradores uno por uno.
+          estado: 'disponible',
+        });
+      });
+
+      it('sin precio no se inventa una operación', async () => {
+        // Una operación con `precio NULL` es una propiedad «disponible» que no
+        // dice a cuánto: sale en la cartera y no entra en ningún filtro de
+        // precio. Es peor que no tenerla.
+        const csv =
+          'calle;localidad;tipo;operacion;precio\n' +
+          'Sin Precio;Ciudad;casa;venta;\n';
+
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+
+        expect(r.body.importadas).toBe(1);
+        expect(r.body.problemas[0].mensaje).toContain('no trae precio');
+        expect(r.body.problemas[0].grave).toBe(false);
+
+        const lista = await http().get('/v1/propiedades?q=Sin Precio').set(...como()).expect(200);
+        expect(lista.body.items[0].operaciones).toHaveLength(0);
+      });
+
+      it('con precio y sin operación asume venta, y lo dice', async () => {
+        const csv = 'calle;localidad;tipo;precio\nSolo Precio;Ciudad;casa;250000\n';
+
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+
+        expect(r.body.problemas[0].mensaje).toContain('se importa como venta');
+
+        const lista = await http().get('/v1/propiedades?q=Solo Precio').set(...como()).expect(200);
+        expect(lista.body.items[0].operaciones[0].tipo).toBe('venta');
+      });
+
+      /**
+       * La moneda por defecto sigue a la OPERACIÓN, como se cotiza en esta
+       * plaza: las ventas en dólares, los alquileres en pesos.
+       *
+       * Al revés, un alquiler de 400.000 se convierte en uno de USD 400.000 —
+       * un error de dos órdenes de magnitud que además se ve razonable.
+       */
+      it('sin moneda, la venta va en dólares y el alquiler en pesos', async () => {
+        const csv =
+          'calle;localidad;tipo;operacion;precio\n' +
+          'Moneda Venta;Ciudad;casa;venta;185000\n' +
+          'Moneda Alquiler;Ciudad;departamento;alquiler;400000\n';
+
+        await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+
+        const v = await http().get('/v1/propiedades?q=Moneda Venta').set(...como()).expect(200);
+        expect(v.body.items[0].operaciones[0].moneda).toBe('USD');
+
+        const a = await http().get('/v1/propiedades?q=Moneda Alquiler').set(...como()).expect(200);
+        expect(a.body.items[0].operaciones[0].moneda).toBe('ARS');
+      });
+
+      it('entiende cómo llama cada planilla a lo mismo', async () => {
+        const csv =
+          'calle;localidad;tipo;operacion;precio;moneda\n' +
+          'Renta Uno;Ciudad;departamento;RENTA;400000;ARS\n' +
+          'Sale Dos;Ciudad;casa;Sale;185000;USD\n' +
+          'Temporario Tres;Ciudad;departamento;temporario;90000;ARS\n';
+
+        const r = await http().post('/v1/importar').set(...como())
+          .send({ recurso: 'propiedades', csv }).expect(201);
+        expect(r.body.importadas).toBe(3);
+
+        const t = await http().get('/v1/propiedades?q=Temporario Tres').set(...como()).expect(200);
+        expect(t.body.items[0].operaciones[0].tipo).toBe('alquiler_temporario');
+      });
+
+      it('la plantilla de ejemplo trae las columnas de precio', async () => {
+        // Si la plantilla no las trae, nadie se entera de que se pueden mandar.
+        const r = await http().get('/v1/importar/plantilla/propiedades.csv')
+          .set(...como()).expect(200);
+        expect(r.text).toContain('operacion');
+        expect(r.text).toContain('precio');
+        expect(r.text).toContain('moneda');
+      });
     });
   });
 });

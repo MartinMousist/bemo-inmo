@@ -65,7 +65,25 @@ const ALIAS: Record<Recurso, Record<string, string[]>> = {
     descripcion: ['descripcion', 'detalle', 'observaciones'],
     lat: ['lat', 'latitud'],
     lng: ['lng', 'lon', 'longitud'],
+    // ── La operación y su precio ──
+    //
+    // Faltaban, y sin ellos una migración desde otro sistema dejaba la cartera
+    // cargada y SIN UN PRECIO: doscientas propiedades y ni un número. La
+    // planilla que exporta cualquier CRM del rubro los trae.
+    operacion: ['operacion', 'tipo_operacion', 'op', 'modalidad'],
+    precio: ['precio', 'valor', 'importe', 'precio_venta', 'precio_alquiler'],
+    moneda: ['moneda', 'currency', 'divisa'],
+    expensas: ['expensas', 'expensa'],
   },
+};
+
+/** Cómo escribe cada planilla las dos operaciones que existen. */
+const OPERACION_ALIAS: Record<string, string> = {
+  venta: 'venta', vender: 'venta', vta: 'venta', sale: 'venta',
+  alquiler: 'alquiler', alquilar: 'alquiler', renta: 'alquiler',
+  arriendo: 'alquiler', locacion: 'alquiler', rent: 'alquiler',
+  alquiler_temporario: 'alquiler_temporario', temporario: 'alquiler_temporario',
+  temporal: 'alquiler_temporario',
 };
 
 const TIPOS_PROPIEDAD = [
@@ -276,6 +294,75 @@ export class ImportarService {
       descripcion: v('descripcion') || null,
       lat: numeroFlexible(v('lat')),
       lng: numeroFlexible(v('lng')),
+      ...this.operacionDeLaFila(v, nroFila, problemas),
+    };
+  }
+
+  /**
+   * La operación y su precio, si la planilla los trae.
+   *
+   * ── Las tres reglas ──
+   *
+   * **Sin precio no hay operación.** Una operación en la base con `precio NULL`
+   * es una propiedad «disponible» que no dice a cuánto: aparece en la cartera y
+   * en los filtros de precio no entra en ningún rango. Es peor que no tenerla.
+   *
+   * **Con precio y sin operación se asume VENTA y se avisa.** Es lo que trae la
+   * mayoría de las planillas de cartera, pero se avisa porque adivinar mal
+   * mete un alquiler en la cartera de venta.
+   *
+   * **Entra como `disponible`, no como `borrador`.** Quien migra su cartera
+   * quiere verla publicada, no revisar doscientos borradores uno por uno.
+   */
+  private operacionDeLaFila(
+    v: (campo: string) => string | undefined,
+    nroFila: number,
+    problemas: ProblemaFila[],
+  ): Record<string, unknown> {
+    const precio = numeroFlexible(v('precio'));
+    const crudo = normalizar(v('operacion') ?? '');
+
+    if (precio === null) {
+      // Una operación declarada sin precio se avisa: la planilla dice que la
+      // propiedad está en venta y no dice a cuánto, y eso el importador no lo
+      // puede inventar.
+      if (crudo) {
+        problemas.push({
+          fila: nroFila,
+          campo: 'precio',
+          mensaje: `Dice "${v('operacion')}" pero no trae precio; la propiedad se importa sin operación.`,
+          grave: false,
+        });
+      }
+      return { operacion: null };
+    }
+
+    let operacion = OPERACION_ALIAS[crudo] ?? null;
+    if (!operacion) {
+      problemas.push({
+        fila: nroFila,
+        campo: 'operacion',
+        mensaje: crudo
+          ? `Operación "${v('operacion')}" no reconocida; se importa como venta.`
+          : 'Sin operación declarada; con un precio cargado se importa como venta.',
+        grave: false,
+      });
+      operacion = 'venta';
+    }
+
+    // La moneda por defecto sigue a la operación, que es como se cotiza en esta
+    // plaza: las ventas en dólares, los alquileres en pesos. Adivinar al revés
+    // convierte un alquiler de 400.000 en uno de USD 400.000.
+    const monedaCruda = (v('moneda') ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+    const moneda = monedaCruda === 'USD' || monedaCruda === 'ARS'
+      ? monedaCruda
+      : (operacion === 'venta' ? 'USD' : 'ARS');
+
+    return {
+      operacion,
+      precio,
+      moneda,
+      expensas: numeroFlexible(v('expensas')),
     };
   }
 
@@ -301,13 +388,14 @@ export class ImportarService {
     // forma de inferir su tipo, y falla con "could not determine data type".
     const tieneUbicacion = d.lat !== null && d.lng !== null;
 
-    await ej.query(
+    const { rows: prop } = await ej.query<{ id: string }>(
       `INSERT INTO propiedad (
          tenant_id, codigo, calle, numero, piso, depto, localidad, provincia, cp,
          tipo, sup_total, sup_cubierta, ambientes, dormitorios, banos, cocheras,
          antiguedad, descripcion, lat, lng, geocode_fuente, geocode_el)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22)`,
+               $19,$20,$21,$22)
+       RETURNING id`,
       [
         tenantId, cod[0].codigo, d.calle, d.numero, d.piso, d.depto,
         d.localidad, d.provincia, d.cp, d.tipo, d.supTotal, d.supCubierta,
@@ -317,6 +405,18 @@ export class ImportarService {
         tieneUbicacion ? new Date() : null,
       ],
     );
+
+    // La operación va en la MISMA transacción que la propiedad: si el precio
+    // rebota por lo que sea, no queda una propiedad huérfana sin él — que es
+    // exactamente el estado que esto vino a evitar.
+    if (d.operacion) {
+      await ej.query(
+        `INSERT INTO operacion (tenant_id, propiedad_id, tipo, precio, moneda,
+                                expensas, estado)
+         VALUES ($1,$2,$3,$4,$5,$6,'disponible')`,
+        [tenantId, prop[0].id, d.operacion, d.precio, d.moneda, d.expensas ?? null],
+      );
+    }
   }
 
   /** Traduce el error de Postgres a algo que le sirva a quien mira la planilla. */
@@ -345,7 +445,11 @@ export const PLANTILLAS: Record<Recurso, string> = {
   personas:
     'nombre;apellido;dni;email;telefono;domicilio;notas\r\n' +
     'Marta;Silva;18456789;marta@ejemplo.com;2614567890;San Martín 100;Propietaria\r\n',
+  // La plantilla trae operación, precio y moneda: es lo que hace que una
+  // cartera importada sirva. Sin ellos entran doscientas propiedades y ni un
+  // número, y quien migró tiene que cargar los precios a mano igual.
   propiedades:
-    'calle;numero;piso;depto;localidad;provincia;tipo;superficie total;ambientes;dormitorios;banos;cocheras;descripcion\r\n' +
-    'Arístides Villanueva;345;3;B;Ciudad;Mendoza;departamento;78;3;2;1;1;"Luminoso, con balcón"\r\n',
+    'calle;numero;piso;depto;localidad;provincia;tipo;superficie total;ambientes;dormitorios;banos;cocheras;operacion;precio;moneda;expensas;descripcion\r\n' +
+    'Arístides Villanueva;345;3;B;Ciudad;Mendoza;departamento;78;3;2;1;1;alquiler;480000;ARS;62000;"Luminoso, con balcón"\r\n' +
+    'San Martín;1200;;;Godoy Cruz;Mendoza;casa;210;5;3;2;2;venta;185000;USD;;"Con parque y pileta"\r\n',
 };
