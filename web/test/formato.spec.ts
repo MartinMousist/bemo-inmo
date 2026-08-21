@@ -288,3 +288,46 @@ describe('situacionesDe', () => {
     ]);
   });
 });
+
+describe('proximidad: la unidad en que la gente piensa un plazo', () => {
+  const enDias = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  it('hasta dos meses, en días: todavía es una fecha en la agenda', () => {
+    expect(proximidad(enDias(45)).texto).toBe('En 45 d');
+    expect(proximidad(enDias(60)).texto).toBe('En 60 d');
+  });
+
+  /**
+   * El caso que motivó esto: la cartera decía «En 895 d».
+   *
+   * Nadie sabe cuánto es sin hacer la cuenta, y en una columna con «En 711 d»
+   * y «En 529 d» al lado no se puede ordenar de un vistazo cuál está más cerca.
+   */
+  it('más allá, en meses o años', () => {
+    expect(proximidad(enDias(90)).texto).toBe('En 3 meses');
+    expect(proximidad(enDias(529)).texto).toBe('En 17 meses');
+    expect(proximidad(enDias(895)).texto).toBe('En 2 años');
+  });
+
+  it('el corte de meses a años va a los 18, no a los 12', () => {
+    // «En 17 meses» todavía se entiende; «En 1 año» perdería que faltan cinco.
+    expect(proximidad(enDias(500)).texto).toContain('meses');
+    expect(proximidad(enDias(600)).texto).toContain('año');
+  });
+
+  it('lo vencido usa la misma escala', () => {
+    expect(proximidad(enDias(-3)).texto).toBe('Vencido hace 3 d');
+    expect(proximidad(enDias(-400)).texto).toBe('Vencido hace 13 meses');
+  });
+
+  it('el tono no cambia: lo urgente sigue siendo lo de menos de 30 días', () => {
+    expect(proximidad(enDias(5)).tono).toBe('err');
+    expect(proximidad(enDias(20)).tono).toBe('warn');
+    expect(proximidad(enDias(895)).tono).toBe('neutro');
+    expect(proximidad(enDias(-1)).tono).toBe('vencido');
+  });
+});

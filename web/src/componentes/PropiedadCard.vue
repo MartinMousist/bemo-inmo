@@ -73,6 +73,17 @@ const operaciones = computed(() => {
  */
 const mostrarTipoOperacion = computed(() => operaciones.value.length > 1);
 
+/**
+ * Las operaciones cuya situación merece un chip.
+ *
+ * «Disponible» es lo que uno asume al abrir una cartera, así que decirlo en
+ * cada tarjeta gasta color sin informar — y peor: con veinticuatro chips verdes
+ * iguales, la única que dice «Reservada» deja de saltar a la vista, que es lo
+ * único para lo que servía el chip.
+ */
+const situacionesDestacadas = computed(() =>
+  operaciones.value.filter((o) => o.estado !== 'disponible'));
+
 const atributos = computed(() => atributosDe(props.propiedad));
 const superficie = computed(() => superficieDe(props.propiedad));
 
@@ -141,24 +152,21 @@ const etiquetaAccesible = computed(() => {
       </div>
     </div>
 
+    <!--
+      El orden es el de Zillow y el de Zonaprop, y no por copiar: es el orden en
+      que se mira una propiedad. Primero cuánto sale, después qué es, después
+      dónde queda. El código y el tipo bajaron al pie —en la vista de tarjetas
+      nadie busca por «PROP-0017»; para eso está la tabla— y el chip de
+      situación aparece SÓLO cuando no es la corriente.
+    -->
     <div class="cuerpo">
-      <div class="encabezado">
-        <span class="cod">{{ propiedad.etiqueta }}</span>
-        <span class="tipo">{{ tipoEnPalabras }}</span>
-      </div>
-
       <div v-for="o in operaciones" :key="o.id" class="op">
         <span class="precio" :class="{ vacio: o.precio === null }">{{ precio(o) }}</span>
-        <span class="chips">
-          <StatusChip
-            v-if="mostrarTipoOperacion"
-            :texto="ETIQUETA_OPERACION[o.tipo] ?? o.tipo"
-            tono="acento"
-          />
-          <StatusChip
-            :texto="etiquetaSituacion(o.estado, o.tipo)"
-            :tono="tonoSituacion(o.estado)"
-          />
+        <!-- La palabra «Venta» va como texto chico al lado del número y no como
+             chip de acento: con dos operaciones eran cuatro chips por tarjeta y
+             veinticuatro tarjetas en pantalla. -->
+        <span v-if="mostrarTipoOperacion" class="op-tipo">
+          {{ ETIQUETA_OPERACION[o.tipo] ?? o.tipo }}
         </span>
       </div>
       <!-- «Sin operación» y no «sin operación cargada»: en el listado general
@@ -167,24 +175,49 @@ const etiquetaAccesible = computed(() => {
            listado no sabe. Es el mismo texto que usa la tabla. -->
       <p v-if="!operaciones.length" class="vacio sin-op">Sin operación</p>
 
-      <p class="dir">{{ propiedad.direccion }}</p>
-
-      <!-- El divisor y lo que sigue sólo existen si hay algo que decir: un
-           terreno no tiene atributos y una propiedad sin metros cargados
-           tampoco tiene superficie. Un renglón de guiones no informa nada. -->
-      <template v-if="atributos.length || superficie">
-        <hr class="linea" />
-        <ul v-if="atributos.length" class="atributos">
-          <li v-for="a in atributos" :key="a.clave" :class="a.estado" :title="a.titulo">
-            <UiIcon :nombre="a.icono" :tam="15" />
-            <span>{{ a.texto }}</span>
-          </li>
-        </ul>
-        <p v-if="superficie" class="sup">
+      <!-- Los atributos suben: son lo segundo que se mira y lo que descarta una
+           propiedad de un vistazo. Antes iban al fondo, después de un divisor. -->
+      <ul v-if="atributos.length" class="atributos">
+        <li v-for="a in atributos" :key="a.clave" :class="a.estado" :title="a.titulo">
+          <UiIcon :nombre="a.icono" :tam="15" />
+          <span>{{ a.texto }}</span>
+        </li>
+        <li v-if="superficie" :title="superficie">
           <UiIcon nombre="superficie" :tam="15" />
           <span>{{ superficie }}</span>
-        </p>
-      </template>
+        </li>
+      </ul>
+      <!-- Clase propia y NO `.atributos`: un terreno no tiene ambientes ni
+           baños, y un test comprueba justamente que esa lista no exista. Meter
+           la superficie ahí lo dejaba en rojo, con razón. -->
+      <p v-else-if="superficie" class="solo-sup">
+        <UiIcon nombre="superficie" :tam="15" />
+        <span>{{ superficie }}</span>
+      </p>
+
+      <p class="dir">{{ propiedad.direccion }}</p>
+
+      <footer class="pie">
+        <span class="cod">{{ propiedad.etiqueta }}</span>
+        <span class="tipo">{{ tipoEnPalabras }}</span>
+        <!--
+          Sólo lo que NO es «Disponible».
+
+          Un chip verde que dice «Disponible» en las veinticuatro tarjetas no
+          informa: es el estado que uno asume al abrir la cartera. Lo que hay
+          que ver de lejos es la excepción — reservada, alquilada, suspendida —
+          y con veinticuatro chips iguales al lado, esa una se pierde.
+
+          El estado sigue en el `aria-label`, que se arma aparte: para un lector
+          de pantalla no hay «de un vistazo» y omitirlo sí sería perder el dato.
+        -->
+        <StatusChip
+          v-for="o in situacionesDestacadas"
+          :key="o.id"
+          :texto="etiquetaSituacion(o.estado, o.tipo)"
+          :tono="tonoSituacion(o.estado)"
+        />
+      </footer>
     </div>
   </RouterLink>
 </template>
@@ -253,12 +286,21 @@ const etiquetaAccesible = computed(() => {
   padding: var(--s-md) var(--s-lg) var(--s-lg);
 }
 
-.encabezado {
+/* El pie: identidad y excepciones. Separado por una línea porque es otra clase
+   de dato —de qué se trata la fila, no de qué se trata la propiedad— y sin ella
+   se lee como una atributo más. */
+.pie {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--s-sm);
+  margin-top: auto;
+  padding-top: var(--s-sm);
+  border-top: 1px solid var(--line);
 }
+/* El chip de excepción se empuja al extremo: es lo único del pie que cambia
+   entre tarjetas, y contra el borde se encuentra recorriendo una columna. */
+.pie :deep(.chip) { margin-left: auto; }
+
 .cod {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -274,19 +316,26 @@ const etiquetaAccesible = computed(() => {
 
 .op {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
   gap: var(--s-sm);
   flex-wrap: wrap;
   row-gap: var(--s-2xs);
 }
+/* El precio manda. Es lo primero que se mira en una tarjeta y antes competía
+   con dos chips de color al lado. */
 .precio {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 17px;
+  font-size: 19px;
+  line-height: 1.2;
   color: var(--ink);
 }
-.chips { display: inline-flex; gap: var(--s-xs); flex-wrap: wrap; }
+.op-tipo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
 .vacio { color: var(--muted-2); font-size: 13px; font-family: var(--font-ui); }
 .sin-op { font-size: 13px; }
 
@@ -302,8 +351,6 @@ const etiquetaAccesible = computed(() => {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
-.linea { height: 1px; margin: 0; border: 0; background: var(--line); }
 
 .atributos {
   display: flex;
@@ -331,14 +378,16 @@ const etiquetaAccesible = computed(() => {
 .atributos li.sin_dato { color: var(--warning-ink); }
 .atributos li.sin_dato svg { color: var(--warning-ink); }
 
-.sup {
+/* La superficie entró en la MISMA fila que los atributos, como un ítem más.
+   Antes era un renglón aparte debajo de un divisor: dos líneas de metadatos
+   donde alcanza una. */
+.atributos li { font-variant-numeric: tabular-nums; }
+.solo-sup {
   display: inline-flex;
   align-items: center;
   gap: var(--s-xs);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 13px;
+  color: var(--ink-2);
 }
-.sup svg { flex: none; }
+.solo-sup svg { color: var(--muted); flex: none; }
 </style>

@@ -533,10 +533,19 @@ onMounted(cargar);
                 <td class="clicable" @click="irA(f.id)">
                   <span class="mono cod">{{ f.propiedad.etiqueta }}</span>
                   <span class="dir">{{ f.propiedad.direccion }}</span>
-                  <!-- Va acá abajo y no en una columna propia: la tabla ya tiene
-                       diez. Y dice «captó» porque eso es lo que el dato afirma:
-                       quien colocó el inquilino puede ser otra persona. -->
-                  <span v-if="f.captador" class="captador">captó {{ f.captador.nombre }}</span>
+                  <!--
+                    El captador salió de la fila.
+
+                    Estaba como tercer renglón de cada celda de propiedad, y
+                    hacía que cada fila midiera cuatro líneas en una tabla de
+                    dieciocho contratos. No es un dato del CONTRATO —es de la
+                    propiedad— y nadie recorre una cartera de alquileres
+                    preguntándose quién captó: se recorre por quién debe, qué
+                    aumento hay que confirmar y qué vence.
+
+                    Sigue en el filtro «Captador» de arriba, que es donde sí
+                    sirve, y en la ficha de la propiedad.
+                  -->
                 </td>
 
                 <td class="clicable" @click="irA(f.id)">
@@ -824,7 +833,6 @@ tbody tr:focus-visible {
 .dir { color: var(--ink); }
 .cada { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-2); font-family: var(--font-ui); }
 .inter { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-2); }
-.captador { display: block; margin-top: 2px; font-size: 10px; color: var(--muted-2); }
 .aviso-exportar { margin: 0; font-size: 12px; color: var(--muted); }
 .cuando { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-2); }
 .vacio { color: var(--muted-2); }

@@ -125,11 +125,38 @@ export function proximidad(iso: string | null | undefined): {
   hoy.setHours(0, 0, 0, 0);
   const dias = Math.round((d.getTime() - hoy.getTime()) / 86_400_000);
 
-  if (dias < 0) return { dias, tono: 'vencido', texto: `Vencido hace ${-dias} d` };
+  if (dias < 0) return { dias, tono: 'vencido', texto: `Vencido hace ${plazo(-dias)}` };
   if (dias === 0) return { dias, tono: 'err', texto: 'Vence hoy' };
   if (dias <= 7) return { dias, tono: 'err', texto: `En ${dias} d` };
   if (dias <= 30) return { dias, tono: 'warn', texto: `En ${dias} d` };
-  return { dias, tono: 'neutro', texto: `En ${dias} d` };
+  return { dias, tono: 'neutro', texto: `En ${plazo(dias)}` };
+}
+
+/**
+ * Un plazo en la unidad en que la gente lo piensa.
+ *
+ * ── Por qué ──
+ *
+ * La cartera de alquileres mostraba «En 895 d». Nadie sabe cuánto es eso sin
+ * hacer la cuenta, y en una columna de veinte filas con «En 711 d», «En 529 d»
+ * y «En 833 d» no se puede ni ordenar de un vistazo cuál está más cerca.
+ *
+ * Los días son exactos y sirven mientras se pueda actuar: hasta un par de
+ * meses, «En 45 d» es una fecha en la agenda. Más allá, la precisión al día es
+ * falsa —nadie planifica el vencimiento de un contrato con esa exactitud— y
+ * «En 2 años» dice lo mismo mejor.
+ *
+ * El corte de meses a años va a los 18 y no a los 12: «En 17 meses» todavía se
+ * entiende, y «En 1 año» perdería que faltan cinco meses más.
+ */
+function plazo(dias: number): string {
+  if (dias <= 60) return `${dias} d`;
+
+  const meses = Math.round(dias / 30.44);
+  if (dias < 548) return `${meses} ${meses === 1 ? 'mes' : 'meses'}`;
+
+  const anios = Math.round(dias / 365.25);
+  return `${anios} ${anios === 1 ? 'año' : 'años'}`;
 }
 
 export const ETIQUETA_TIPO: Record<string, string> = {
