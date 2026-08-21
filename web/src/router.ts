@@ -29,6 +29,14 @@ const router = createRouter({
       component: () => import('./paginas/PortalInquilinoPage.vue'),
       meta: { publica: true, permiteSesion: true },
     },
+    // La selección de propiedades que un asesor le manda a su cliente. `/s/` y
+    // no `/seleccion/`: este enlace viaja por WhatsApp, donde se ve entero, y
+    // cada carácter de más es ruido en la burbuja del mensaje.
+    {
+      path: '/s/:token',
+      component: () => import('./paginas/SeleccionPage.vue'),
+      meta: { publica: true, permiteSesion: true },
+    },
     { path: '/registrar', component: () => import('./paginas/RegistrarPage.vue'), meta: { publica: true } },
     {
       path: '/invitacion/:token',
@@ -39,6 +47,8 @@ const router = createRouter({
     { path: '/app', redirect: '/inicio' },
     { path: '/inicio', component: () => import('./paginas/InicioPage.vue') },
     { path: '/tablero', component: () => import('./paginas/TableroPage.vue') },
+    { path: '/red', component: () => import('./paginas/RedPage.vue') },
+    { path: '/envios', component: () => import('./paginas/EnviosPage.vue') },
     { path: '/reclamos', component: () => import('./paginas/ReclamosPage.vue') },
     { path: '/gastos', component: () => import('./paginas/GastosPage.vue') },
     { path: '/plantillas', component: () => import('./paginas/PlantillasPage.vue') },

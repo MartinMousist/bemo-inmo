@@ -88,6 +88,8 @@ const grupos = [
       { a: '/reservas', icono: 'sena', texto: 'Reservas', modulo: 'reservas' },
       { a: '/ventas', icono: 'grafico', texto: 'Ventas', modulo: 'ventas' },
       { a: '/publicaciones', icono: 'mapa', texto: 'Publicaciones', modulo: 'publicaciones' },
+      { a: '/envios', icono: 'documento', texto: 'Envíos a clientes' },
+      { a: '/red', icono: 'mapa', texto: 'La Red' },
     ],
   },
   {

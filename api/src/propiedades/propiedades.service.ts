@@ -116,6 +116,16 @@ export interface Propiedad {
   geocodeFuente: string | null;
   /** Cuándo se resolvió. Es la memoria de cálculo de la coordenada. */
   geocodeEl: string | null;
+  /**
+   * Si está ofrecida en la Red, y con cuánta comisión.
+   *
+   * Va en la ficha y no en una pantalla aparte porque la decisión se toma acá:
+   * mirando la propiedad es cuando uno resuelve si la muestra a otras
+   * inmobiliarias. `null` en la comisión significa «a convenir», que es
+   * distinto de cero.
+   */
+  redCompartida: boolean;
+  redComisionPct: number | null;
   tipo: string;
   supTotal: number | null;
   supCubierta: number | null;
@@ -981,6 +991,8 @@ interface FilaPropiedad {
   /** `timestamptz`, no `date`: node-pg lo devuelve como `Date` y acá sí se
    *  puede convertir — la trampa del 01/01 es de las columnas `date`. */
   geocode_el: Date | null;
+  red_compartida: boolean;
+  red_comision_pct: string | null;
   tipo: string;
   sup_total: string | null;
   sup_cubierta: string | null;
@@ -1121,6 +1133,8 @@ function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
     ubicacionConocida: f.lat !== null && f.lng !== null,
     geocodeFuente: f.geocode_fuente,
     geocodeEl: f.geocode_el ? f.geocode_el.toISOString() : null,
+    redCompartida: f.red_compartida === true,
+    redComisionPct: num(f.red_comision_pct),
     tipo: f.tipo,
     supTotal: num(f.sup_total),
     supCubierta: num(f.sup_cubierta),

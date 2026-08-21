@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import { useAuth } from '../stores/auth';
@@ -292,19 +292,76 @@ function alternarEnCsv(campo: typeof CAMPOS_MULTI[number], clave: string): void 
 }
 
 /**
- * Lo marcado para comparar.
+ * Lo marcado.
  *
  * Vive en la pantalla y NO en `filtros`: no es un filtro y no se recuerda entre
  * visitas. Volver mañana y encontrar tres propiedades tildadas de una sesión
  * anterior sería desconcertante.
+ *
+ * Antes esto era «marcado para comparar» y el tope era cuatro. Ahora lo marcado
+ * sirve para dos cosas —comparar y mandárselas a un cliente— así que el tope
+ * sube a doce y es COMPARAR el que pide entre dos y cuatro, porque más columnas
+ * no entran en la tabla. Un solo mecanismo de marcado; dos cosas para hacer con
+ * él.
  */
-const paraComparar = ref<string[]>([]);
+const marcadas = ref<string[]>([]);
+const MAX_MARCADAS = 12;
 const MAX_COMPARAR = 4;
 
-function alternarComparar(id: string) {
-  const i = paraComparar.value.indexOf(id);
-  if (i >= 0) paraComparar.value.splice(i, 1);
-  else if (paraComparar.value.length < MAX_COMPARAR) paraComparar.value.push(id);
+function alternarMarcada(id: string) {
+  const i = marcadas.value.indexOf(id);
+  if (i >= 0) marcadas.value.splice(i, 1);
+  else if (marcadas.value.length < MAX_MARCADAS) marcadas.value.push(id);
+}
+
+/**
+ * El envío al cliente.
+ *
+ * Se arma acá y no en una pantalla aparte porque el momento de mandar es JUSTO
+ * después de elegir: mandar a otra pantalla obligaría a volver a marcar las
+ * mismas propiedades.
+ */
+const abrirEnvio = ref(false);
+const creandoEnvio = ref(false);
+const errorEnvio = ref('');
+const enlaceEnvio = ref('');
+const copiado = ref(false);
+/**
+ * Cuántas se mandaron, congelado al crear.
+ *
+ * El título contaba `marcadas.length` en vivo, y como las marcas se sueltan al
+ * crear el enlace, el encabezado terminaba diciendo «Enviar 0 propiedades»
+ * justo cuando el envío había salido bien. Se vio abriendo la pantalla.
+ */
+const cantidadEnviada = ref(0);
+const envio = reactive({ contactoNombre: '', titulo: '', mensaje: '' });
+
+async function crearEnvio() {
+  creandoEnvio.value = true; errorEnvio.value = '';
+  try {
+    const r = await api<{ token: string }>('/envios', {
+      method: 'POST',
+      body: JSON.stringify({
+        propiedades: marcadas.value,
+        contactoNombre: envio.contactoNombre || undefined,
+        titulo: envio.titulo || undefined,
+        mensaje: envio.mensaje || undefined,
+      }),
+    });
+    enlaceEnvio.value = `${window.location.origin}/s/${r.token}`;
+    cantidadEnviada.value = marcadas.value.length;
+    // Las marcas se sueltan recién ACÁ, con el enlace ya creado: soltarlas antes
+    // dejaría al asesor sin nada marcado si la creación falla.
+    marcadas.value = [];
+  } catch (e) {
+    errorEnvio.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo crear el envío.';
+  } finally { creandoEnvio.value = false; }
+}
+
+async function copiarEnlace() {
+  await navigator.clipboard.writeText(enlaceEnvio.value);
+  copiado.value = true;
+  setTimeout(() => { copiado.value = false; }, 2000);
 }
 
 /** ¿Está buscando por cercanía? Los tres campos o ninguno. */
@@ -644,17 +701,68 @@ onMounted(() => {
       El botón «Exportar» baja la cartera completa, no lo que está filtrado.
     </p>
 
-    <!-- Aparece recién con dos marcadas: comparar una sola no significa nada. -->
-    <p v-if="paraComparar.length" class="barra-comparar">
-      <span>{{ plural(paraComparar.length, 'propiedad marcada', 'propiedades marcadas') }}</span>
+    <p v-if="marcadas.length" class="barra-comparar">
+      <span>{{ plural(marcadas.length, 'propiedad marcada', 'propiedades marcadas') }}</span>
+
+      <!-- Enviar va primero y con una sola alcanza: mandarle UNA propiedad a un
+           cliente es un caso normal, comparar una contra nada no lo es. -->
+      <button class="btn sm" type="button" @click="abrirEnvio = true">Enviar a un cliente</button>
+
       <RouterLink
-        v-if="paraComparar.length >= 2"
-        class="btn sm"
-        :to="`/propiedades/comparar?ids=${paraComparar.join(',')}`"
+        v-if="marcadas.length >= 2 && marcadas.length <= MAX_COMPARAR"
+        class="btn secondary sm"
+        :to="`/propiedades/comparar?ids=${marcadas.join(',')}`"
       >Comparar</RouterLink>
-      <span v-else class="ayuda">Marcá otra para comparar.</span>
-      <button class="btn secondary sm" type="button" @click="paraComparar = []">Quitar</button>
+      <span v-else-if="marcadas.length > MAX_COMPARAR" class="ayuda">
+        Para comparar, marcá hasta {{ MAX_COMPARAR }}.
+      </span>
+
+      <button class="btn secondary sm" type="button" @click="marcadas = []">Quitar</button>
     </p>
+
+    <!-- El armado del envío.
+         Todo es opcional menos las propiedades: el asesor está apurado y el
+         título y el mensaje tienen default. Pedirle tres campos para mandar un
+         enlace haría que lo siga haciendo por capturas de pantalla. -->
+    <div v-if="abrirEnvio" class="card stack envio">
+      <h2 v-if="!enlaceEnvio">Enviar {{ plural(marcadas.length, 'propiedad', 'propiedades') }}</h2>
+      <h2 v-else>{{ plural(cantidadEnviada, 'propiedad lista', 'propiedades listas') }} para mandar</h2>
+
+      <template v-if="!enlaceEnvio">
+        <label class="campo">
+          <span>Para quién (opcional)</span>
+          <input v-model="envio.contactoNombre" maxlength="120" placeholder="Familia Gómez" />
+        </label>
+        <label class="campo">
+          <span>Título (opcional)</span>
+          <input v-model="envio.titulo" maxlength="120"
+            placeholder="Opciones para vos" />
+        </label>
+        <label class="campo">
+          <span>Mensaje (opcional)</span>
+          <textarea v-model="envio.mensaje" maxlength="1000" rows="2"
+            placeholder="Mirá estas tres, la primera me parece la mejor."></textarea>
+        </label>
+        <p v-if="errorEnvio" class="alert" role="alert">{{ errorEnvio }}</p>
+        <div class="acciones">
+          <button class="btn" type="button" :disabled="creandoEnvio" @click="crearEnvio">
+            {{ creandoEnvio ? 'Creando…' : 'Crear enlace' }}
+          </button>
+          <button class="btn secondary" type="button" @click="abrirEnvio = false">Cancelar</button>
+        </div>
+      </template>
+
+      <template v-else>
+        <p>Listo. Pegale este enlace al cliente por donde te escriba.</p>
+        <div class="acciones">
+          <input class="enlace" :value="enlaceEnvio" readonly @focus="($event.target as HTMLInputElement).select()" />
+          <button class="btn" type="button" @click="copiarEnlace">
+            {{ copiado ? 'Copiado' : 'Copiar' }}
+          </button>
+        </div>
+        <p class="ayuda">Vas a ver si lo abrió en <RouterLink to="/envios">Envíos</RouterLink>.</p>
+      </template>
+    </div>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
@@ -728,10 +836,10 @@ onMounted(() => {
               <td class="check-comparar" @click.stop @keydown.stop>
                 <input
                   type="checkbox"
-                  :checked="paraComparar.includes(p.id)"
-                  :disabled="!paraComparar.includes(p.id) && paraComparar.length >= MAX_COMPARAR"
+                  :checked="marcadas.includes(p.id)"
+                  :disabled="!marcadas.includes(p.id) && marcadas.length >= MAX_MARCADAS"
                   :aria-label="`Comparar ${p.etiqueta}`"
-                  @change="alternarComparar(p.id)"
+                  @change="alternarMarcada(p.id)"
                 />
               </td>
               <td class="mono cod">{{ p.etiqueta }}</td>
@@ -1030,4 +1138,10 @@ button.hon-total:focus-visible { outline: 2px solid var(--acento); outline-offse
   max-width: 70ch;
 }
 
+
+.envio { max-width: 34rem; }
+.envio .acciones { display: flex; gap: .5rem; align-items: center; }
+.envio .enlace {
+  flex: 1; font-family: ui-monospace, monospace; font-size: .85rem;
+}
 </style>

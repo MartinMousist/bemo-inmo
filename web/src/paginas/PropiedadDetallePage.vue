@@ -42,6 +42,7 @@ interface Propiedad {
   /** `'manual'`, `'google'` o `null`. Decide qué dice el pie del mapa. */
   geocodeFuente: string | null;
   geocodeEl: string | null;
+  redCompartida: boolean; redComisionPct: number | null;
   supTotal: number | null; supCubierta: number | null;
   ambientes: number | null; dormitorios: number | null; banos: number | null; cocheras: number | null;
   antiguedad: number | null; descripcion: string | null;
@@ -254,6 +255,38 @@ async function guardarComision(o: Operacion, heredar = false) {
 }
 
 onMounted(cargar);
+
+/**
+ * Compartir en la Red.
+ *
+ * El bloque va SIEMPRE visible, prendido o apagado, y no escondido detrás de un
+ * menú: si compartir no se ve, no se usa, y una Red que nadie alimenta no
+ * existe. Sólo lo maneja quien dirige —qué se le muestra a la competencia, y
+ * con cuánta comisión, no es una decisión de un asesor—.
+ */
+const redComision = ref('');
+const guardandoRed = ref(false);
+
+async function alternarRed(compartida: boolean) {
+  if (!p.value) return;
+  guardandoRed.value = true; error.value = '';
+  try {
+    const r = await api<{ compartida: boolean; comisionPct: number | null }>(
+      `/red/propiedades/${p.value.id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          compartida,
+          comisionPct: compartida && redComision.value !== '' ? Number(redComision.value) : undefined,
+        }),
+      },
+    );
+    p.value.redCompartida = r.compartida;
+    p.value.redComisionPct = r.comisionPct;
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cambiar.';
+  } finally { guardandoRed.value = false; }
+}
 </script>
 
 <template>
@@ -281,6 +314,55 @@ onMounted(cargar);
 
       <div class="cols">
         <div class="stack">
+
+          <!-- La Red. Prendido o apagado, siempre visible: compartir que no se
+               ve no se usa, y una Red que nadie alimenta no existe. -->
+          <section v-if="puedeEditarComision" class="card stack">
+            <div class="row entre">
+              <h2>La Red</h2>
+              <StatusChip
+                :texto="p.redCompartida ? 'Compartida' : 'No compartida'"
+                :tono="p.redCompartida ? 'ok' : 'neutro'" />
+            </div>
+
+            <template v-if="p.redCompartida">
+              <p class="nota">
+                Otras inmobiliarias la ven en su buscador
+                <template v-if="p.redComisionPct !== null">
+                  con <strong>{{ p.redComisionPct }}%</strong> de comisión para quien traiga
+                  el comprador.
+                </template>
+                <template v-else>y la comisión queda a convenir.</template>
+                <!-- Se dice explícito para que nadie tenga que confiar: el
+                     titular y las notas internas son lo que más preocupa al
+                     compartir, y son justo lo que no viaja. -->
+                Ven la zona, los metros y el precio; no ven el titular, ni tus notas,
+                ni la altura de la calle.
+              </p>
+              <div>
+                <button class="btn secondary sm" type="button" :disabled="guardandoRed"
+                  @click="alternarRed(false)">Bajar de la Red</button>
+              </div>
+            </template>
+
+            <template v-else>
+              <p class="nota">
+                Ofrecela a otras inmobiliarias. Si una trae al comprador, cobra el
+                porcentaje que pongas acá sobre tu comisión.
+              </p>
+              <div class="row alta">
+                <label class="campo">
+                  <span>Comisión que ofrezco</span>
+                  <input v-model="redComision" type="number" min="0" max="100" step="0.5"
+                    placeholder="A convenir" />
+                </label>
+                <button class="btn sm" type="button" :disabled="guardandoRed"
+                  @click="alternarRed(true)">
+                  {{ guardandoRed ? 'Compartiendo…' : 'Compartir en la Red' }}
+                </button>
+              </div>
+            </template>
+          </section>
           <section class="card stack">
             <div class="row entre">
               <h2>Operaciones</h2>

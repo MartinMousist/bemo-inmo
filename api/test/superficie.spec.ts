@@ -114,7 +114,7 @@ describe('Superficie expuesta', () => {
    * token. Doce rutas, cada una con su motivo; la trece tiene que costar
    * escribirla acá.
    */
-  it('las rutas públicas son exactamente estas quince', () => {
+  it('las rutas públicas son exactamente estas dieciséis', () => {
     const publicas = rutas.filter((r) => r.publico).map((r) => `${r.verbo} ${r.camino}`).sort();
 
     expect(publicas).toEqual([
@@ -132,6 +132,10 @@ describe('Superficie expuesta', () => {
       'GET /propietario/:token',
       'GET /inquilino/:token',
       'POST /inquilino/:token/reclamos',
+      // La selección de propiedades que un asesor le manda a su cliente. No
+      // pide cuenta a propósito: si pidiera registro, no la abriría nadie. Sólo
+      // lee, vence, y no expone titular ni datos internos.
+      'GET /seleccion/:token',
       // El feed que consumen los portales inmobiliarios.
       'GET /feed/:token.xml',
       // Por acá entran los mensajes de los canales. Públicos por necesidad:

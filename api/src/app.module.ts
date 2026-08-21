@@ -129,6 +129,10 @@ import {
 import { EmprendimientosService } from './emprendimientos/emprendimientos.service';
 import { ImportarUnidadesService } from './emprendimientos/importar-unidades.service';
 import { PlanesPagoService } from './emprendimientos/planes.service';
+import { RedController } from './red/red.controller';
+import { RedService } from './red/red.service';
+import { EnviosController, SeleccionPublicaController } from './envios/envios.controller';
+import { EnviosService } from './envios/envios.service';
 import { TelegramAdaptador } from './inbox/adaptadores/telegram.adaptador';
 import { TwilioAdaptador } from './inbox/adaptadores/twilio.adaptador';
 import { TotpService } from './auth/totp.service';
@@ -177,6 +181,9 @@ import { CuentaService } from './cuenta/cuenta.service';
     CanalesController,
     RespuestasController,
     BotController,
+    RedController,
+    EnviosController,
+    SeleccionPublicaController,
     EmprendimientosController,
     PlanesPagoController,
     EquipoController,
@@ -211,6 +218,8 @@ import { CuentaService } from './cuenta/cuenta.service';
     DocumentosController,
   ],
   providers: [
+    RedService,
+    EnviosService,
     AuthService,
     TokensService,
     InicioService,
