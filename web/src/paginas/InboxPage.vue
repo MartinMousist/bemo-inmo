@@ -107,8 +107,12 @@ async function usarRespuesta(r: Respuesta) {
   }
 }
 
+// `as boolean` en los dos: sin eso TypeScript los infiere como el literal
+// `false` y el `@click` que los alterna no compila. Con `v-model` en una
+// casilla pasaba desapercibido porque la plantilla es más laxa ahí.
 const { valores: filtros } = filtrosRecordados('inbox', {
-  estado: 'abierta', canal: '', soloMios: false, noLeidos: false, q: '',
+  estado: 'abierta', canal: '', q: '',
+  soloMios: false as boolean, noLeidos: false as boolean,
 });
 
 const ETIQUETA_CANAL: Record<string, string> = {
@@ -292,8 +296,33 @@ onMounted(cargar);
         <option value="">Todos los canales</option>
         <option v-for="(et, k) in ETIQUETA_CANAL" :key="k" :value="k">{{ et }}</option>
       </select>
-      <label class="check"><input v-model="filtros.noLeidos" type="checkbox" /> Sin leer</label>
-      <label class="check"><input v-model="filtros.soloMios" type="checkbox" /> Míos</label>
+      <!--
+        Interruptores y no casillas.
+
+        «Sin leer» y «Míos» son FILTROS, igual que los dos desplegables de al
+        lado, y estaban dibujados como casillas de un formulario. Dos lenguajes
+        para lo mismo en la misma fila: una casilla dice «esto es un dato que
+        vas a guardar», un interruptor dice «esto recorta la lista de abajo».
+
+        Y prendidos se ven prendidos, que era el otro problema: una casilla
+        tildada a 13px, al lado de dos selects, no se nota, y quien no encuentra
+        una conversación no tiene forma de darse cuenta de que la está
+        escondiendo un filtro que dejó puesto ayer.
+      -->
+      <button
+        type="button"
+        class="conmutador"
+        :class="{ activo: filtros.noLeidos }"
+        :aria-pressed="filtros.noLeidos"
+        @click="filtros.noLeidos = !filtros.noLeidos"
+      >Sin leer</button>
+      <button
+        type="button"
+        class="conmutador"
+        :class="{ activo: filtros.soloMios }"
+        :aria-pressed="filtros.soloMios"
+        @click="filtros.soloMios = !filtros.soloMios"
+      >Míos</button>
     </div>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
@@ -555,7 +584,6 @@ onMounted(cargar);
   border-radius: var(--r-md); background: var(--surface); color: var(--ink);
 }
 .buscar { min-width: 200px; }
-.check { display: inline-flex; align-items: center; gap: var(--s-2xs); font-size: 13px; }
 
 /* Tres columnas: la cola, la conversación y lo que se HACE con ella.
    Separar el panel de acciones del hilo es lo que evita que la cabecera del
@@ -688,4 +716,26 @@ onMounted(cargar);
 .resultados-prop button:hover { background: var(--surface-2); }
 .resultados-prop strong { font-size: 12px; }
 .resultados-prop span { font-size: 11px; color: var(--muted); }
+
+/* Mismo alto y mismo redondeo que los selects de al lado: son la misma clase de
+   control y tienen que leerse como una sola fila. */
+.conmutador {
+  height: 34px;
+  padding: 0 var(--s-md);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--t-short), background var(--t-short);
+}
+.conmutador:hover { border-color: var(--muted); }
+.conmutador.activo {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+  font-weight: 500;
+}
 </style>

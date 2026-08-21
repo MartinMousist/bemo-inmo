@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import { useUi } from '../stores/ui';
@@ -22,8 +22,33 @@ interface Liquidacion {
 const POR_PAGINA = 25;
 
 const ui = useUi();
+/**
+ * Cuánto sale este mes, por moneda.
+ *
+ * ── Por qué faltaba ──
+ *
+ * La pantalla contestaba «quién cobra cuánto» y no «cuánto tengo que pagar».
+ * Ese segundo número es el que hay que tener antes de sentarse a transferir, y
+ * había que sumarlo a mano de la pantalla — con tres propietarios se puede, con
+ * treinta no.
+ *
+ * **Por moneda y no en un solo total**: sumar pesos con dólares da un número
+ * que no es plata de nada.
+ *
+ * Suma lo que está EN PANTALLA, con los filtros aplicados. Si alguien filtró
+ * por «Borrador», el total es el de los borradores, que es justo lo que quiso
+ * preguntar. Por eso el rótulo dice cuántas son.
+ */
 const items = ref<Liquidacion[]>([]);
 const total = ref(0);
+
+const netoPorMoneda = computed(() => {
+  const por = new Map<string, number>();
+  for (const l of items.value) {
+    por.set(l.moneda, (por.get(l.moneda) ?? 0) + l.totalNeto);
+  }
+  return [...por.entries()].map(([moneda, monto]) => ({ moneda, monto }));
+});
 const paginas = ref(1);
 const pagina = ref(1);
 /**
@@ -164,6 +189,25 @@ onMounted(cargar);
       </div>
     </div>
 
+    <!--
+      El total va ARRIBA de la lista y no al pie: es lo que se viene a buscar, y
+      al pie de treinta filas hay que scrollear para encontrarlo.
+
+      Y va FUERA de la cadena `v-if / v-else-if / v-else` de abajo, con su
+      propio `v-if`. La primera versión lo metió adentro como un `v-else-if`, y
+      como la cadena es excluyente, el total se dibujaba y las liquidaciones
+      desaparecían. Se vio abriendo la pantalla: el número estaba y la lista no.
+    -->
+    <div v-if="!cargando && items.length" class="total-mes">
+      <span class="et">
+        A pagar en {{ fmtPeriodo(mes + '-01') }}
+        <template v-if="items.length !== total">· {{ items.length }} de {{ total }}</template>
+      </span>
+      <span class="cifras">
+        <b v-for="m in netoPorMoneda" :key="m.moneda" class="mono">{{ money(m.monto, m.moneda) }}</b>
+      </span>
+    </div>
+
     <UiSkeleton v-if="cargando" :filas="3" :alto="72" />
 
     <UiEmpty
@@ -176,6 +220,9 @@ onMounted(cargar);
       <button class="btn" type="button" @click="generar">Generar el período</button>
     </UiEmpty>
 
+    <!-- `v-else` y no `v-if="items.length"`: `v-if` y `v-for` en el mismo
+         elemento es un antipatrón en Vue 3, y acá además no hace falta —el
+         bloque del total ya cierra la cadena con su `v-else-if`—. -->
     <article v-for="l in items" v-else :key="l.id" class="card liq">
       <header @click="abierta = abierta === l.id ? null : l.id">
         <div>
@@ -226,6 +273,16 @@ onMounted(cargar);
 
 .mes { font: inherit; padding: var(--s-sm) var(--s-md); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: var(--ink); }
 .liq { padding: 0; overflow: hidden; }
+.total-mes {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s-md); flex-wrap: wrap;
+  padding: var(--s-md) var(--s-lg);
+  background: var(--surface-2); border-radius: var(--r-md);
+}
+.total-mes .et { color: var(--muted); font-size: 13px; }
+.total-mes .cifras { display: flex; gap: var(--s-lg); flex-wrap: wrap; }
+.total-mes b { font-size: 18px; font-variant-numeric: tabular-nums; }
+
 .liq header { display: flex; align-items: center; gap: var(--s-xl); padding: var(--s-lg); cursor: pointer; flex-wrap: wrap; }
 .liq header:hover { background: var(--surface-2); }
 .quien { margin: 0; font-weight: 500; color: var(--ink); }
