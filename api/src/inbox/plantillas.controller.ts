@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { BotService } from './bot.service';
  * borrarlas es de titular y administración: una plantilla mal escrita se manda
  * a cien clientes antes de que alguien la lea.
  */
+@Modulo('bandeja')
 @Controller('respuestas')
 export class RespuestasController {
   constructor(private readonly plantillas: PlantillasChatService) {}
@@ -88,6 +90,7 @@ export class RespuestasController {
  * Sólo titular y administración: define qué se le contesta solo a un cliente y
  * cuándo se avisa a una persona. No es una preferencia personal.
  */
+@Modulo('bandeja')
 @Controller('bot')
 export class BotController {
   constructor(private readonly bot: BotService) {}

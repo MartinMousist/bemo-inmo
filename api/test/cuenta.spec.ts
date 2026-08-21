@@ -21,14 +21,23 @@ describe('Tipo de cuenta y módulos', () => {
       expect(modulosActivos('inmobiliaria')).toEqual(MODULOS.map((m) => m.clave));
     });
 
-    it('un gestor de alquileres no ve ninguno', () => {
+    it('un gestor de alquileres no ve ninguno de los que elige', () => {
       // Su trabajo es cobrar el 1, liquidarle al propietario y que no se le
-      // venza una garantía. Todo eso es núcleo y lo tiene entero.
-      expect(modulosActivos('gestor')).toEqual([]);
+      // venza una garantía. Nada de eso es «leads» ni «comisiones».
+      //
+      // Sin plan declarado, los FIJOS sí están: no son una preferencia suya
+      // sino algo que decide el plan, y sin plan no hay nada que filtrar. Que
+      // un gestor no vea Liquidaciones sería absurdo: es su trabajo entero.
+      const activos = modulosActivos('gestor');
+      expect(activos).not.toContain('leads');
+      expect(activos).not.toContain('ventas');
+      expect(activos).not.toContain('comisiones');
+      expect(activos).toContain('liquidaciones');
+      expect(activos).toContain('portal');
     });
 
     it('la excepción gana sobre el tipo, en los dos sentidos', () => {
-      expect(modulosActivos('gestor', ['ventas'])).toEqual(['ventas']);
+      expect(modulosActivos('gestor', ['ventas'])).toContain('ventas');
       expect(modulosActivos('inmobiliaria', [], ['publicaciones']))
         .not.toContain('publicaciones');
     });
@@ -44,13 +53,29 @@ describe('Tipo de cuenta y módulos', () => {
       expect(comisiones.motivo).toBe('fuera-del-plan');
     });
 
-    it('«leads» se compara contra «oportunidades», que es como lo llama el plan', () => {
-      // Sin la traducción, el módulo que TODOS los planes incluyen aparecería
-      // fuera del plan en todas las cuentas.
-      const estado = estadoDeModulos('inmobiliaria', [], [], [
-        'propiedades', 'personas', 'oportunidades', 'contratos', 'ajustes',
-      ]);
-      expect(estado.find((m) => m.clave === 'leads')!.activo).toBe(true);
+    it('el plan y el menú usan las MISMAS claves, sin traducción', () => {
+      // Antes el plan decía `oportunidades` donde el menú dice `leads`, y una
+      // función traducía. Desde la migración 044 son la misma palabra: si el
+      // plan trae `leads`, el módulo está; si trae el nombre viejo, no.
+      const conNuevo = estadoDeModulos('inmobiliaria', [], [], ['leads']);
+      expect(conNuevo.find((m) => m.clave === 'leads')!.activo).toBe(true);
+
+      const conViejo = estadoDeModulos('inmobiliaria', [], [], ['oportunidades']);
+      expect(conViejo.find((m) => m.clave === 'leads')!.activo).toBe(false);
+    });
+
+    it('un módulo fijo no se apaga con el interruptor: se cambia de plan', () => {
+      // `liquidaciones` en `off` no hace nada. Apagar la rendición mensual no
+      // es una preferencia razonable, y ofrecerla como tal sería una forma de
+      // que alguien se rompa el mes sin querer.
+      const estado = estadoDeModulos('inmobiliaria', [], ['liquidaciones'], null);
+      expect(estado.find((m) => m.clave === 'liquidaciones')!.activo).toBe(true);
+
+      // Fuera del plan sí desaparece, y con su motivo.
+      const sinPlan = estadoDeModulos('inmobiliaria', [], [], ['leads']);
+      const liq = sinPlan.find((m) => m.clave === 'liquidaciones')!;
+      expect(liq.activo).toBe(false);
+      expect(liq.motivo).toBe('fuera-del-plan');
     });
 
     it('sin plan declarado no se filtra nada', () => {
@@ -58,7 +83,7 @@ describe('Tipo de cuenta y módulos', () => {
       // incluye nada. Confundirlos dejaría sin módulos a una cuenta sin
       // suscripción cargada.
       expect(modulosActivos('inmobiliaria', [], [], undefined)).toHaveLength(MODULOS.length);
-      expect(modulosActivos('inmobiliaria', [], [], [])).toHaveLength(3);
+      expect(modulosActivos('inmobiliaria', [], [], [])).toHaveLength(0);
     });
   });
 
@@ -96,10 +121,18 @@ describe('Tipo de cuenta y módulos', () => {
       expect(r.body.activos).toContain('ventas');
     });
 
-    it('pasar a gestor esconde los cinco', async () => {
+    it('pasar a gestor esconde los cinco que se eligen, y deja los del plan', async () => {
       const r = await http().put('/v1/cuenta/tipo').set(...como(inmo))
         .send({ tipo: 'gestor' }).expect(200);
-      expect(r.body.activos).toEqual([]);
+
+      // Los cinco electivos se van: un gestor no capta, no vende y no reparte
+      // comisiones.
+      for (const c of ['leads', 'ventas', 'reservas', 'comisiones', 'publicaciones']) {
+        expect(r.body.activos).not.toContain(c);
+      }
+      // Los que decide el plan se quedan: liquidarle al propietario ES su
+      // trabajo, y esconderlo por elegir «gestor» sería vaciarle la app.
+      expect(r.body.activos).toContain('liquidaciones');
       expect(r.body.tipoTexto).toBe('Gestión de alquileres');
     });
 
@@ -109,7 +142,7 @@ describe('Tipo de cuenta y módulos', () => {
         .send({ activo: true }).expect(200);
 
       expect(r.body.tipo).toBe('gestor');
-      expect(r.body.activos).toEqual(['ventas']);
+      expect(r.body.activos).toContain('ventas');
       expect(r.body.modulos.find((m: { clave: string }) => m.clave === 'ventas').motivo)
         .toBe('prendido');
     });
@@ -172,7 +205,8 @@ describe('Tipo de cuenta y módulos', () => {
       const cuenta = await http().get('/v1/cuenta')
         .set('Authorization', `Bearer ${r.body.accessToken}`).expect(200);
       expect(cuenta.body.tipo).toBe('gestor');
-      expect(cuenta.body.activos).toEqual([]);
+      expect(cuenta.body.activos).not.toContain('leads');
+      expect(cuenta.body.activos).not.toContain('comisiones');
     });
   });
 });

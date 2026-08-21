@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { InboxService } from './inbox.service';
  * contestarla. Lo que cambia por rol no es el acceso sino **qué ve**: el número
  * del cliente le sale enmascarado a quien no es titular ni administración.
  */
+@Modulo('bandeja')
 @Controller('inbox')
 export class InboxController {
   constructor(private readonly inbox: InboxService) {}

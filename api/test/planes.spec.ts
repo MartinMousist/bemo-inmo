@@ -25,7 +25,7 @@ describe('Planes, límites y API', () => {
     await limpiarFixtures();
     app = await crearApp();
     inmo = await crearInmobiliaria('planes', app.get(TokensService));
-    await ponerPlan(inmo.tenantId, 'medio');
+    await ponerPlan(inmo.tenantId, 'inmobiliaria');
   }, 60_000);
 
   afterAll(async () => {
@@ -52,12 +52,26 @@ describe('Planes, límites y API', () => {
     }
   }
 
-  /** Cambia el tope del plan inicial. Tabla global: siempre restaurar. */
-  async function topeDePropiedades(n: number) {
+  /**
+   * Cambia el tope del plan Base y devuelve el que había.
+   *
+   * Devuelve el anterior en vez de que el `finally` restaure una constante: la
+   * primera versión restauraba un 100 escrito a mano y el día que el plan pasó
+   * a 150, este test dejó el tope en 100 y rompió a OTRO test del mismo archivo.
+   * Pasaba solo y fallaba en la suite completa.
+   */
+  async function topeDePropiedades(n: number | null): Promise<number | null> {
     const c = new Client({ connectionString: loadEnv().DATABASE_OWNER_URL });
     await c.connect();
     try {
-      await c.query(`UPDATE plan SET max_propiedades = $1 WHERE codigo = 'inicial'`, [n]);
+      // Se lee ANTES y se escribe después, en dos sentencias. Un `RETURNING`
+      // con subconsulta daría el valor viejo por el snapshot de la sentencia,
+      // pero eso es demasiado sutil para dejarlo escrito en un test.
+      const { rows } = await c.query<{ max_propiedades: number | null }>(
+        `SELECT max_propiedades FROM plan WHERE codigo = 'base'`,
+      );
+      await c.query(`UPDATE plan SET max_propiedades = $1 WHERE codigo = 'base'`, [n]);
+      return rows[0]?.max_propiedades ?? null;
     } finally {
       await c.end();
     }
@@ -66,26 +80,30 @@ describe('Planes, límites y API', () => {
   it('el catálogo es público y NO trae precios inventados', async () => {
     const res = await request(app.getHttpServer()).get('/v1/planes').expect(200);
 
-    expect(res.body).toHaveLength(4);
+    // Tres, no cuatro: «A medida» era una cuarta fila que nadie usaba y que en
+    // una página de precios se lee como «llamanos», no como un plan.
+    expect(res.body).toHaveLength(3);
     // El gate de la etapa 0 es que alguien diga un número concreto. Hasta
-    // entonces, precio null y no una cifra puesta a ojo.
+    // entonces, precio null y no una cifra puesta a ojo. La columna
+    // `precio_usd` ya existe (migración 044) y arranca vacía justamente por
+    // esto: la propuesta está en docs/planes.md, sin publicar.
     expect(res.body.every((p: { precio: null }) => p.precio === null)).toBe(true);
 
-    const inicial = res.body.find((p: { codigo: string }) => p.codigo === 'inicial');
-    expect(inicial.maxPropiedades).toBe(100);
-    const pro = res.body.find((p: { codigo: string }) => p.codigo === 'pro');
+    const inicial = res.body.find((p: { codigo: string }) => p.codigo === 'base');
+    expect(inicial.maxPropiedades).toBe(150);
+    const pro = res.body.find((p: { codigo: string }) => p.codigo === 'total');
     expect(pro.maxPropiedades).toBeNull();   // sin límite
   });
 
   it('mi-plan dice el estado REAL del cobro, sin simularlo', async () => {
     const res = await http().get('/v1/planes/mi-plan').set(...como(inmo)).expect(200);
 
-    expect(res.body.plan.codigo).toBe('medio');
+    expect(res.body.plan.codigo).toBe('inmobiliaria');
     expect(res.body.cobro.integrado).toBe(false);
     expect(res.body.cobro.detalle).toContain('medio de pago');
     // Y los límites vienen con lo usado de verdad.
     const props = res.body.limites.find((l: { recurso: string }) => l.recurso === 'propiedades');
-    expect(props.maximo).toBe(500);
+    expect(props.maximo).toBe(1000);
     expect(typeof props.usado).toBe('number');
   });
 
@@ -94,9 +112,9 @@ describe('Planes, límites y API', () => {
     // aserción falla antes de restaurar, el tope queda tocado y rompe los
     // demás tests. Un test que muta estado compartido lo restaura pase lo que
     // pase.
-    await topeDePropiedades(2);
+    const topeOriginal = await topeDePropiedades(2);
     try {
-      await ponerPlan(inmo.tenantId, 'inicial');
+      await ponerPlan(inmo.tenantId, 'base');
 
       await http().post('/v1/propiedades').set(...como(inmo))
         .send({ calle: 'Una', tipo: 'casa' }).expect(201);
@@ -113,23 +131,95 @@ describe('Planes, límites y API', () => {
       expect(res.body.detail).toContain('tope de 2 propiedades');
       expect(res.body.detail).toContain('plan superior');
     } finally {
-      await topeDePropiedades(100);
-      await ponerPlan(inmo.tenantId, 'medio');
+      await topeDePropiedades(topeOriginal);
+      await ponerPlan(inmo.tenantId, 'inmobiliaria');
     }
   });
 
+
+  /**
+   * El portón de módulos.
+   *
+   * Hasta la migración 044, `plan.modulos` declaraba trece módulos y el código
+   * exigía dos: los otros once eran texto en una página de precios. Esta tanda
+   * es lo que hace que dejen de ser una promesa.
+   */
+  describe('el plan se hace valer, no sólo se declara', () => {
+    afterEach(async () => { await ponerPlan(inmo.tenantId, 'inmobiliaria'); });
+
+    it('con plan Base no se puede emitir una liquidación', async () => {
+      await ponerPlan(inmo.tenantId, 'base');
+      const res = await http().post('/v1/liquidaciones/generar').set(...como(inmo))
+        .send({ periodo: '2026-08-01' })
+        .expect(403);
+      expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
+      expect(res.body.detail).toContain('liquidaciones');
+    });
+
+    /**
+     * El caso que separa un límite de plan de un secuestro de datos.
+     *
+     * Quien baja de plan deja de EMITIR liquidaciones. Las que ya emitió son
+     * suyas y las sigue viendo. Cortarle el acceso a dos años de rendiciones
+     * para presionarlo a pagar no es un límite comercial.
+     */
+    it('pero SÍ puede leer las que ya había emitido', async () => {
+      await ponerPlan(inmo.tenantId, 'base');
+      await http().get('/v1/liquidaciones').set(...como(inmo)).expect(200);
+    });
+
+    it('la Red se corta entera, también para leer: ahí leer ES el servicio', async () => {
+      await ponerPlan(inmo.tenantId, 'base');
+      const res = await http().get('/v1/red').set(...como(inmo)).expect(403);
+      expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
+    });
+
+    it('la bandeja también: un plan Base no la abre', async () => {
+      await ponerPlan(inmo.tenantId, 'base');
+      await http().get('/v1/inbox').set(...como(inmo)).expect(403);
+      await http().get('/v1/canales').set(...como(inmo)).expect(403);
+    });
+
+    it('los emprendimientos son del plan Total', async () => {
+      await ponerPlan(inmo.tenantId, 'inmobiliaria');
+      await http().post('/v1/emprendimientos').set(...como(inmo))
+        .send({ nombre: 'Torre', calle: 'Alguna' })
+        .expect(403);
+
+      await ponerPlan(inmo.tenantId, 'total');
+      await http().post('/v1/emprendimientos').set(...como(inmo))
+        .send({ nombre: 'Torre', calle: 'Alguna' })
+        .expect(201);
+    });
+
+    /**
+     * Lo que NO se corta.
+     *
+     * El feed XML lo consume un portal inmobiliario con un token, sin sesión.
+     * Un 403 ahí no lo ve nadie de la inmobiliaria: lo ve Zonaprop, que deja de
+     * publicar la cartera sin que nadie se entere. Las rutas públicas dentro de
+     * un controlador con módulo siguen andando.
+     */
+    it('una ruta pública dentro de un módulo no se corta', async () => {
+      await ponerPlan(inmo.tenantId, 'base');
+      // Sin token: no hay actor, así que no hay plan que consultar. Da 404 por
+      // el token inventado, NO 403.
+      await request(app.getHttpServer()).get('/v1/feed/tokeninventado.xml').expect(404);
+    });
+  });
+
   it('un módulo fuera del plan devuelve 403 con el motivo', async () => {
-    await ponerPlan(inmo.tenantId, 'inicial');
+    await ponerPlan(inmo.tenantId, 'base');
 
     const res = await http().get('/v1/sucursales').set(...como(inmo)).expect(403);
     expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
     expect(res.body.detail).toContain('multisucursal');
 
-    await ponerPlan(inmo.tenantId, 'medio');
+    await ponerPlan(inmo.tenantId, 'inmobiliaria');
   });
 
   it('con el plan Pro, multisucursal y API funcionan', async () => {
-    await ponerPlan(inmo.tenantId, 'pro');
+    await ponerPlan(inmo.tenantId, 'total');
 
     await http().post('/v1/sucursales').set(...como(inmo))
       .send({ nombre: 'Centro' }).expect(201);
@@ -149,7 +239,7 @@ describe('Planes, límites y API', () => {
   });
 
   it('en la base sólo queda el hash de la clave, nunca la clave', async () => {
-    await ponerPlan(inmo.tenantId, 'pro');
+    await ponerPlan(inmo.tenantId, 'total');
     const clave = await http().post('/v1/api-keys').set(...como(inmo))
       .send({ nombre: 'Otra' }).expect(201);
 
@@ -167,7 +257,7 @@ describe('Planes, límites y API', () => {
   });
 
   it('revocar una clave dos veces no funciona', async () => {
-    await ponerPlan(inmo.tenantId, 'pro');
+    await ponerPlan(inmo.tenantId, 'total');
     const clave = await http().post('/v1/api-keys').set(...como(inmo))
       .send({ nombre: 'Revocable' }).expect(201);
 
@@ -176,7 +266,7 @@ describe('Planes, límites y API', () => {
   });
 
   it('sólo el titular administra sucursales y claves', async () => {
-    await ponerPlan(inmo.tenantId, 'pro');
+    await ponerPlan(inmo.tenantId, 'total');
     await http().post('/v1/sucursales').set(...como(inmo, 'admin'))
       .send({ nombre: 'Sur' }).expect(403);
     await http().get('/v1/api-keys').set(...como(inmo, 'admin')).expect(403);

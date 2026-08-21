@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query,
 } from '@nestjs/common';
@@ -47,6 +48,7 @@ class GenerarDto {
   @IsUUID() contratoId!: string;
 }
 
+@Modulo('documentos', { lecturaLibre: true })
 @Controller('plantillas')
 export class PlantillasController {
   constructor(private readonly plantillas: PlantillasService) {}

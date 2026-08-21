@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query,
 } from '@nestjs/common';
@@ -57,6 +58,7 @@ class EnvioDto {
  * `contable` queda afuera de crear y mandar, y adentro de leer: el pre-contrato
  * no es plata, pero saber qué papel salió sí es parte de mirar una cuenta.
  */
+@Modulo('documentos', { lecturaLibre: true })
 @Controller('contratos/:contratoId/documentos')
 export class DocumentosDeContratoController {
   constructor(
@@ -76,6 +78,7 @@ export class DocumentosDeContratoController {
   }
 }
 
+@Modulo('documentos', { lecturaLibre: true })
 @Controller('documentos')
 export class DocumentosController {
   constructor(private readonly documentos: DocumentosService) {}

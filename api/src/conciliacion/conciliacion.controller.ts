@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import {
@@ -36,6 +37,7 @@ class PendientesDto {
  * decide a qué contrato entra cada peso, y eso termina en la liquidación al
  * propietario. El contable LEE —es su trabajo revisar la cobranza— y no imputa.
  */
+@Modulo('conciliacion', { lecturaLibre: true })
 @Controller('conciliacion')
 export class ConciliacionController {
   constructor(private readonly conciliacion: ConciliacionService) {}

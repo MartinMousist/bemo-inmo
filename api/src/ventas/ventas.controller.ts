@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Get, Param, ParseUUIDPipe, Post, Patch, Put, Query,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import {
 } from './ventas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
+@Modulo('ventas', { lecturaLibre: true })
 @Controller('ventas')
 export class VentasController {
   constructor(private readonly ventas: VentasService) {}
@@ -79,6 +81,7 @@ export class VentasController {
  * cuelgan de `/contratos/:id` pero el servicio, el motor y los DTO son los de
  * comisiones. Así, cuando cambie el reparto, cambia un módulo y no dos.
  */
+@Modulo('comisiones', { lecturaLibre: true })
 @Controller('contratos/:contratoId/comisiones')
 export class ComisionesDeContratoController {
   constructor(private readonly comisiones: ComisionesContratoService) {}
@@ -105,6 +108,7 @@ export class ComisionesDeContratoController {
   }
 }
 
+@Modulo('comisiones', { lecturaLibre: true })
 @Controller('comisiones')
 export class ComisionesController {
   constructor(

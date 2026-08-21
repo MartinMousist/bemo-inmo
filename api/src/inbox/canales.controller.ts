@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Req,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { CrearCuentaCanalDto, EditarCuentaCanalDto } from './inbox.dto';
  * Editar y desconectar: cada uno el suyo; titular y administración, todos. El
  * canal de la inmobiliaria sólo lo tocan ellos.
  */
+@Modulo('bandeja')
 @Controller('canales')
 export class CanalesController {
   constructor(private readonly canales: CanalesService) {}

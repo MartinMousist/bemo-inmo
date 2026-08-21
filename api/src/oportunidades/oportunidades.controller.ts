@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body,
   Controller,
@@ -21,6 +22,7 @@ import {
 } from './oportunidades.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
 
+@Modulo('leads', { lecturaLibre: true })
 @Controller('oportunidades')
 export class OportunidadesController {
   constructor(private readonly oportunidades: OportunidadesService) {}
@@ -90,6 +92,7 @@ export class OportunidadesController {
   }
 }
 
+@Modulo('reservas', { lecturaLibre: true })
 @Controller('reservas')
 export class ReservasController {
   constructor(private readonly oportunidades: OportunidadesService) {}

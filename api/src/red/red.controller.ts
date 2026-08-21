@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
 import {
   IsBoolean, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min,
@@ -39,6 +40,7 @@ class CompartirDto {
   comisionPct?: number;
 }
 
+@Modulo('red')
 @Controller('red')
 export class RedController {
   constructor(private readonly red: RedService) {}

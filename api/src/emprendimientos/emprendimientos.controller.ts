@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Get, Header, HttpCode, Param, ParseUUIDPipe,
   Patch, Post, Query,
@@ -19,6 +20,7 @@ import { PlanesPagoService } from './planes.service';
  * avance de obra es de titular y administración: son los números que después
  * alguien firma.
  */
+@Modulo('emprendimientos', { lecturaLibre: true })
 @Controller('emprendimientos')
 export class EmprendimientosController {
   constructor(
@@ -121,6 +123,7 @@ export class EmprendimientosController {
  * puede ser general de la desarrolladora —«30 + 36 CAC» se ofrece en los tres
  * edificios— y colgarlo de uno obligaría a duplicarlo en cada uno.
  */
+@Modulo('emprendimientos', { lecturaLibre: true })
 @Controller('planes-pago')
 export class PlanesPagoController {
   constructor(private readonly planes: PlanesPagoService) {}

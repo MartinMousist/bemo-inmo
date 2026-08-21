@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, Res,
 } from '@nestjs/common';
@@ -10,6 +11,7 @@ import {
 } from './publicaciones.dto';
 import { ActorActual, Publico, Roles, type Actor } from '../auth/decoradores';
 
+@Modulo('publicaciones', { lecturaLibre: true })
 @Controller('publicaciones')
 export class PublicacionesController {
   constructor(private readonly pub: PublicacionesService) {}

@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Param, ParseUUIDPipe, Patch, Post, Get, Put,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { AppError, ErrorCode } from '../common/app-error';
  * lo hace cumplir la base — y una sin firmar se arregla editándola. «Borrar el
  * acta y hacerla de nuevo» es justo lo que no queremos que sea fácil.
  */
+@Modulo('actas', { lecturaLibre: true })
 @Controller('contratos/:contratoId/actas')
 export class ActasDeContratoController {
   constructor(private readonly actas: ActasService) {}
@@ -40,6 +42,7 @@ export class ActasDeContratoController {
   }
 }
 
+@Modulo('actas', { lecturaLibre: true })
 @Controller('actas')
 export class ActasController {
   constructor(private readonly actas: ActasService) {}

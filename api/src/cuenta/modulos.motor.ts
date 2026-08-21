@@ -48,6 +48,17 @@ export interface Modulo {
   detalle: string;
   /** Las rutas del front que deja de haber. La primera es la del menú. */
   rutas: string[];
+  /**
+   * Lo gobierna el PLAN y no el usuario: aparece según el plan, sin
+   * interruptor.
+   *
+   * La diferencia con los demás no es de importancia sino de quién decide.
+   * «Leads» se apaga porque a un gestor de alquileres no le sirve —es una
+   * preferencia—. «Liquidaciones» no se apaga: si el plan la incluye, está, y
+   * si no la incluye, lo que corresponde ofrecer es cambiar de plan, no un
+   * interruptor que no va a arreglar nada.
+   */
+  fijo?: boolean;
 }
 
 export const MODULOS: Modulo[] = [
@@ -80,6 +91,68 @@ export const MODULOS: Modulo[] = [
     nombre: 'Reservas',
     detalle: 'Las señas tomadas sobre una operación y su vencimiento.',
     rutas: ['/reservas'],
+  },
+
+  // ── Los que gobierna el plan ───────────────────────────────────────────────
+  //
+  // Todo esto se construyó entre las etapas 12 y 19 y no figuraba en ningún
+  // plan, así que hasta la migración 044 lo tenía cualquiera. No es que se le
+  // quite algo a nadie: es que nunca estuvo decidido a quién le tocaba.
+  {
+    clave: 'liquidaciones',
+    nombre: 'Liquidaciones',
+    detalle: 'La rendición mensual al propietario, con honorarios, gastos y retenciones.',
+    rutas: ['/liquidaciones'],
+    fijo: true,
+  },
+  {
+    clave: 'portal',
+    nombre: 'Portales de propietario e inquilino',
+    detalle: 'El enlace sin cuenta donde cada uno ve lo suyo y deja de llamar para preguntarlo.',
+    rutas: ['/propietarios'],
+    fijo: true,
+  },
+  {
+    clave: 'bandeja',
+    nombre: 'Bandeja omnicanal',
+    detalle: 'WhatsApp, Telegram, Instagram y mail en un solo lugar, con bot y respuestas.',
+    rutas: ['/inbox', '/bot'],
+    fijo: true,
+  },
+  {
+    clave: 'red',
+    nombre: 'La Red',
+    detalle: 'Buscar y ofrecer propiedades entre inmobiliarias, con comisión compartida.',
+    rutas: ['/red'],
+    fijo: true,
+  },
+  {
+    clave: 'documentos',
+    nombre: 'Documentos y pre-contratos',
+    detalle: 'Las plantillas de la casa y el documento generado listo para firmar.',
+    rutas: ['/plantillas'],
+    fijo: true,
+  },
+  {
+    clave: 'emprendimientos',
+    nombre: 'Emprendimientos en pozo',
+    detalle: 'Unidades por planilla, planes de pago y calculadoras de cuota y de inversión.',
+    rutas: ['/emprendimientos'],
+    fijo: true,
+  },
+  {
+    clave: 'conciliacion',
+    nombre: 'Conciliación bancaria',
+    detalle: 'El extracto del banco cruzado contra los cobros, sin marcar uno por uno.',
+    rutas: ['/conciliacion'],
+    fijo: true,
+  },
+  {
+    clave: 'actas',
+    nombre: 'Actas de inicio y cierre',
+    detalle: 'El estado de la propiedad con fotos, al entregar y al recibir.',
+    rutas: ['/contratos'],
+    fijo: true,
   },
 ];
 
@@ -136,12 +209,17 @@ export function estadoDeModulos(
     // `delPlan` sin definir = no hay límite de plan que aplicar. Es distinto de
     // un array vacío, que sería un plan que no incluye nada.
     //
-    // La comparación va por `claveDePlan`: el menú dice `leads` y el plan dice
-    // `oportunidades`. Sin traducir, el módulo que TODOS los planes incluyen
-    // aparecería fuera del plan en todas las cuentas.
-    if (delPlan && !esNucleoDePlan(m.clave) && !delPlan.includes(claveDePlan(m.clave))) {
+    // Sin traducción ni excepciones: desde la migración 044 el plan usa
+    // EXACTAMENTE las mismas claves que este catálogo. Antes el plan decía
+    // `oportunidades` donde el menú dice `leads`, y `ventas`, `publicaciones` y
+    // `reservas` estaban exentos «porque ningún plan los nombra» — cosa que
+    // dejó de ser cierta y habría dejado a un plan Base mostrando
+    // Publicaciones.
+    if (delPlan && !delPlan.includes(m.clave)) {
       return { ...m, activo: false, motivo: 'fuera-del-plan' as const };
     }
+    // Los fijos no miran interruptores: si el plan lo incluye, está.
+    if (m.fijo) return { ...m, activo: true, motivo: 'tipo' as const };
     if (apagados.has(m.clave)) return { ...m, activo: false, motivo: 'apagado' as const };
     if (prendidos.has(m.clave)) return { ...m, activo: true, motivo: 'prendido' as const };
     return {
@@ -162,20 +240,9 @@ export function modulosActivos(
   return estadoDeModulos(tipo, on, off, delPlan).filter((m) => m.activo).map((m) => m.clave);
 }
 
-/**
- * `plan.modulos` y estas claves no son el mismo vocabulario y no hay que
- * forzarlos: el plan habla de `oportunidades` y el menú de `leads`, y hay
- * módulos de navegación —`ventas`, `publicaciones`, `reservas`— que ningún plan
- * nombra porque siempre estuvieron incluidos.
- *
- * Esta función dice cuáles NO se comparan contra el plan. Traducir sería peor:
- * un mapa de sinónimos que hay que acordarse de actualizar en dos lados.
- */
-function esNucleoDePlan(clave: string): boolean {
-  return clave === 'ventas' || clave === 'publicaciones' || clave === 'reservas';
-}
-
-/** `leads` en el menú es `oportunidades` en el plan. La única traducción real. */
-export function claveDePlan(clave: string): string {
-  return clave === 'leads' ? 'oportunidades' : clave;
-}
+// Acá vivían `esNucleoDePlan()` y `claveDePlan()`, que traducían entre el
+// vocabulario del menú y el de los planes y eximían tres módulos de la
+// comparación. La migración 044 hizo que los planes usen exactamente estas
+// claves, así que las dos funciones dejaron de tener nada que hacer. Un mapa de
+// sinónimos que ya no traduce nada es una trampa esperando: el día que alguien
+// agregue un módulo, va a preguntarse si tiene que anotarlo ahí.

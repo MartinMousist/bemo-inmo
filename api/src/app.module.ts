@@ -10,6 +10,7 @@ import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { TokensService } from './auth/tokens.service';
 import { AuthGuard } from './auth/auth.guard';
+import { ModuloGuard } from './planes/modulo.guard';
 import { EquipoController } from './equipo/equipo.controller';
 import { EquipoService } from './equipo/equipo.service';
 import { PersonasController } from './personas/personas.controller';
@@ -282,6 +283,9 @@ import { CuentaService } from './cuenta/cuenta.service';
     PlanesPagoService,
     ImportarUnidadesService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    // Después del AuthGuard a propósito: necesita el actor que aquél deja en
+    // el request para saber de qué inmobiliaria es el plan.
+    { provide: APP_GUARD, useClass: ModuloGuard },
     // DESPUÉS del de autenticación, y el orden es la feature: así el contador
     // general puede contar por usuario en vez de por IP, porque `req.actor` ya
     // está resuelto cuando llega acá.

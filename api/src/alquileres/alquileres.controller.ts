@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query, Req,
 } from '@nestjs/common';
@@ -260,6 +261,7 @@ export class IndicesController {
   }
 }
 
+@Modulo('liquidaciones', { lecturaLibre: true })
 @Controller('liquidaciones')
 export class LiquidacionesController {
   constructor(private readonly liquidaciones: LiquidacionesService) {}

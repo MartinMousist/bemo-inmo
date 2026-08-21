@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post,
 } from '@nestjs/common';
@@ -33,6 +34,7 @@ class ReportarDto {
   descripcion!: string;
 }
 
+@Modulo('portal', { lecturaLibre: true })
 @Controller('propietarios')
 export class AccesosPropietarioController {
   constructor(private readonly portal: PortalService) {}
@@ -84,6 +86,7 @@ export class PortalController {
 }
 
 /** Los accesos del inquilino, del lado de la inmobiliaria. */
+@Modulo('portal', { lecturaLibre: true })
 @Controller('inquilinos')
 export class AccesosInquilinoController {
   constructor(private readonly portal: PortalService) {}
