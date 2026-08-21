@@ -666,7 +666,8 @@ elemento pensada para el caso común, aplicada a controles que no son ese caso. 
       % fijo sobre la venta dejaría de cerrar— y se muestran las dos.
 - [x] **Las dos puntas, acopladas al total.** Mover una ajusta la otra para que
       sigan sumando el total, que arranca en 6% y es editable.
-- [ ] `propiedad.agente_captador_id` también existe y no pre-llena nada.
+- [x] `propiedad.agente_captador_id` **sí pre-llena**: `GET /ventas/:id/reparto/sugerido`
+      lo trae como captador. Verificado el 2026-08-20.
 - [ ] El pre-llenado es un **valor por defecto editable**: el captador no
       siempre es quien cargó la propiedad.
 - [ ] El % de cada agente en su membresía, editable desde el listado de equipo,
@@ -682,7 +683,8 @@ elemento pensada para el caso común, aplicada a controles que no son ese caso. 
       Del DNI se derivan los CUIL posibles. Sólo situación 1 se acepta y el
       veredicto se **congela** con su fecha: la decisión se tomó con ese dato.
 - [x] Mínimo 2 garantes, con la verificación diciendo qué falta en castellano.
-- [ ] El recordatorio `garantia_por_vencer` sigue sin emisor.
+- [x] El recordatorio `garantia_por_vencer` **tiene emisor** desde hace rato:
+      está en `recordatorios.service.ts`. Verificado el 2026-08-20.
 - [ ] Cheques rechazados: el endpoint del BCRA existe y no se consulta.
 - [ ] Re-consulta periódica: hoy es a pedido, y un contrato dura tres años.
 
@@ -724,7 +726,9 @@ no va.
       La pestaña cuenta el alcance («1.500 inquilinos») y la bajada cuenta lo
       filtrado («3 de 1.500»). Está escrito en `conteoPorRol()` y hay un test
       que lo fija, porque leído rápido parece un bug.
-- [ ] ⏳ **Las pantallas nuevas no tienen `@Roles`**, igual que Cartera y
+- [x] ~~**Las pantallas nuevas no tienen `@Roles`**~~ — lo cerró la 17.5 con
+      `superficie.spec.ts`, que falla si alguien agrega una ruta que escribe
+      sin declarar sus roles. Verificado el 2026-08-20. Antes decía: igual que Cartera y
       Liquidaciones, que muestran la misma plata. Está argumentado en
       `roles.controller.ts`. Si el dueño lo quiere distinto, son un decorador
       por endpoint **y** sus tests de denegación.
@@ -936,7 +940,9 @@ secciones no es adaptar el producto**, y lo que queda es lo que más se nota:
 
 ---
 
-## Etapa 16 — Lo que un portal ya te enseñó a esperar ⏳ POR EMPEZAR
+## Etapa 16 — Lo que un portal ya te enseñó a esperar ✅ CERRADA
+
+> *El encabezado decía «por empezar» con sus catorce ítems tildados. Verificado el 2026-08-20: cero ítems abiertos.*
 
 > Salió de una pregunta del dueño sobre countries y barrios privados (agregado
 > como 027/028 — ver más abajo) y de un pedido explícito: "qué más enriquecería
