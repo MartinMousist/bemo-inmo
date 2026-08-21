@@ -49,6 +49,27 @@ export interface Modulo {
   /** Las rutas del front que deja de haber. La primera es la del menú. */
   rutas: string[];
   /**
+   * Qué tan real es hoy.
+   *
+   * `listo` funciona. `parcial` funciona una parte y `nota` dice cuál falta.
+   * `pronto` no está construido.
+   *
+   * ── Por qué vive acá y no en la página de precios ──
+   *
+   * Estaba en tres lados: la landing lo tenía escrito a mano, la pantalla de
+   * «Tu plan» tenía su propio diccionario, y ninguno de los dos sabía lo que
+   * decía el otro. Ya habían divergido —la landing seguía ofreciendo «Inicial,
+   * Medio y Pro», que dejaron de existir en la migración 046—.
+   *
+   * Y es la clase de dato que NO puede divergir: un tilde en una página de
+   * precios es una promesa. El playbook lo dice con todas las letras, y este
+   * repo ya lo pagó una vez con «Comisiones por punta», que salía con tilde en
+   * una sección y como «En desarrollo» ocho más arriba de la MISMA página.
+   */
+  estado?: 'listo' | 'parcial' | 'pronto';
+  /** Qué falta, cuando `estado` no es `listo`. Se muestra tal cual. */
+  nota?: string;
+  /**
    * Lo gobierna el PLAN y no el usuario: aparece según el plan, sin
    * interruptor.
    *
@@ -67,30 +88,36 @@ export const MODULOS: Modulo[] = [
     nombre: 'Leads',
     detalle: 'El embudo de consultas: quién preguntó por qué propiedad y en qué anda.',
     rutas: ['/leads'],
+    estado: 'listo',
   },
   {
     clave: 'ventas',
     nombre: 'Ventas',
     detalle: 'Reserva, boleto y escritura, con su reparto de honorarios.',
     rutas: ['/ventas'],
+    estado: 'listo',
   },
   {
     clave: 'comisiones',
     nombre: 'Comisiones',
     detalle: 'Los porcentajes de la casa y de cada agente, y cómo se reparte cada operación.',
     rutas: ['/comisiones'],
+    estado: 'listo',
   },
   {
     clave: 'publicaciones',
     nombre: 'Publicaciones',
     detalle: 'El aviso listo para pegar en los portales y el feed XML de la cartera.',
     rutas: ['/publicaciones'],
+    estado: 'parcial',
+    nota: 'Publicar directo en cada portal depende de un convenio con cada uno, que no controlamos.',
   },
   {
     clave: 'reservas',
     nombre: 'Reservas',
     detalle: 'Las señas tomadas sobre una operación y su vencimiento.',
     rutas: ['/reservas'],
+    estado: 'listo',
   },
 
   // ── Los que gobierna el plan ───────────────────────────────────────────────
@@ -103,6 +130,7 @@ export const MODULOS: Modulo[] = [
     nombre: 'Liquidaciones',
     detalle: 'La rendición mensual al propietario, con honorarios, gastos y retenciones.',
     rutas: ['/liquidaciones'],
+    estado: 'listo',
     fijo: true,
   },
   {
@@ -110,6 +138,7 @@ export const MODULOS: Modulo[] = [
     nombre: 'Portales de propietario e inquilino',
     detalle: 'El enlace sin cuenta donde cada uno ve lo suyo y deja de llamar para preguntarlo.',
     rutas: ['/propietarios'],
+    estado: 'listo',
     fijo: true,
   },
   {
@@ -120,6 +149,9 @@ export const MODULOS: Modulo[] = [
     // la que alguien deja el Excel. Lo que este módulo agrega es que el sistema
     // lo levante solo y lleve la cuenta de lo visto.
     rutas: ['/avisos'],
+    estado: 'parcial',
+    nota:
+      'Los avisos se generan y se ven adentro del sistema. Que salgan solos por WhatsApp o mail necesita un proveedor de correo y la verificación de negocio de Meta.',
     fijo: true,
   },
   {
@@ -127,6 +159,9 @@ export const MODULOS: Modulo[] = [
     nombre: 'Bandeja de mensajes',
     detalle: 'WhatsApp, Telegram, Instagram y mail en un solo lugar, con tus plantillas a mano.',
     rutas: ['/inbox'],
+    estado: 'parcial',
+    nota:
+      'WhatsApp, Telegram e Instagram andan. El correo entra, pero para RESPONDER por mail falta configurar un proveedor de envío.',
     fijo: true,
   },
   {
@@ -137,6 +172,7 @@ export const MODULOS: Modulo[] = [
     nombre: 'Respuestas automáticas',
     detalle: 'El bot que contesta, sus palabras de salida y cuándo llama a una persona.',
     rutas: ['/bot'],
+    estado: 'listo',
     fijo: true,
   },
   {
@@ -144,6 +180,7 @@ export const MODULOS: Modulo[] = [
     nombre: 'La Red',
     detalle: 'Buscar y ofrecer propiedades entre inmobiliarias, con comisión compartida.',
     rutas: ['/red'],
+    estado: 'listo',
     fijo: true,
   },
   {
@@ -151,6 +188,7 @@ export const MODULOS: Modulo[] = [
     nombre: 'Documentos y pre-contratos',
     detalle: 'Las plantillas de la casa y el documento generado listo para firmar.',
     rutas: ['/plantillas'],
+    estado: 'listo',
     fijo: true,
   },
   {
@@ -158,6 +196,7 @@ export const MODULOS: Modulo[] = [
     nombre: 'Emprendimientos en pozo',
     detalle: 'Unidades por planilla, planes de pago y calculadoras de cuota y de inversión.',
     rutas: ['/emprendimientos'],
+    estado: 'listo',
     fijo: true,
   },
   {
@@ -165,6 +204,47 @@ export const MODULOS: Modulo[] = [
     nombre: 'Conciliación bancaria',
     detalle: 'El extracto del banco cruzado contra los cobros, sin marcar uno por uno.',
     rutas: ['/conciliacion'],
+    estado: 'listo',
+    fijo: true,
+  },
+  // ── Los que el plan gobierna pero no tienen entrada propia en el menú ──
+  //
+  // `multisucursal` y `api` viven en «Tu cuenta»; `marca_blanca` y `arca`
+  // todavía no existen. Están en el catálogo igual porque la página de precios
+  // los nombra, y sin entrada acá salían con su clave cruda —«marca_blanca»—
+  // y sin poder decir si funcionan.
+  {
+    clave: 'multisucursal',
+    nombre: 'Multi-sucursal',
+    detalle: 'Más de una oficina, cada una con su cartera y su equipo.',
+    rutas: ['/cuenta'],
+    estado: 'listo',
+    fijo: true,
+  },
+  {
+    clave: 'api',
+    nombre: 'API y webhooks',
+    detalle: 'Claves de acceso para conectarlo con tu sitio o con lo que ya usás.',
+    rutas: ['/cuenta'],
+    estado: 'listo',
+    fijo: true,
+  },
+  {
+    clave: 'marca_blanca',
+    nombre: 'Marca blanca',
+    detalle: 'Tu logo y tus colores en el portal y en lo que ve el cliente.',
+    rutas: [],
+    estado: 'pronto',
+    nota: 'Todavía no está construido. No hay una línea de código: se dice, en vez de ofrecerlo.',
+    fijo: true,
+  },
+  {
+    clave: 'arca',
+    nombre: 'Facturación ARCA',
+    detalle: 'La factura electrónica emitida desde el sistema.',
+    rutas: [],
+    estado: 'pronto',
+    nota: 'Espera la habilitación del certificado en ARCA, que es un trámite y no código.',
     fijo: true,
   },
   {
@@ -172,6 +252,7 @@ export const MODULOS: Modulo[] = [
     nombre: 'Actas de inicio y cierre',
     detalle: 'El estado de la propiedad con fotos, al entregar y al recibir.',
     rutas: ['/contratos'],
+    estado: 'listo',
     fijo: true,
   },
 ];

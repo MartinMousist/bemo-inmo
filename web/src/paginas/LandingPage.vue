@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { api } from '../api/cliente';
 import BemoLogo from '../componentes/BemoLogo.vue';
 import UiIcon from '../componentes/UiIcon.vue';
 import StatusChip from '../componentes/StatusChip.vue';
@@ -90,58 +91,81 @@ const pasos = [
 /**
  * Planes.
  *
- * Cada ítem lleva su estado, igual que `modulos`. La versión anterior listaba
- * TODO con un tilde verde, incluidas cosas que el propio `docs/CONTINUAR.md`
- * marca bloqueadas: el envío por WhatsApp necesita verificación de negocio, las
- * campañas en Meta no están empezadas y la publicación directa a portales
- * depende de convenios en trámite. Peor todavía, "Comisiones por punta" salía
- * con tilde acá y como "En desarrollo" ocho secciones más arriba, en esta misma
- * página.
+ * ── Vienen de la API, no de acá ──
  *
- * Es el error que el playbook §4 nombra con todas las letras: un tilde es una
- * promesa. Lo que no existe dice "En desarrollo".
+ * Estaban escritos a mano en este archivo: «Inicial», «Medio» y «Pro», con su
+ * lista de funciones y un estado por función. Dejaron de existir en la
+ * migración 046 y esta página siguió ofreciéndolos meses.
+ *
+ * Era la tercera copia de la misma verdad —la base, la pantalla de «Tu plan» y
+ * ésta—, y las tres decían cosas distintas. `GET /planes` es público
+ * justamente porque ESTA es la página de precios: ahora el nombre, el precio,
+ * los topes, lo que incluye cada plan y si eso existe salen de un solo lugar.
+ *
+ * El estado por función se conserva, que era lo bueno de la versión a mano: un
+ * tilde es una promesa, y lo que no está construido dice «En desarrollo».
  */
-const planes: Array<{
-  nombre: string;
-  para: string;
-  incluye: Array<{ texto: string; estado: Estado }>;
-  destacado: boolean;
-}> = [
-  {
-    nombre: 'Inicial',
-    para: 'Hasta 3 usuarios · 100 propiedades',
-    incluye: [
-      { texto: 'Cartera, personas y oportunidades', estado: 'listo' },
-      { texto: 'Contratos y vencimientos', estado: 'pronto' },
-      { texto: 'Ajustes por índice', estado: 'pronto' },
-      { texto: 'Publicación a 1 portal', estado: 'pronto' },
-    ],
-    destacado: false,
+interface ModuloDePlan {
+  clave: string; nombre: string; detalle: string;
+  estado: 'listo' | 'parcial' | 'pronto';
+  nota: string | null;
+}
+interface PlanPublico {
+  codigo: string; familia: 'gestion' | 'inmobiliaria'; nombre: string;
+  resumen: string | null; paraQuien: string | null; precio: number | null;
+  maxUsuarios: number | null; maxPropiedades: number | null;
+  maxContratos: number | null; maxCanales: number | null;
+  maxEnviosMes: number | null; maxRedCompartidas: number | null;
+  modulos: ModuloDePlan[];
+}
+
+const FAMILIA: Record<string, { titulo: string; bajada: string; contra: string }> = {
+  gestion: {
+    titulo: 'Gestión de alquileres',
+    bajada: 'Administrás alquileres —propios o de terceros— y no trabajás con ventas.',
+    contra: 'Compite con la planilla que tenés hoy.',
   },
-  {
-    nombre: 'Medio',
-    para: 'Hasta 10 usuarios · 500 propiedades',
-    incluye: [
-      { texto: 'Todo lo de Inicial', estado: 'listo' },
-      { texto: 'Cobranzas y liquidación a propietarios', estado: 'pronto' },
-      { texto: 'Pre-contratos y plantillas', estado: 'listo' },
-      { texto: 'Comisiones por punta · 3 portales', estado: 'pronto' },
-      { texto: 'Recordatorios por WhatsApp', estado: 'pronto' },
-    ],
-    destacado: true,
+  inmobiliaria: {
+    titulo: 'Inmobiliaria',
+    bajada: 'Además de administrar, captás, vendés y tenés equipo.',
+    contra: 'Hace lo que hacen los otros sistemas, y además administra lo que ya vendiste.',
   },
-  {
-    nombre: 'Pro',
-    para: 'Usuarios y propiedades sin límite',
-    incluye: [
-      { texto: 'Todo lo de Medio', estado: 'listo' },
-      { texto: 'Multi-sucursal', estado: 'pronto' },
-      { texto: 'Campañas en Meta', estado: 'pronto' },
-      { texto: 'Todos los portales · API', estado: 'pronto' },
-    ],
-    destacado: false,
-  },
-];
+};
+
+const planes = ref<PlanPublico[]>([]);
+
+const familias = computed(() =>
+  (['gestion', 'inmobiliaria'] as const)
+    .map((f) => ({ clave: f, ...FAMILIA[f], planes: planes.value.filter((p) => p.familia === f) }))
+    .filter((f) => f.planes.length > 0));
+
+/**
+ * Lo que ESTE plan suma sobre el anterior de su familia.
+ *
+ * Repetir la lista entera hacía que el plan de arriba tuviera diecisiete
+ * renglones y que comparar —lo único para lo que alguien mira cinco planes
+ * juntos— fuera trabajo del lector.
+ */
+function nuevosEn(planesDeLaFamilia: PlanPublico[], i: number): ModuloDePlan[] {
+  const propios = planesDeLaFamilia[i]?.modulos ?? [];
+  if (i === 0) return propios;
+  const previos = new Set(planesDeLaFamilia[i - 1].modulos.map((m) => m.clave));
+  return propios.filter((m) => !previos.has(m.clave));
+}
+
+/** Los topes en frases cortas, sin los que no aplican. */
+function topesDe(p: PlanPublico): string[] {
+  const t: string[] = [];
+  t.push(p.maxUsuarios ? `${p.maxUsuarios} ${p.maxUsuarios === 1 ? 'usuario' : 'usuarios'}` : 'Usuarios sin límite');
+  t.push(p.maxPropiedades ? `${p.maxPropiedades} propiedades` : 'Propiedades sin límite');
+  if (p.maxContratos) t.push(`${p.maxContratos} contratos vigentes`);
+  if (p.maxCanales) t.push(`${p.maxCanales} ${p.maxCanales === 1 ? 'canal' : 'canales'} de WhatsApp`);
+  if (p.maxEnviosMes) t.push(`${p.maxEnviosMes} envíos a clientes por mes`);
+  if (p.maxRedCompartidas) t.push(`${p.maxRedCompartidas} propiedades en la Red`);
+  return t;
+}
+
+
 
 /**
  * El bloque "antes / después".
@@ -248,6 +272,14 @@ function alScrollear() {
 onMounted(() => {
   window.addEventListener('scroll', alScrollear, { passive: true });
   document.documentElement.classList.add('en-portada');
+
+  // Sin `await` ni pantalla de carga: la portada tiene que pintarse entera de
+  // una, y si `/planes` tarda o falla, lo único que pasa es que la sección de
+  // precios aparece un instante después. Un esqueleto gris arriba de la
+  // portada sería peor que el hueco.
+  api<PlanPublico[]>('/planes')
+    .then((r) => { planes.value = r; })
+    .catch(() => { /* la sección no se dibuja; el resto de la portada sí */ });
 });
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', alScrollear);
@@ -437,32 +469,87 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
-        <div class="grid3 planes">
-          <article
-            v-for="(p, i) in planes"
-            :key="p.nombre"
-            class="plan elevar"
-            :class="{ destacado: p.destacado }"
-            v-revelar="i % 3"
-          >
-            <!-- Decía "El que eligen la mayoría". Todavía no hay una mayoría que
-                 haya elegido nada: la etapa 0 sigue abierta y no hay clientes.
-                 Inventar prueba social es el mismo error que inventar un precio. -->
-            <p v-if="p.destacado" class="etiqueta">El que recomendamos</p>
-            <h3>{{ p.nombre }}</h3>
-            <p class="para">{{ p.para }}</p>
-            <p class="precio">A convenir</p>
-            <ul>
-              <li v-for="f in p.incluye" :key="f.texto" :class="{ pendiente: f.estado === 'pronto' }">
-                <UiIcon :nombre="f.estado === 'listo' ? 'tilde' : 'reloj'" :tam="15" />
-                <span>{{ f.texto }}</span>
-                <span v-if="f.estado === 'pronto'" class="pronto">En desarrollo</span>
-              </li>
-            </ul>
-            <RouterLink class="btn" :class="{ secondary: !p.destacado }" to="/registrar">
-              Empezar
-            </RouterLink>
-          </article>
+        <!--
+          Dos familias, no una escalera de cinco.
+
+          Quien administra veinte departamentos no es una inmobiliaria chica: no
+          capta, no vende y no va a hacerlo. Ponerlo como el escalón de abajo de
+          una escalera de inmobiliarias le dice, cada vez que abre esta página,
+          que está en el peldaño más bajo de algo que no quiere subir.
+        -->
+        <div v-for="fam in familias" :key="fam.clave" class="familia" v-revelar>
+          <div class="familia-cab">
+            <h3>{{ fam.titulo }}</h3>
+            <p>{{ fam.bajada }}</p>
+            <p class="contra">{{ fam.contra }}</p>
+          </div>
+
+          <div class="planes" :class="`de-${fam.planes.length}`">
+            <article
+              v-for="(p, i) in fam.planes"
+              :key="p.codigo"
+              class="plan elevar"
+              :class="{ destacado: fam.clave === 'inmobiliaria' && i === 1 }"
+            >
+              <!-- «El que recomendamos» y no «el que elige la mayoría»: la
+                   etapa 0 sigue abierta y no hay una mayoría que haya elegido
+                   nada. Inventar prueba social es el mismo error que inventar
+                   un precio. -->
+              <p v-if="fam.clave === 'inmobiliaria' && i === 1" class="etiqueta">
+                El que recomendamos
+              </p>
+
+              <h4>{{ p.nombre }}</h4>
+              <p class="para">{{ p.resumen }}</p>
+
+              <!-- El precio sale de la BASE y hoy está vacío. Mientras no haya
+                   un número decidido dice «A convenir»: no se publica un precio
+                   que nadie decidió. -->
+              <p class="precio">
+                <template v-if="p.precio !== null">
+                  USD {{ p.precio }}<small>/mes</small>
+                </template>
+                <template v-else>A convenir</template>
+              </p>
+
+              <p v-if="p.paraQuien" class="para-quien">{{ p.paraQuien }}</p>
+
+              <ul class="topes">
+                <li v-for="t in topesDe(p)" :key="t">{{ t }}</li>
+              </ul>
+
+              <p class="delta-cab">
+                <template v-if="i === 0">Incluye</template>
+                <template v-else>Todo lo de {{ fam.planes[i - 1].nombre }}, más</template>
+              </p>
+
+              <ul class="incluye">
+                <li
+                  v-for="m in nuevosEn(fam.planes, i)"
+                  :key="m.clave"
+                  :class="{ pendiente: m.estado === 'pronto', parcial: m.estado === 'parcial' }"
+                >
+                  <UiIcon :nombre="m.estado === 'listo' ? 'tilde' : 'reloj'" :tam="15" />
+                  <span class="que">
+                    <b>{{ m.nombre }}</b>
+                    <!-- Lo que se pierde sin él, no lo que es. Es la única
+                         pregunta que alguien se hace mirando planes. -->
+                    <span class="detalle">{{ m.detalle }}</span>
+                    <!-- Y si no está entero, qué le falta — con esas palabras.
+                         «Parcial» sin decir qué no informa nada. -->
+                    <span v-if="m.nota" class="nota">{{ m.nota }}</span>
+                  </span>
+                  <span v-if="m.estado === 'pronto'" class="pronto">En desarrollo</span>
+                </li>
+              </ul>
+
+              <RouterLink
+                class="btn"
+                :class="{ secondary: !(fam.clave === 'inmobiliaria' && i === 1) }"
+                to="/registrar"
+              >Empezar</RouterLink>
+            </article>
+          </div>
         </div>
 
         <div class="medida" v-revelar>
@@ -949,7 +1036,73 @@ onBeforeUnmount(() => {
   line-height: 1.62;
 }
 
-/* ── Planes ── */
+/* ── Planes ──────────────────────────────────────────────────────────────
+   Dos familias, una debajo de la otra. Gestión trae dos planes e Inmobiliaria
+   tres, así que la grilla se ajusta a cuántos hay: dos tarjetas estiradas a
+   tres columnas quedan enormes y vacías. */
+.familia + .familia { margin-top: var(--s-3xl); }
+.familia-cab { margin-bottom: var(--s-xl); }
+.familia-cab h3 { font-family: var(--font-title); font-size: 26px; margin: 0; }
+.familia-cab p { margin: var(--s-xs) 0 0; opacity: .75; }
+.familia-cab .contra { font-size: 14px; opacity: .55; }
+
+.planes { display: grid; gap: var(--s-lg); align-items: stretch; }
+.planes.de-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 42rem; }
+.planes.de-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+.plan { display: flex; flex-direction: column; gap: var(--s-sm); padding: var(--s-xl); }
+/* `color: inherit` porque `familia.css` le pone `--ink` a todo `h4`, que es
+   tinta oscura — sobre una tarjeta oscura queda invisible. La sección
+   `.tinta` ya define el color claro; el título tiene que tomarlo de ahí.
+   El `h3` de la versión anterior no lo pedía porque el estilo de la portada lo
+   cubría; al bajar un nivel de encabezado, dejó de cubrirlo. */
+.plan h4 { font-family: var(--font-title); font-size: 22px; margin: 0; color: inherit; }
+.plan .para { margin: 0; font-size: 14px; opacity: .8; }
+.plan .para-quien { margin: 0; font-size: 13px; opacity: .6; }
+
+/* El lugar del precio lo ocupa «A convenir» hasta que haya un número decidido.
+   En serif y del tamaño de un precio, para que el hueco no se lea como un
+   olvido. */
+.precio { margin: var(--s-sm) 0; font-family: var(--font-title); font-size: 28px; }
+.precio small { font-size: 14px; font-family: var(--font-body); opacity: .6; }
+
+.topes {
+  list-style: none; margin: 0; padding: var(--s-sm) 0 0;
+  border-top: 1px solid currentColor; border-color: color-mix(in srgb, currentColor 14%, transparent);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.topes li { font-size: 13px; opacity: .65; }
+
+.delta-cab {
+  margin: var(--s-md) 0 var(--s-2xs); font-size: 11px;
+  letter-spacing: .06em; text-transform: uppercase; opacity: .5;
+}
+
+/* `flex: 1` para que el hueco entre un plan de 3 ítems y uno de 7 quede ABAJO
+   y los botones «Empezar» terminen todos a la misma altura. */
+.incluye { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-sm); flex: 1; }
+.incluye li { display: flex; gap: var(--s-sm); font-size: 13px; }
+.incluye li svg { flex: none; margin-top: 3px; opacity: .7; }
+.incluye .que { display: grid; gap: 1px; }
+.incluye b { font-weight: 600; }
+.incluye .detalle { opacity: .6; line-height: 1.4; }
+.incluye .nota { font-size: 12px; opacity: .5; line-height: 1.4; font-style: italic; }
+
+/* Lo que no está construido se ve distinto, no se esconde. Un tilde es una
+   promesa; esto es un reloj. */
+.incluye li.pendiente { opacity: .6; }
+.pronto {
+  margin-left: auto; align-self: flex-start; white-space: nowrap;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .7;
+}
+
+.plan .btn { margin-top: var(--s-lg); text-align: center; }
+
+.etiqueta {
+  margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  opacity: .8;
+}
+
 /* ── Planes ──────────────────────────────────────────────────────────────
    Cuatro defectos con una sola raíz: la tarjeta está construida como si
    tuviera un precio, y no lo tiene.

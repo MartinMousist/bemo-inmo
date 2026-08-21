@@ -100,7 +100,43 @@ describe('Planes, límites y API', () => {
     // Inmobiliaria: compite con una planilla, no con Tokko.
     const entrada = res.body.find((p: { codigo: string }) => p.codigo === 'gestion_esencial');
     expect(entrada.maxPropiedades).toBe(40);
-    expect(entrada.modulos).toEqual(['liquidaciones']);
+
+    // Los módulos vienen ENRIQUECIDOS, no como claves sueltas: la landing y la
+    // pantalla de «Tu plan» los dibujan sin diccionarios propios, que era donde
+    // se les iba divergiendo la verdad.
+    expect(entrada.modulos).toHaveLength(1);
+    expect(entrada.modulos[0]).toMatchObject({
+      clave: 'liquidaciones',
+      nombre: 'Liquidaciones',
+      estado: 'listo',
+    });
+  });
+
+  /**
+   * Un tilde en una página de precios es una promesa.
+   *
+   * Este repo ya lo pagó una vez: «Comisiones por punta» salía con tilde en una
+   * sección de la landing y como «En desarrollo» ocho más arriba, en la MISMA
+   * página. Ahora el estado sale de un solo lugar, y esto lo cuida.
+   */
+  it('lo que no está construido NO se ofrece como listo', async () => {
+    const res = await request(app.getHttpServer()).get('/v1/planes').expect(200);
+    const todos = (res.body as Array<{ modulos: Array<{ clave: string; estado: string; nota: string | null }> }>)
+      .flatMap((p) => p.modulos);
+    const porClave = new Map(todos.map((m) => [m.clave, m]));
+
+    // Marca blanca y ARCA no tienen una línea de código: no pueden decir
+    // «listo».
+    expect(porClave.get('marca_blanca')?.estado).toBe('pronto');
+    expect(porClave.get('arca')?.estado).toBe('pronto');
+
+    // Lo parcial tiene que decir QUÉ le falta, o «parcial» no informa nada.
+    for (const m of porClave.values()) {
+      if (m.estado === 'parcial') expect(m.nota).toBeTruthy();
+    }
+
+    // Y el que sí anda no arrastra una nota de disculpa.
+    expect(porClave.get('liquidaciones')?.estado).toBe('listo');
     const pro = res.body.find((p: { codigo: string }) => p.codigo === 'inmo_total');
     expect(pro.maxPropiedades).toBeNull();   // sin límite
   });

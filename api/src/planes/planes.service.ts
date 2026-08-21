@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { DbService } from '../database/db.service';
+import { MODULOS } from '../cuenta/modulos.motor';
 import { AppError, ErrorCode } from '../common/app-error';
 
 export interface EstadoPlan {
@@ -11,6 +12,9 @@ export interface EstadoPlan {
   /** ⚠️ Todavía no hay integración de cobro. Se dice, no se simula. */
   cobro: { integrado: false; detalle: string };
 }
+
+/** El catálogo por clave, para no recorrerlo en cada fila. */
+const CATALOGO = new Map(MODULOS.map((m) => [m.clave, m]));
 
 @Injectable()
 export class PlanesService {
@@ -46,7 +50,32 @@ export class PlanesService {
       maxCanales: f.max_canales,
       maxEnviosMes: f.max_envios_mes,
       maxRedCompartidas: f.max_red_compartidas,
-      modulos: f.modulos,
+      /**
+       * Los módulos ENRIQUECIDOS, no las claves sueltas.
+       *
+       * Antes esto devolvía `['liquidaciones', 'portal', …]` y cada pantalla se
+       * arreglaba sola: la landing tenía la lista escrita a mano y «Tu plan»
+       * tenía su propio diccionario de nombres. Ya habían divergido —la landing
+       * seguía ofreciendo «Inicial, Medio y Pro», que dejaron de existir en la
+       * migración 046— y ninguna de las dos sabía si lo que prometía existe.
+       *
+       * Un tilde en una página de precios es una promesa. Ahora el nombre, el
+       * detalle y el estado salen de UN lugar, `cuenta/modulos.motor.ts`, que
+       * es el mismo que decide qué se ve en el menú.
+       */
+      modulos: f.modulos.map((clave) => {
+        const m = CATALOGO.get(clave);
+        return {
+          clave,
+          nombre: m?.nombre ?? clave,
+          detalle: m?.detalle ?? '',
+          // Sin estado declarado se asume `pronto`, no `listo`: si alguien
+          // agrega un módulo y se olvida de decir si funciona, la página de
+          // precios prefiere prometer de menos.
+          estado: m?.estado ?? 'pronto',
+          nota: m?.nota ?? null,
+        };
+      }),
       /**
        * El precio sale de la BASE, y hoy está vacío.
        *
