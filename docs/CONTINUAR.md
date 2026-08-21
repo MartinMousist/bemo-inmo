@@ -61,21 +61,22 @@ anónimo; instalar sólo en el host no rompe al instalar, rompe al reiniciar.
 
 | # | Etapa | Estado | Qué falta para cerrarla |
 |---|---|---|---|
-| 0 | Validación | ⚠️ **ABIERTA** | Que alguien diga un precio concreto |
+| 0 | Validación | ⚠️ **ABIERTA** | Que alguien diga un precio concreto. **La propuesta ya está escrita** en `docs/planes.md` (USD 9 / 19 / 39 / 89 / 199) con su `UPDATE` listo; falta la decisión, no el número |
 | 1–3 | Fundaciones · Auth · Espina | ✅ | — |
 | 4 | Alquileres | ⚠️ construida | **Tres liquidaciones reales tuyas** |
 | 5 | Ventas y comisiones | ⚠️ construida | Una venta real con su reparto |
 | 6 | Publicaciones | ⚠️ Plan B listo | Convenio con un portal (no es código) |
 | 7 | Recordatorios | ⚠️ generación lista | Proveedor de mail · verificación de WhatsApp |
 | 8 | Piloto | ⚠️ lista | 30 días de uso diario |
-| 9 | Planes | ⚠️ lista | Un cliente y un medio de pago |
+| 9 | Planes | ⚠️ definidos | **Alcance cerrado** (migración 046, dos familias). Falta un cliente y un medio de pago |
 | 10–11 | Mejoras · Lo que se ve usando la app | ✅ | — |
 | 12 | Lo que pidió el dueño | ✅ salvo 12.3 | Avisar cuando falta el IPC del mes |
 | 13–14 | Garantes · Editor Word · Tipo de cuenta | ✅ | — |
 | 15 | Lo que le falta a un sistema así | ⏳ **en curso** | sólo **15.3** (ARCA), que espera un trámite y no código |
 | 16 | Lo que un portal te enseñó a esperar | ✅ **CERRADA** | — |
-| 17 | Sellado de seguridad | ⏳ **en curso** | 17.1 y 17.3 cerradas; faltan 17.2, 17.4, 17.5 |
-| 18 | Inbox omnicanal | ⏳ por empezar | Todo. Ojo con la dependencia externa |
+| 17 | Sellado de seguridad | ✅ **CERRADA** | — |
+| 18 | Inbox omnicanal | ✅ **CERRADA** | Falta el envío saliente de mail (proveedor) y la verificación de Meta — trámite, no código |
+| 19 | Paridad con Tokko y pasada visual | ⏳ **en curso** | La Red, el portal de clientes, emprendimientos y los planes están; queda el barrido de pantallas |
 
 **Ningún gate abierto de las etapas 0 a 9 depende de código.** Están marcados así
 a propósito: dar por cerrado un gate cuya evidencia no existe es el error #2 del
@@ -232,8 +233,12 @@ no publicaba.
 
 ### Lo próximo
 
-**Etapa 17 — el resto del sellado de seguridad**, que es lo único con trabajo de
-código pendiente además de la 18:
+**Etapa 19 — lo que queda del barrido visual.** Lo estructural ya se hizo (ver
+más abajo); falta pasar por las pantallas que todavía no se miraron con esa vara:
+Caja, Conciliación, Ventas, Reclamos, Gastos y el detalle de contrato.
+
+**Etapa 17 — cerrada.** Se deja el texto de abajo porque explica qué NO hay que
+romper:
 
 ### Seguridad — la etapa 17 quedó CERRADA
 
@@ -278,6 +283,49 @@ no se descubra a mitad de camino:
 - **La regla que manda sobre la pantalla**: mientras el canal no pueda enviar,
   el cuadro de respuesta dice que queda en cola y **no simula que salió**. Es la
   misma decisión de la etapa 6 con el botón *Publicar* que no publicaba.
+
+### Etapa 19 — paridad con Tokko, la Red y la pasada visual
+
+**Construido y verificado en pantalla:**
+
+- **La Red entre inmobiliarias** (migración 043). Compartir es explícito por
+  propiedad, con la comisión que se ofrece. Cruza el borde entre inmobiliarias
+  por UNA función `SECURITY DEFINER` con proyección recortada: RLS no se tocó.
+  La calle sí, la altura no; nunca el titular ni las notas internas.
+- **Envío de propiedades a un cliente** (misma migración). Enlace sin cuenta que
+  registra si lo abrió. Se arma desde la cartera con el mismo marcado que servía
+  para comparar.
+- **Emprendimientos en pozo** (042), con importación de planillas, planes de
+  pago y calculadoras de cuota e inversión.
+- **Los planes, definidos y con dientes** (044 · 045 · 046). Dos familias:
+  Gestión —que compite con el Excel— e Inmobiliaria —que compite con Tokko—.
+  `@Modulo()` + `ModuloGuard` los hace valer sobre 22 controladores. Antes
+  `plan.modulos` declaraba trece módulos y el código exigía dos.
+
+**La pasada visual, y lo que encontró:**
+
+- El acordeón del menú **estaba diseñado para degradarse**: guardaba los grupos
+  CERRADOS y cada navegación borraba uno del conjunto guardado, hasta dejarlo
+  vacío para siempre. Ahora no persiste nada. De 35 entradas visibles a 9.
+- Los filtros de propiedades pasaron de 30 campos en una pared a una fila de
+  pastillas desplegables, al estilo de Zonaprop.
+- La tarjeta de propiedad se reordenó al patrón de Zillow, y el chip
+  «Disponible» —que estaba en las 24 tarjetas— se dibuja sólo cuando NO es lo
+  corriente.
+- `proximidad()` decía «En 895 d». Ahora «En 2 años».
+- «Cuotas impagas» en Inicio se agrupa por deudor, no por cuota.
+- Liquidaciones dice cuánto sale en total, por moneda.
+
+**Lo que falta de la 19:** el barrido de las pantallas que todavía no se
+miraron —Caja, Conciliación, Ventas, Reclamos, Gastos, detalle de contrato— y
+los pendientes de Tokko que no se tocaron: reporte al propietario, etiquetas en
+contactos, acciones masivas, Google Calendar, PWA y sitio web por inmobiliaria.
+
+⚠️ **Un dato que cambió el diseño de los planes y hay que recordar:** los
+recordatorios NO SALEN del sistema. `recordatorios.service.ts` declara `email` y
+`whatsapp` como no disponibles. Por eso el plan «Al día» **no se vende** como
+«te avisamos por WhatsApp», sino por los avisos que se generan solos y la
+bandeja donde se centraliza y se responde.
 
 ### Fuera de sprint, por trámite ajeno
 
