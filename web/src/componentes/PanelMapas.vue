@@ -35,6 +35,42 @@ const pendientes = ref(0);
 const fallidas = ref<Resultado['resultados']>([]);
 const cargando = ref(true);
 const trabajando = ref(false);
+
+/**
+ * Probar la key desde la pantalla.
+ *
+ * Existe para cerrar el circuito sin salir del navegador. Configurar la key son
+ * cuatro pasos en Google Cloud y cualquiera de los cuatro puede quedar a medias;
+ * la única forma de saber cuál era abrir una terminal y pegarle al endpoint de
+ * diagnóstico. Ahora es un botón.
+ *
+ * Muestra el `mensajeDeGoogle` TAL CUAL: es lo único que dice **cuál** API falta
+ * habilitar o **qué** restricción rebotó. Traducirlo pierde el dato, y ese dato
+ * es la diferencia entre resolverlo en un minuto o perder una tarde.
+ */
+const probando = ref(false);
+const resultadoPrueba = ref('');
+
+async function probar() {
+  probando.value = true;
+  resultadoPrueba.value = '';
+  try {
+    const d = await api<Diagnostico>('/propiedades/geocoding/diagnostico');
+    diag.value = d;
+    resultadoPrueba.value = d.funciona
+      ? '✓ La key funciona. Google respondió OK.'
+      : `Google respondió «${d.estado}». ${d.mensajeDeGoogle ?? d.detalle}`;
+    // Si empezó a andar, se recuentan las pendientes: el botón de ubicar
+    // depende de eso y quedaría escondido hasta la próxima recarga.
+    if (d.funciona) await cargar();
+  } catch (e) {
+    resultadoPrueba.value = e instanceof ApiError
+      ? e.paraMostrar
+      : 'No se pudo consultar el diagnóstico.';
+  } finally {
+    probando.value = false;
+  }
+}
 const ui = useUi();
 
 /** Sólo titular y administración: son los que pueden tocar la configuración. */
@@ -94,15 +130,37 @@ onMounted(cargar);
     class="card panel"
     :class="{ roto: diag.configurado && !diag.funciona }"
   >
+    <!--
+      UNA línea. Antes eran tres párrafos siempre visibles: 214px de la pantalla
+      más usada del sistema, gastados en cada carga para contarle a alguien cómo
+      se activa la facturación de un proyecto de Google. Medido: `/propiedades`
+      gastaba 62% del alto antes del primer dato; `/contratos`, sin cartel, 31%.
+
+      Un aviso que no se puede sacar y que ocupa medio pliegue deja de ser un
+      aviso: se convierte en decoración que la gente aprende a saltear. Lo que
+      hay que HACER queda a la vista; el porqué, a un clic.
+    -->
     <header>
       <h2>Mapas</h2>
       <StatusChip
         :texto="diag.funciona ? 'Google conectado' : diag.configurado ? 'Con problema' : 'Sin configurar'"
         :tono="diag.funciona ? 'ok' : diag.configurado ? 'err' : 'warn'"
       />
+
+      <p class="resumen">
+        <template v-if="pendientes > 0">
+          <b>{{ pendientes }}</b>
+          {{ plural(pendientes, 'propiedad', 'propiedades', false) }} sin ubicación.
+        </template>
+        <template v-else>{{ diag.detalle }}</template>
+      </p>
+
+      <button class="probar" type="button" :disabled="probando" @click="probar">
+        {{ probando ? 'Probando…' : 'Probar la key' }}
+      </button>
     </header>
 
-    <p class="detalle">{{ diag.detalle }}</p>
+    <p v-if="resultadoPrueba" class="prueba">{{ resultadoPrueba }}</p>
 
     <!-- El mensaje crudo de Google es lo único que dice CUÁL API falta
          habilitar o QUÉ restricción rebotó. Se muestra tal cual. -->
@@ -116,6 +174,14 @@ onMounted(cargar);
     -->
     <details v-if="!diag.configurado" class="como">
       <summary>Cómo se configura</summary>
+      <p>{{ diag.detalle }}</p>
+      <p>
+        <b>El mapa de la ficha no depende de esta key</b>: es un iframe de
+        <code class="mono">maps?…&amp;output=embed</code>, que no la lleva. Lo que
+        falta sin key es resolver una dirección a coordenadas sola; las que ya
+        tienen latitud y longitud —cargadas a mano o importadas— muestran su
+        mapa igual.
+      </p>
       <p>
         Se crea en Google Cloud: habilitar <b>Geocoding API</b> (sólo esa),
         activar la facturación del proyecto, y ponerle a la key <b>dos</b>
@@ -144,20 +210,9 @@ onMounted(cargar);
          `maps?…&output=embed`, que no la lleva. Lo que falta sin key es resolver
          una dirección a coordenadas. Decirlo acá evita que quien lee este panel
          crea que sin la key no hay mapas en ningún lado. -->
-    <p v-if="!diag.configurado" class="detalle">
-      Las propiedades que ya tienen latitud y longitud —cargadas a mano o
-      importadas— muestran su mapa igual: el mapa de la ficha no usa esta key.
-    </p>
-
-    <template v-if="pendientes > 0">
+    <template v-if="pendientes > 0 && diag.funciona">
       <p class="pendientes">
-        <b>{{ pendientes }}</b> {{ plural(pendientes, 'propiedad', 'propiedades', false) }} sin ubicación.
-        <template v-if="diag.funciona">
-          Se resuelven de a 50 por vez — cada consulta a Google se paga.
-        </template>
-        <template v-else>
-          Se pueden ubicar a mano desde cada ficha, con latitud y longitud.
-        </template>
+        Se resuelven de a 50 por vez — cada consulta a Google se paga.
       </p>
 
       <button
@@ -197,7 +252,31 @@ onMounted(cargar);
 }
 .panel.roto { background: var(--danger-tint); border-color: var(--danger-line); }
 
-header { display: flex; align-items: center; gap: var(--s-md); }
+/* Una sola fila. `flex-wrap` para que en pantalla angosta baje el botón y no
+   se corte el resumen, que es lo único que hay que leer. */
+header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm) var(--s-md);
+  flex-wrap: wrap;
+  width: 100%;
+}
+.resumen { margin: 0; margin-right: auto; font-size: 13px; }
+
+.probar {
+  font: inherit; font-size: 12px; cursor: pointer;
+  background: none; border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); padding: 3px var(--s-sm); color: var(--ink);
+}
+.probar:hover:not(:disabled) { border-color: var(--accent); }
+.probar:disabled { cursor: progress; opacity: 0.7; }
+
+.prueba {
+  margin: 0; font-size: 12px; line-height: 1.5;
+  padding: var(--s-xs) var(--s-sm);
+  background: var(--surface); border-radius: var(--r-sm);
+  max-width: 80ch; word-break: break-word;
+}
 
 .detalle, .como, .pendientes {
   margin: 0;
