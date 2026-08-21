@@ -184,6 +184,17 @@ export const MODULOS: Modulo[] = [
     fijo: true,
   },
   {
+    clave: 'bcra',
+    nombre: 'Consulta al BCRA',
+    detalle: 'La situación en la Central de Deudores y los cheques rechazados de un garante, antes de firmar.',
+    // No tiene ruta propia: se consulta desde el legajo del garante, dentro del
+    // contrato. Un array vacío no bloquea ninguna pantalla — lo que gobierna es
+    // el `@Modulo('bcra')` sobre el endpoint que va al BCRA.
+    rutas: [],
+    estado: 'listo',
+    fijo: true,
+  },
+  {
     clave: 'documentos',
     nombre: 'Documentos y pre-contratos',
     detalle: 'Las plantillas de la casa y el documento generado listo para firmar.',

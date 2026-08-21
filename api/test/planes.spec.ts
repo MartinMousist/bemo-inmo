@@ -268,6 +268,37 @@ describe('Planes, límites y API', () => {
       await http().get('/v1/respuestas').set(...como(inmo)).expect(200);
     });
 
+    /**
+     * El BCRA se vende; los garantes no.
+     *
+     * Cargar un garante es núcleo —sin garantes no se alquila— así que el gate
+     * va sobre el ENDPOINT que sale a la Central de Deudores, no sobre el
+     * controlador entero. Un plan de entrada que no deja cargar garantes no
+     * sirve para alquilar.
+     */
+    it('«Esencial» carga garantes pero no consulta el BCRA', async () => {
+      await ponerPlan(inmo.tenantId, 'gestion_esencial');
+
+      // El legajo del garante se lee igual.
+      await http().get('/v1/garantes/documentos/00000000-0000-4000-8000-000000000000')
+        .set(...como(inmo))
+        .expect((r) => { if (r.status === 403) throw new Error('los garantes no se gatean'); });
+
+      const res = await http().post('/v1/garantes/00000000-0000-4000-8000-000000000000/bcra')
+        .set(...como(inmo)).send({})
+        .expect(403);
+      expect(res.body.code).toBe('MODULO_NO_INCLUIDO');
+      expect(res.body.detail).toContain('bcra');
+    });
+
+    it('los pre-contratos llegan con «Al día», no recién con Medio', async () => {
+      // Escribir cada contrato a mano en Word es el dolor de quien administra
+      // alquileres, y era la razón por la que la familia Gestión no servía para
+      // dejar la planilla.
+      await ponerPlan(inmo.tenantId, 'gestion_dia');
+      await http().get('/v1/plantillas').set(...como(inmo)).expect(200);
+    });
+
     it('los emprendimientos son del plan Total', async () => {
       await ponerPlan(inmo.tenantId, 'inmo_medio');
       await http().post('/v1/emprendimientos').set(...como(inmo))

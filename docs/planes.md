@@ -31,11 +31,22 @@ bajo que la pregunta no sea «¿me conviene?» sino «¿por qué no?».
 
 Lo que trae es exactamente lo que una planilla no puede hacer:
 
-- Calcular bien el ajuste por **IPC, ICL, UVA o Casa Propia** el mes que toca
+- Calcular bien el ajuste por **IPC, ICL, UVA o Casa Propia** el mes que toca,
+  guardando qué índice, qué período y qué coeficiente se usó
 - Armar la **liquidación al propietario** con honorarios, gastos y retenciones
+- **Una persona, todos sus roles**: propietario, inquilino, garante, comprador,
+  interesado o reservante se DERIVAN de lo que la persona hace. El mismo Juan
+  que alquila hoy es el comprador de mañana, sin cargarlo dos veces
+- **Garantes con lo que falta a la vista**: recibo de sueldo —las dos caras del
+  DNI y tres recibos— o seguro de caución, con «2 de 2 en regla» o exactamente
+  qué documento falta
 - Ver qué vence, quién debe y cuánto
 
 Topes: 1 usuario, 40 propiedades, 25 contratos vigentes.
+
+> **Los garantes son núcleo, no un extra.** Sin garantes no se alquila, y un
+> plan de entrada que no deja cargarlos no sirve para alquilar. Lo que Esencial
+> no trae es la CONSULTA al BCRA.
 
 > **La liquidación va en el plan más barato aunque sea lo más caro de
 > construir.** Sin eso no le gana a una planilla, y un plan de entrada que no le
@@ -45,6 +56,11 @@ Topes: 1 usuario, 40 propiedades, 25 contratos vigentes.
 
 **Todo lo de Esencial, más que el sistema te avise y puedas contestar.**
 
+- **Consulta al BCRA** — la situación en la Central de Deudores y los **cheques
+  rechazados** de un garante, antes de firmar. Queda asentado en el legajo con
+  quién lo consultó y cuándo
+- **Pre-contratos** — las plantillas de la casa y el contrato generado, listo
+  para firmar
 - **Avisos de vencimiento** que se generan solos: qué contrato vence, qué aumento
   toca, qué garantía se cae
 - **Bandeja de mensajes**: WhatsApp, Instagram y mail en un lugar, con las
@@ -52,6 +68,22 @@ Topes: 1 usuario, 40 propiedades, 25 contratos vigentes.
 - **Portales** de propietario e inquilino
 
 Topes: 3 usuarios, 120 propiedades, 80 contratos, 1 canal.
+
+> **Por qué el BCRA se vende y los garantes no.** Cargar un garante es el
+> trabajo; averiguar si debe en el banco es la ventaja. La diferencia entre los
+> dos planes de Gestión queda concreta: Esencial te deja cargar el garante, Al
+> día te dice si debe.
+>
+> La integración es real y está verificada contra la API del BCRA —deudas y
+> cheques rechazados, con su contrato documentado en `deudores.service.ts`—. No
+> es una promesa: el 404 del BCRA se trata como «no tiene deuda informada», que
+> es lo que significa, y no como una falla.
+
+> **Por qué los pre-contratos bajaron acá.** Estaban de «Medio» para arriba, o
+> sea que ninguna cuenta de la familia Gestión podía generar un contrato desde
+> una plantilla. Escribir cada contrato a mano en Word es exactamente el dolor
+> de quien administra alquileres, y era la razón por la que este plan no
+> alcanzaba para dejar la planilla.
 
 > **El corte entre los dos es «mirar» contra «que te avise».** Esencial es entrar
 > y ver. Al día es que el sistema lo levante solo y que puedas responder sin
@@ -75,7 +107,7 @@ Todo lo de «Al día» + leads, ventas, reservas y publicaciones.
 
 ### Medio
 **Más el equipo, la Red y las respuestas automáticas.**
-+ comisiones, documentos y pre-contratos, la Red (30 propiedades) y el bot.
++ comisiones, la Red (30 propiedades) y el bot.
 10 usuarios · 1.500 propiedades · 2 sucursales · 3 canales.
 
 ### Todo

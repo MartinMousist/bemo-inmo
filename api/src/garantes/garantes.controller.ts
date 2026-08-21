@@ -1,3 +1,4 @@
+import { Modulo } from '../planes/modulo.guard';
 import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Req,
 } from '@nestjs/common';
@@ -95,6 +96,15 @@ export class GaranteController {
     return this.garantes.verDocumento(a.tenantId, documentoId, a.usuarioId, req.ip);
   }
 
+  /**
+   * Gateado a nivel MÉTODO y no de controlador.
+   *
+   * Cargar un garante con su DNI y sus recibos es núcleo: sin garantes no se
+   * alquila, y un plan que no deja cargarlos no sirve para alquilar. Lo que se
+   * paga es que el sistema vaya al BCRA, traiga la situación y los cheques, y
+   * lo deje asentado en el legajo con quién lo consultó y cuándo.
+   */
+  @Modulo('bcra')
   @Post(':id/bcra')
   @Roles('owner', 'admin', 'agente')
   @LimiteDeTercero()
