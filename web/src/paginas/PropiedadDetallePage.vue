@@ -43,6 +43,7 @@ interface Propiedad {
   geocodeFuente: string | null;
   geocodeEl: string | null;
   redCompartida: boolean; redComisionPct: number | null;
+  archivadaEl: string | null; archivadaMotivo: string | null;
   fotosPendientes: number; fotosFallidas: number; motivoFotoFallida: string | null;
   supTotal: number | null; supCubierta: number | null;
   ambientes: number | null; dormitorios: number | null; banos: number | null; cocheras: number | null;
@@ -288,6 +289,51 @@ async function alternarRed(compartida: boolean) {
     error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo cambiar.';
   } finally { guardandoRed.value = false; }
 }
+
+/**
+ * Archivar y desarchivar.
+ *
+ * ── Por qué el botón dice «Archivar» y no «Eliminar» ──
+ *
+ * Porque eliminar no es lo que pasa, y llamarlo así haría que la gente no lo
+ * toque por miedo a perder el historial — que es justamente lo que NO se
+ * pierde. El botón de borrar de verdad sigue existiendo y sólo funciona en las
+ * que nunca tuvieron nada.
+ */
+const archivando = ref(false);
+const pidiendoMotivo = ref(false);
+const motivoArchivo = ref('');
+
+async function archivar() {
+  if (!p.value) return;
+  archivando.value = true; error.value = '';
+  try {
+    await api(`/propiedades/${p.value.id}/archivar`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo: motivoArchivo.value.trim() || undefined }),
+    });
+    pidiendoMotivo.value = false;
+    motivoArchivo.value = '';
+    await cargar();
+    ui.ok('Propiedad archivada', 'Sale de la cartera. Su historia queda.');
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo archivar.';
+  } finally { archivando.value = false; }
+}
+
+async function desarchivar() {
+  if (!p.value) return;
+  archivando.value = true; error.value = '';
+  try {
+    await api(`/propiedades/${p.value.id}/desarchivar`, { method: 'POST' });
+    await cargar();
+    // Se dice lo que NO pasó: quien desarchiva espera verla publicada de nuevo,
+    // y no lo está.
+    ui.ok('Propiedad activa otra vez', 'Sus operaciones siguen cerradas: volvé a publicarla con el precio de hoy.');
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.paraMostrar : 'No se pudo desarchivar.';
+  } finally { archivando.value = false; }
+}
 </script>
 
 <template>
@@ -308,8 +354,54 @@ async function alternarRed(compartida: boolean) {
             Ficha para imprimir
           </RouterLink>
           <RouterLink class="btn secondary" :to="`/propiedades/${p.id}/editar`">Editar</RouterLink>
+          <button
+            v-if="puedeEditarComision && !p.archivadaEl"
+            class="btn secondary"
+            type="button"
+            @click="pidiendoMotivo = !pidiendoMotivo"
+          >Archivar</button>
+          <button
+            v-if="puedeEditarComision && p.archivadaEl"
+            class="btn"
+            type="button"
+            :disabled="archivando"
+            @click="desarchivar"
+          >Devolver a la cartera</button>
         </template>
       </PageHeader>
+
+      <!--
+        Archivada: se dice arriba de todo y no con un chip al costado.
+
+        Quien abre esta ficha tiene que saber ANTES de leer cualquier número que
+        esta propiedad no está en circulación. Un chip chico se saltea, y la
+        persona sigue leyendo un precio que ya no se ofrece.
+      -->
+      <p v-if="p.archivadaEl" class="archivada">
+        <strong>Archivada</strong> el {{ fecha(p.archivadaEl) }}.
+        <template v-if="p.archivadaMotivo">{{ p.archivadaMotivo }}.</template>
+        No aparece en la cartera ni en la Red. Su historia queda entera.
+      </p>
+
+      <!-- El motivo es opcional: «se vendió» es lo normal y no hace falta
+           escribirlo. Se pregunta igual porque dentro de dos años, «¿por qué
+           archivamos esta?» no tiene otra respuesta. -->
+      <div v-if="pidiendoMotivo" class="card stack pedir-motivo">
+        <label class="campo">
+          <span>¿Por qué la archivás? (opcional)</span>
+          <input v-model="motivoArchivo" maxlength="300" placeholder="Se vendió · El dueño la sacó" />
+        </label>
+        <p class="nota">
+          Sale de la cartera y de la Red, y sus operaciones se cierran. No se
+          borra nada: contratos, cobros y liquidaciones quedan.
+        </p>
+        <div class="acciones">
+          <button class="btn" type="button" :disabled="archivando" @click="archivar">
+            {{ archivando ? 'Archivando…' : 'Archivar' }}
+          </button>
+          <button class="btn secondary" type="button" @click="pidiendoMotivo = false">Cancelar</button>
+        </div>
+      </div>
 
       <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
@@ -823,4 +915,12 @@ async function alternarRed(compartida: boolean) {
 /* El ámbar es para lo que quedó mal y pide una acción — subirlas a mano —, no
    para lo que simplemente todavía no terminó. */
 .nota-fotos.falla { background: var(--warning-tint); color: var(--warning-ink); }
+
+.archivada {
+  margin: 0; padding: var(--s-md) var(--s-lg);
+  background: var(--surface-2); border-left: 3px solid var(--muted);
+  border-radius: var(--r-md); font-size: 13px; color: var(--ink-2);
+}
+.pedir-motivo { max-width: 34rem; }
+.pedir-motivo .acciones { display: flex; gap: var(--s-sm); }
 </style>

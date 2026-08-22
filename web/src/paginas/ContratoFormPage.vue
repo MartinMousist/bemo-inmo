@@ -56,7 +56,40 @@ const ui = useUi();
 const auth = useAuth();
 
 const propiedades = ref<Array<{ id: string; etiqueta: string; direccion: string }>>([]);
-const personas = ref<Array<{ id: string; nombreCompleto: string }>>([]);
+const personas = ref<Array<{
+  id: string;
+  nombreCompleto: string;
+  semaforo?: { estado: string; motivo: string | null; por: string | null };
+}>>([]);
+
+/**
+ * El aviso sobre el inquilino elegido.
+ *
+ * ── Éste es el momento para el que existe la marca ──
+ *
+ * De nada sirve tenerla en la lista de personas si no aparece justo cuando
+ * alguien está por firmarle un contrato a esa persona. Acá es donde se lee.
+ *
+ * ── Y por eso NO deshabilita el botón ──
+ *
+ * Avisa y nada más. Que el sistema se niegue a dejar armar el contrato sería
+ * tomar por la inmobiliaria una decisión que es suya, y una marca vieja o
+ * puesta con bronca dejaría a alguien afuera sin que nadie lo revise.
+ */
+const avisoInquilino = computed(() => {
+  const p = personas.value.find((x) => x.id === f.locatarioId);
+  const e = p?.semaforo?.estado;
+  if (!e || e === 'sin_marcar') return null;
+  if (e === 'recomendado') {
+    return { tono: 'ok' as const, titulo: 'Recomendado', motivo: p!.semaforo!.motivo, por: p!.semaforo!.por };
+  }
+  return {
+    tono: e === 'no_alquilar' ? ('err' as const) : ('warn' as const),
+    titulo: e === 'no_alquilar' ? 'Marcado «no alquilar»' : 'Marcado «con reparos»',
+    motivo: p!.semaforo!.motivo,
+    por: p!.semaforo!.por,
+  };
+});
 const error = ref('');
 const guardando = ref(false);
 
@@ -232,6 +265,14 @@ async function guardar() {
             </select>
           </label>
         </div>
+
+        <!-- El aviso, si esta persona está marcada. Avisa: no impide nada, y el
+             botón de guardar sigue habilitado. -->
+        <p v-if="avisoInquilino" class="aviso-semaforo" :class="avisoInquilino.tono">
+          <strong>{{ avisoInquilino.titulo }}</strong>
+          <template v-if="avisoInquilino.motivo"> — {{ avisoInquilino.motivo }}</template>
+          <span v-if="avisoInquilino.por" class="quien">Lo marcó {{ avisoInquilino.por }}.</span>
+        </p>
       </section>
 
       <section class="card stack">
@@ -410,4 +451,16 @@ async function guardar() {
   border-radius: var(--r-md);
   color: var(--warning-ink);
 }
+
+/* El aviso del semáforo. Ocupa el ancho entero y va debajo del selector: al
+   costado, en una grilla de tres columnas, quedaría del tamaño de una etiqueta
+   y se saltearía. */
+.aviso-semaforo {
+  margin: var(--s-sm) 0 0; padding: var(--s-sm) var(--s-md);
+  border-radius: var(--r-md); font-size: 13px; line-height: 1.5;
+}
+.aviso-semaforo.ok { background: var(--success-tint); color: var(--success-ink); }
+.aviso-semaforo.warn { background: var(--warning-tint); color: var(--warning-ink); }
+.aviso-semaforo.err { background: var(--danger-tint); color: var(--danger); }
+.aviso-semaforo .quien { display: block; opacity: .8; font-size: 12px; margin-top: 2px; }
 </style>

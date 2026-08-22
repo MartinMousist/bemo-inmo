@@ -126,6 +126,9 @@ export interface Propiedad {
    */
   redCompartida: boolean;
   redComisionPct: number | null;
+  /** Cuándo salió de la cartera, y por qué. `null` = está activa. */
+  archivadaEl: string | null;
+  archivadaMotivo: string | null;
   /**
    * Fotos que el importador dejó encoladas y todavía no bajó.
    *
@@ -1245,6 +1248,8 @@ interface FilaPropiedad {
   geocode_el: Date | null;
   red_compartida: boolean;
   red_comision_pct: string | null;
+  archivada_el: Date | null;
+  archivada_motivo: string | null;
   fotos_pendientes: string | null;
   fotos_fallidas: string | null;
   motivo_foto_fallida: string | null;
@@ -1416,6 +1421,8 @@ function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
     geocodeEl: f.geocode_el ? f.geocode_el.toISOString() : null,
     redCompartida: f.red_compartida === true,
     redComisionPct: num(f.red_comision_pct),
+    archivadaEl: f.archivada_el ? f.archivada_el.toISOString() : null,
+    archivadaMotivo: f.archivada_motivo ?? null,
     fotosPendientes: Number(f.fotos_pendientes ?? 0),
     fotosFallidas: Number(f.fotos_fallidas ?? 0),
     motivoFotoFallida: f.motivo_foto_fallida ?? null,

@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import { filtrosEnUrl } from '../dominio/filtros';
+import { useAuth } from '../stores/auth';
+import { useUi } from '../stores/ui';
 import PageHeader from '../componentes/PageHeader.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import StatusChip from '../componentes/StatusChip.vue';
@@ -12,24 +14,47 @@ import UiSkeleton from '../componentes/UiSkeleton.vue';
 interface Persona {
   id: string; nombreCompleto: string; docTipo: string | null; docNumero: string | null;
   email: string | null; telefono: string | null; roles: string[];
+  semaforo: { estado: string; motivo: string | null; por: string | null; el: string | null };
 }
+
+/**
+ * El semáforo, como lo dibuja la lista.
+ *
+ * `sin_marcar` NO está: un chip gris que diga «sin marcar» en las cuatrocientas
+ * personas de la cartera es ruido puro. Se muestra la excepción, que es para lo
+ * que sirve.
+ */
+const SEMAFORO: Record<string, { texto: string; tono: 'ok' | 'warn' | 'err' }> = {
+  recomendado: { texto: 'Recomendado', tono: 'ok' },
+  con_reparos: { texto: 'Con reparos', tono: 'warn' },
+  no_alquilar: { texto: 'No alquilar', tono: 'err' },
+};
 
 type ConteoRoles = Record<string, number>;
 
-/** Los seis roles derivados, en el orden en que se muestran. */
+/**
+ * Los roles derivados, en el orden en que se muestran.
+ *
+ * Los `ex_` van pegados al rol del que salen: quien lee la lista busca
+ * «inquilinos» y ahí al lado encuentra «ex inquilinos», que es la pregunta
+ * siguiente.
+ */
 const ROLES = [
-  'propietario', 'inquilino', 'garante', 'comprador', 'interesado', 'reservante',
+  'propietario', 'inquilino', 'ex_inquilino', 'garante', 'ex_garante',
+  'comprador', 'interesado', 'reservante',
 ] as const;
 type Rol = (typeof ROLES)[number];
 
 const ETIQUETA_ROL: Record<string, string> = {
-  propietario: 'Propietario', inquilino: 'Inquilino', garante: 'Garante',
+  propietario: 'Propietario', inquilino: 'Inquilino', ex_inquilino: 'Ex inquilino',
+  garante: 'Garante', ex_garante: 'Ex garante',
   comprador: 'Comprador', interesado: 'Interesado', reservante: 'Reservó',
 };
 
 /** El plural de la pestaña. «Reservó» no pluraliza como los demás. */
 const PESTANA: Record<Rol, string> = {
-  propietario: 'Propietarios', inquilino: 'Inquilinos', garante: 'Garantes',
+  propietario: 'Propietarios', inquilino: 'Inquilinos', ex_inquilino: 'Ex inquilinos',
+  garante: 'Garantes', ex_garante: 'Ex garantes',
   comprador: 'Compradores', interesado: 'Interesados', reservante: 'Reservaron',
 };
 
@@ -50,8 +75,10 @@ const PANTALLA_PROPIA: Partial<Record<Rol, { a: string; texto: string }>> = {
  */
 const VACIO_ROL: Record<Rol, string> = {
   propietario: 'Una persona es propietaria cuando figura como titular de una propiedad. Se carga desde la ficha de la propiedad.',
-  inquilino: 'Una persona es inquilina cuando figura como locataria de un contrato de alquiler.',
-  garante: 'Los garantes se cargan desde el legajo de cada contrato de alquiler.',
+  inquilino: 'Una persona es inquilina cuando figura como locataria de un contrato EN CURSO. Cuando el contrato termina, pasa a Ex inquilinos.',
+  ex_inquilino: 'Acá van quienes alquilaron y ya no: su contrato terminó o se rescindió. Se les puede volver a alquilar — para eso está la marca.',
+  garante: 'Los garantes se cargan desde el legajo de cada contrato de alquiler en curso.',
+  ex_garante: 'Quienes garantizaron un contrato que ya terminó.',
   comprador: 'Una persona es compradora cuando figura como tal en una operación de venta que no se cayó.',
   interesado: 'Los interesados aparecen solos al cargar un lead.',
   reservante: 'Una persona reservó cuando tiene una reserva activa sobre una operación.',
@@ -186,6 +213,55 @@ async function exportar() {
 }
 
 onMounted(() => { void cargar(); void cargarConteos(); });
+
+/**
+ * Marcar a una persona.
+ *
+ * ── Por qué acá y no en una ficha ──
+ *
+ * No hay ficha de persona: la lista ES la pantalla. Y el momento en que uno
+ * quiere marcar a alguien es justo cuando lo está mirando en la lista después
+ * de que pasó algo, no navegando a un detalle.
+ */
+const auth = useAuth();
+const ui = useUi();
+const esJefe = computed(() => auth.rol === 'owner' || auth.rol === 'admin');
+
+const marcando = ref<Persona | null>(null);
+const nuevoEstado = ref('sin_marcar');
+const nuevoMotivo = ref('');
+const guardandoSemaforo = ref(false);
+
+const OPCIONES_SEMAFORO = [
+  { v: 'recomendado', t: 'Recomendado', d: 'Pagó en fecha y cuidó la propiedad. Le volveríamos a alquilar.' },
+  { v: 'con_reparos', t: 'Con reparos', d: 'Se puede, pero hay algo que la próxima hay que mirar.' },
+  { v: 'no_alquilar', t: 'No alquilar', d: 'No le volveríamos a alquilar. Queda escrito por qué.' },
+  { v: 'sin_marcar', t: 'Sacar la marca', d: 'Vuelve a quedar sin nota.' },
+];
+
+function abrirSemaforo(f: Persona) {
+  marcando.value = f;
+  nuevoEstado.value = f.semaforo?.estado ?? 'sin_marcar';
+  nuevoMotivo.value = f.semaforo?.motivo ?? '';
+}
+
+async function guardarSemaforo() {
+  if (!marcando.value) return;
+  guardandoSemaforo.value = true;
+  try {
+    await api(`/personas/${marcando.value.id}/semaforo`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        estado: nuevoEstado.value,
+        motivo: nuevoMotivo.value.trim() || undefined,
+      }),
+    });
+    marcando.value = null;
+    await cargar();
+  } catch (e) {
+    ui.error('No se pudo guardar', e instanceof ApiError ? e.paraMostrar : 'Error inesperado');
+  } finally { guardandoSemaforo.value = false; }
+}
 </script>
 
 <template>
@@ -285,7 +361,19 @@ onMounted(() => { void cargar(); void cargarConteos(); });
           </thead>
           <tbody>
             <tr v-for="p in items" :key="p.id">
-              <td class="fuerte">{{ p.nombreCompleto }}</td>
+              <td class="fuerte">
+                {{ p.nombreCompleto }}
+                <!-- El semáforo va PEGADO al nombre y no en una columna al
+                     final: es una advertencia sobre esta persona, no un
+                     atributo suyo, y en una columna del extremo derecho se
+                     lee después de haber decidido. -->
+                <StatusChip
+                  v-if="SEMAFORO[p.semaforo?.estado]"
+                  :texto="SEMAFORO[p.semaforo.estado].texto"
+                  :tono="SEMAFORO[p.semaforo.estado].tono"
+                  :title="p.semaforo.motivo ?? ''"
+                />
+              </td>
               <td class="mono">{{ p.docNumero ? `${(p.docTipo ?? '').toUpperCase()} ${p.docNumero}` : '—' }}</td>
               <td>
                 <div class="contacto">
@@ -304,6 +392,12 @@ onMounted(() => { void cargar(); void cargarConteos(); });
                    a «esta persona no tiene cuenta corriente» es un viaje en
                    vano, y la lista ya sabe los roles. -->
               <td class="der">
+                <button
+                  v-if="esJefe"
+                  class="btn enlace sm"
+                  type="button"
+                  @click="abrirSemaforo(p)"
+                >Marcar</button>
                 <RouterLink
                   v-if="p.roles.includes('inquilino') || p.roles.includes('propietario')"
                   class="btn enlace sm"
@@ -313,6 +407,48 @@ onMounted(() => { void cargar(); void cargarConteos(); });
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!--
+      Marcar a alguien.
+
+      El texto de abajo no es decorativo: quien pone «no alquilar» tiene que
+      saber que eso NO impide nada y que queda con su nombre. Las dos cosas
+      cambian cómo se usa.
+    -->
+    <div v-if="marcando" class="card stack semaforo-caja">
+      <h2>{{ marcando.nombreCompleto }}</h2>
+
+      <div class="opciones-semaforo">
+        <label v-for="o in OPCIONES_SEMAFORO" :key="o.v" class="op-semaforo"
+          :class="{ elegida: nuevoEstado === o.v }">
+          <input v-model="nuevoEstado" type="radio" :value="o.v" name="semaforo" />
+          <span>
+            <b>{{ o.t }}</b>
+            <span class="det">{{ o.d }}</span>
+          </span>
+        </label>
+      </div>
+
+      <label v-if="nuevoEstado !== 'sin_marcar'" class="campo">
+        <span>Por qué</span>
+        <textarea v-model="nuevoMotivo" rows="2" maxlength="500"
+          placeholder="Se fue debiendo cuatro meses y no atendió el teléfono."></textarea>
+        <small>Obligatorio. Dentro de seis meses, esto es lo único que va a explicar la marca.</small>
+      </label>
+
+      <p class="nota">
+        <b>No bloquea nada.</b> Le vas a poder armar un contrato igual: esto avisa,
+        no decide. Queda con tu nombre y la fecha, y no sale de la inmobiliaria —
+        ni al portal, ni a la Red, ni a un envío.
+      </p>
+
+      <div class="acciones">
+        <button class="btn" type="button" :disabled="guardandoSemaforo" @click="guardarSemaforo">
+          {{ guardandoSemaforo ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <button class="btn secondary" type="button" @click="marcando = null">Cancelar</button>
       </div>
     </div>
   </div>
@@ -359,4 +495,16 @@ onMounted(() => { void cargar(); void cargarConteos(); });
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
 }
+
+.semaforo-caja { max-width: 36rem; margin-top: var(--s-lg); }
+.opciones-semaforo { display: grid; gap: var(--s-sm); }
+.op-semaforo {
+  display: flex; gap: var(--s-sm); align-items: flex-start;
+  padding: var(--s-sm) var(--s-md);
+  border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer;
+}
+.op-semaforo.elegida { border-color: var(--accent); background: var(--accent-tint); }
+.op-semaforo > span { display: grid; gap: 1px; }
+.op-semaforo .det { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.semaforo-caja .acciones { display: flex; gap: var(--s-sm); }
 </style>

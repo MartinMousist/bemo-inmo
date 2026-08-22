@@ -174,8 +174,16 @@ export class PersonasService {
 
       const { rows } = await ej.query<FilaPersona>(
         `WITH pagina AS (
+           -- Las columnas se listan una por una para no arrastrar lo que no se
+           -- muestra. El costo es éste: al agregar el semáforo, la FICHA lo
+           -- devolvía y la LISTA no, así que el chip no aparecía en ninguna
+           -- fila. Se vio comparando las dos respuestas de la misma persona.
+           -- (Sin comillas invertidas: adentro de un template literal lo
+           --  cierran. Es la cuarta vez que se pisa en este repo.)
            SELECT p.id, p.tipo, p.nombre, p.apellido, p.doc_tipo, p.doc_numero,
-                  p.email::text AS email, p.telefono, p.domicilio, p.notas
+                  p.email::text AS email, p.telefono, p.domicilio, p.notas,
+                  p.semaforo, p.semaforo_motivo, p.semaforo_el,
+                  (SELECT u.nombre FROM usuario u WHERE u.id = p.semaforo_por) AS semaforo_por
              FROM persona p
              ${donde}
             ORDER BY p.apellido NULLS LAST, p.nombre
