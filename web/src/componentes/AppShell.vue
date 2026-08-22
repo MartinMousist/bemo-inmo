@@ -7,6 +7,7 @@ import {
 } from '../dominio/sidebar';
 import UiIcon from './UiIcon.vue';
 import BemoLogo from './BemoLogo.vue';
+import Campana from './Campana.vue';
 import MenuUsuario from './MenuUsuario.vue';
 import CommandPalette from './CommandPalette.vue';
 
@@ -302,6 +303,7 @@ window.addEventListener('keydown', (e) => {
         <span class="tenant">{{ auth.tenant?.nombre }}</span>
         <span class="separador" />
 
+        <Campana />
         <MenuUsuario />
       </header>
 

@@ -34,6 +34,15 @@ export interface Evento {
  * eso es un trámite, no código. Cuando esté, se agrega un despachador y los
  * eventos ya generados salen solos.
  */
+/**
+ * Los días de gracia antes de llamar «mora prolongada» a un atraso.
+ *
+ * Tres, que es lo que pidió el producto. No es configurable por ahora a
+ * propósito: un número que cada inmobiliaria elige es un número que nadie
+ * elige, y el default termina siendo el valor real igual.
+ */
+const DIAS_MORA_PROLONGADA = 3;
+
 @Injectable()
 export class RecordatoriosService {
   private readonly logger = new Logger('Recordatorios');
@@ -325,6 +334,95 @@ export class RecordatoriosService {
         );
       }
 
+      /*
+       * ── Mora prolongada ──
+       *
+       * NO es «hay una cuota impaga»: es «este inquilino lleva más de tres días
+       * sin pagar». La diferencia importa — la primera es rutina de cobranza y
+       * ya la cubre `cuota_impaga`; ésta es el momento de levantar el teléfono.
+       *
+       * Va sobre el CONTRATO y no sobre el período. Si fuera por cuota, alguien
+       * con cuatro meses de atraso recibiría cuatro avisos idénticos el mismo
+       * día — el mismo ruido que la bandeja de Inicio ya tuvo que arreglar
+       * agrupando por deudor.
+       *
+       * `dispara_el` es la fecha de la cuota MÁS VIEJA impaga más los días de
+       * gracia: así el evento es estable y el ON CONFLICT lo deduplica de una
+       * corrida a la otra en vez de crear uno nuevo cada día.
+       */
+      sumar(
+        'mora_prolongada',
+        await this.insertar(
+          ej,
+          tenantId,
+          `SELECT 'mora_prolongada', 'contrato', c.id,
+                  (min(p.vence_el) + $2::int) AS dispara,
+                  'Mora de ' || $2::text || ' días o más · ' ||
+                    coalesce((SELECT trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,''))
+                                FROM contrato_parte cp JOIN persona pe ON pe.id = cp.persona_id
+                               WHERE cp.contrato_id = c.id AND cp.rol = 'locatario'
+                               ORDER BY pe.apellido LIMIT 1), 'el inquilino'),
+                  trim(pr.calle || ' ' || coalesce(pr.numero,'')) || ' · ' ||
+                    -- «1 cuota(s)» es plural de formulario. El CASE cuesta una
+                    -- línea y es lo que separa un aviso de un volcado de datos.
+                    count(*)::text || CASE WHEN count(*) = 1 THEN ' cuota' ELSE ' cuotas' END ||
+                    ' sin pagar desde el ' ||
+                    to_char(min(p.vence_el), 'DD/MM/YYYY'),
+                  jsonb_build_object('cuotas', count(*), 'desde', min(p.vence_el))
+             FROM periodo_alquiler p
+             JOIN contrato_alquiler c ON c.id = p.contrato_id
+             JOIN propiedad pr ON pr.id = c.propiedad_id
+            WHERE p.estado IN ('pendiente','parcial','vencido')
+              AND p.vence_el < current_date - $2::int
+              AND c.estado IN ('vigente','por_iniciar')
+            GROUP BY c.id, pr.calle, pr.numero
+           HAVING min(p.vence_el) + $2::int BETWEEN current_date - 90 AND current_date`,
+          [tenantId, DIAS_MORA_PROLONGADA],
+        ),
+      );
+
+      /*
+       * ── Mora reincidente ──
+       *
+       * Es sobre la PERSONA y no sobre la cuota: ya se atrasó más de una vez.
+       * Eso no lo dice ninguna cuota mirada de a una, y es justo lo que hay que
+       * saber ANTES de renovarle el contrato.
+       *
+       * Cuenta los períodos que vencieron sin estar pagados, incluidos los que
+       * después se pagaron: haber pagado tarde dos veces es la señal, y si sólo
+       * se contaran los impagos de hoy, el inquilino que se atrasa siempre pero
+       * termina pagando no aparecería nunca.
+       */
+      sumar(
+        'mora_reincidente',
+        await this.insertar(
+          ej,
+          tenantId,
+          `SELECT 'mora_reincidente', 'contrato', c.id,
+                  current_date AS dispara,
+                  'Se atrasó ' || count(*)::text || ' veces · ' ||
+                    coalesce((SELECT trim(coalesce(pe.nombre,'') || ' ' || coalesce(pe.apellido,''))
+                                FROM contrato_parte cp JOIN persona pe ON pe.id = cp.persona_id
+                               WHERE cp.contrato_id = c.id AND cp.rol = 'locatario'
+                               ORDER BY pe.apellido LIMIT 1), 'el inquilino'),
+                  trim(pr.calle || ' ' || coalesce(pr.numero,'')) ||
+                    ' · Mirar antes de renovar.',
+                  jsonb_build_object('atrasos', count(*))
+             FROM periodo_alquiler p
+             JOIN contrato_alquiler c ON c.id = p.contrato_id
+             JOIN propiedad pr ON pr.id = c.propiedad_id
+            WHERE c.estado IN ('vigente','por_iniciar')
+              AND (
+                p.estado IN ('pendiente','parcial','vencido') AND p.vence_el < current_date
+                OR EXISTS (SELECT 1 FROM cobro co
+                            WHERE co.periodo_id = p.id AND co.fecha > p.vence_el)
+              )
+            GROUP BY c.id, pr.calle, pr.numero
+           HAVING count(*) > 1`,
+          [tenantId],
+        ),
+      );
+
       return creados;
     });
   }
@@ -356,6 +454,81 @@ export class RecordatoriosService {
    * silencio — la pantalla mostraba 200 avisos y no había forma de saber que
    * había un aviso 201, ni de llegar a él. Ahora el total viene en la respuesta.
    */
+  /**
+   * Lo que va en la campanita: los sin ver, y cuántos son.
+   *
+   * ── Por qué no reusa `bandeja()` ──
+   *
+   * La bandeja pagina, filtra y busca — es una pantalla. Esto es un badge y un
+   * panel de seis líneas que se pide en CADA carga de CADA pantalla, así que
+   * trae lo mínimo y nada más.
+   *
+   * «Sin ver» y no «pendiente»: un aviso se marca visto cuando alguien lo abre.
+   * Que siga pendiente de resolver no lo hace nuevo, y una campanita que nunca
+   * baja a cero es una campanita que se apaga en la cabeza de la gente.
+   */
+  async sinVer(tenantId: string, limite = 6) {
+    return this.db.withTenant(tenantId, async (ej) => {
+      // El conteo cuenta NOTICIAS, no eventos: si el panel muestra tres cosas
+      // y el badge dice doce, el badge está contando algo que la persona no
+      // puede encontrar en ningún lado.
+      const { rows: conteo } = await ej.query<{ total: string }>(
+        `SELECT count(DISTINCT titulo)::text AS total FROM evento_programado
+          WHERE visto_el IS NULL AND estado IN ('pendiente','enviado')
+            AND dispara_el <= current_date`,
+      );
+
+      /*
+       * UNO por título, no uno por evento.
+       *
+       * `cuota_impaga` se genera por CUOTA y por cada corte de días —el día que
+       * vence, a los 5 y a los 15— así que un contrato con cuatro cuotas
+       * atrasadas produce doce eventos. En una bandeja paginada eso está bien;
+       * en un panel de seis renglones, las seis eran la misma propiedad
+       * repetida y las otras noticias del día no entraban.
+       *
+       * Se vio abriendo la campanita: cuatro «Cuota impaga · Arístides
+       * Villanueva 345» seguidas. Es el mismo problema que ya se había
+       * arreglado en la tarjeta de Inicio agrupando por deudor.
+       *
+       * El título es la clave correcta porque ES la noticia: dos eventos que
+       * dicen lo mismo son lo mismo, aunque apunten a cuotas distintas. Se
+       * queda el MÁS VIEJO de cada uno, que es el que mide hace cuánto espera.
+       */
+      const { rows } = await ej.query<{
+        id: string; tipo: string; titulo: string; detalle: string | null;
+        dispara_el: string; entidad_tipo: string; entidad_id: string;
+      }>(
+        `SELECT * FROM (
+           SELECT DISTINCT ON (titulo)
+                  id, tipo, titulo, detalle, dispara_el, entidad_tipo, entidad_id
+             FROM evento_programado
+            WHERE visto_el IS NULL AND estado IN ('pendiente','enviado')
+              AND dispara_el <= current_date
+            ORDER BY titulo, dispara_el, created_at
+         ) x
+         -- Lo más viejo primero: lo que lleva días esperando es lo que urge, no
+         -- lo que acaba de aparecer.
+         ORDER BY x.dispara_el, x.titulo
+         LIMIT $1`,
+        [limite],
+      );
+
+      return {
+        total: Number(conteo[0].total),
+        items: rows.map((r) => ({
+          id: r.id,
+          tipo: r.tipo,
+          titulo: r.titulo,
+          detalle: r.detalle,
+          disparaEl: r.dispara_el,
+          entidadTipo: r.entidad_tipo,
+          entidadId: r.entidad_id,
+        })),
+      };
+    });
+  }
+
   async bandeja(tenantId: string, f: FiltroAvisosDto): Promise<Pagina<Evento>> {
     return this.db.withTenant(tenantId, async (ej) => {
       const q = f.q ? `%${f.q.trim()}%` : null;

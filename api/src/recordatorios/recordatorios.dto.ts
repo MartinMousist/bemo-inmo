@@ -22,6 +22,13 @@ export const TIPOS_EVENTO = [
   // se entere de que hace falta una persona, y de que nadie contestó.
   'conversacion_escalada',
   'conversacion_sin_responder',
+
+  // Etapa 19. Los dos de mora, que NO son «cuota impaga»: aquél avisa por cada
+  // cuota y sirve para cobrar; éstos son sobre el inquilino —lleva más de tres
+  // días sin pagar, o ya se atrasó más de una vez— y son los que se miran antes
+  // de llamar por teléfono o de renovarle el contrato.
+  'mora_prolongada',
+  'mora_reincidente',
 ] as const;
 
 /** `q` busca por título o detalle del aviso. */

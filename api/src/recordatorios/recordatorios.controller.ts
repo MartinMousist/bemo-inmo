@@ -17,6 +17,17 @@ export class RecordatoriosController {
     return this.rec.canales();
   }
 
+  /**
+   * Lo que muestra la campanita. ANTES de `:id`, como toda ruta literal.
+   *
+   * Sin `@Roles`: cualquiera que entre tiene que ver sus avisos. Un asesor que
+   * no ve que un contrato vence no puede hacer nada al respecto.
+   */
+  @Get('sin-ver')
+  sinVer(@ActorActual() a: Actor) {
+    return this.rec.sinVer(a.tenantId);
+  }
+
   @Get()
   bandeja(@ActorActual() a: Actor, @Query() f: FiltroAvisosDto) {
     return this.rec.bandeja(a.tenantId, f);
