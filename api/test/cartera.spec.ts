@@ -374,4 +374,58 @@ describe('Cartera de alquileres', () => {
       .set(...como(otra)).expect(200);
     expect(per.body.items).toHaveLength(0);
   });
+
+  describe('Marcadas', () => {
+    /**
+     * Una marca es de la PERSONA, no de la inmobiliaria.
+     *
+     * Una asesora marca las seis que le muestra a su cliente del jueves; que
+     * esas seis le aparezcan marcadas al resto de la oficina convertiría un
+     * anotador personal en un ranking involuntario de la cartera.
+     */
+    it('lo que marca una persona no lo ve la otra', async () => {
+      const prop = await http().post('/v1/propiedades').set(...como(inmo))
+        .send({ calle: 'Marcada', numero: '1', localidad: 'Ciudad', tipo: 'casa' })
+        .expect(201);
+
+      await http().put(`/v1/propiedades/${prop.body.id}/favorita`).set(...como(inmo))
+        .send({ marcada: true }).expect(200);
+
+      const mias = await http().get('/v1/propiedades/favoritas').set(...como(inmo)).expect(200);
+      expect(mias.body).toContain(prop.body.id);
+
+      // Otra persona de la MISMA inmobiliaria no la ve marcada.
+      const deOtro = await http().get('/v1/propiedades/favoritas')
+        .set(...como(inmo, 'agente')).expect(200);
+      expect(deOtro.body).not.toContain(prop.body.id);
+    });
+
+    it('marcar dos veces no rompe, y desmarcar la saca', async () => {
+      const prop = await http().post('/v1/propiedades').set(...como(inmo))
+        .send({ calle: 'Dos Veces', localidad: 'Ciudad', tipo: 'casa' }).expect(201);
+
+      // El PUT lleva el estado deseado, no es un toggle: dos toques rápidos
+      // desde el teléfono con un toggle terminan al revés de lo que se ve.
+      await http().put(`/v1/propiedades/${prop.body.id}/favorita`).set(...como(inmo))
+        .send({ marcada: true }).expect(200);
+      await http().put(`/v1/propiedades/${prop.body.id}/favorita`).set(...como(inmo))
+        .send({ marcada: true }).expect(200);
+
+      let mias = await http().get('/v1/propiedades/favoritas').set(...como(inmo)).expect(200);
+      expect(mias.body.filter((x: string) => x === prop.body.id)).toHaveLength(1);
+
+      await http().put(`/v1/propiedades/${prop.body.id}/favorita`).set(...como(inmo))
+        .send({ marcada: false }).expect(200);
+      mias = await http().get('/v1/propiedades/favoritas').set(...como(inmo)).expect(200);
+      expect(mias.body).not.toContain(prop.body.id);
+    });
+
+    it('no se puede marcar una propiedad de otra inmobiliaria', async () => {
+      const ajena = await http().post('/v1/propiedades').set(...como(otra))
+        .send({ calle: 'Ajena', localidad: 'Ciudad', tipo: 'casa' }).expect(201);
+
+      await http().put(`/v1/propiedades/${ajena.body.id}/favorita`).set(...como(inmo))
+        .send({ marcada: true }).expect(404);
+    });
+  });
 });

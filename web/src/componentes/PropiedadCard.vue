@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import StatusChip from './StatusChip.vue';
 import UiIcon from './UiIcon.vue';
 import { atributosDe, superficieDe } from '../dominio/atributos';
@@ -51,7 +51,11 @@ const props = defineProps<{
    * cartera de venta, que es el número equivocado en la pantalla equivocada.
    */
   modo?: 'general' | 'venta' | 'alquiler';
+  /** Si esta persona la marcó. Lo sabe la pantalla, no la tarjeta. */
+  favorita?: boolean;
 }>();
+
+const emit = defineEmits<{ (e: 'favorita', marcada: boolean): void }>();
 
 const tipoEnPalabras = computed(
   () => ETIQUETA_TIPO[props.propiedad.tipo] ?? props.propiedad.tipo,
@@ -83,6 +87,45 @@ const mostrarTipoOperacion = computed(() => operaciones.value.length > 1);
  */
 const situacionesDestacadas = computed(() =>
   operaciones.value.filter((o) => o.estado !== 'disponible'));
+
+/**
+ * El carrusel.
+ *
+ * ── Por qué las flechas y no un scroll horizontal ──
+ *
+ * Un carrusel que se arrastra con el dedo anda bien en el teléfono y en el
+ * escritorio obliga a hacer scroll lateral con el trackpad ADENTRO de una
+ * grilla que ya scrollea vertical. Las dos direcciones peleando es el gesto
+ * más frustrante que hay. Con flechas, cada foto es un clic.
+ *
+ * ── El índice se reinicia si cambian las fotos ──
+ *
+ * La grilla reusa los componentes al filtrar: sin esto, la tarjeta que estaba
+ * en la foto 6 muestra la 6 de OTRA propiedad, que puede tener tres.
+ */
+const foto = ref(0);
+const galeria = computed(() => {
+  const f = props.propiedad.fotos ?? [];
+  if (f.length) return f;
+  return props.propiedad.fotoPortada ? [props.propiedad.fotoPortada] : [];
+});
+watch(galeria, () => { foto.value = 0; });
+
+function mover(delta: number, ev: Event) {
+  // Las flechas viven ADENTRO del RouterLink que es toda la tarjeta: sin
+  // frenar el evento, pasar de foto abre la ficha.
+  ev.preventDefault();
+  ev.stopPropagation();
+  const n = galeria.value.length;
+  if (n < 2) return;
+  foto.value = (foto.value + delta + n) % n;
+}
+
+function alternarFavorita(ev: Event) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  emit('favorita', !props.favorita);
+}
 
 const atributos = computed(() => atributosDe(props.propiedad));
 const superficie = computed(() => superficieDe(props.propiedad));
@@ -124,41 +167,84 @@ const etiquetaAccesible = computed(() => {
     :to="`/propiedades/${propiedad.id}`"
     :aria-label="etiquetaAccesible"
   >
-    <!-- El `<img>` va adentro de un `.media` con `aspect-ratio` y no suelto: un
-         `aspect-ratio` sobre el propio `<img>` no se respeta cuando es hijo de
-         una tarjeta flex, y la imagen sale estirada al doble de alto. El
-         wrapper además reserva el hueco antes de que la foto llegue, así que la
-         grilla no salta cuando cargan las de abajo del pliegue. -->
-    <div class="media">
+    <!--
+      La foto A SANGRE: sin marco, tocando los tres bordes de la tarjeta.
+
+      No es gusto: en una grilla la foto es lo que hace que el ojo se detenga, y
+      un margen alrededor la convierte en una ilustración adentro de una ficha.
+      Sin margen, la tarjeta ES la propiedad. El recorte lo hace `.tarjeta` con
+      su `overflow: clip`.
+
+      El `<img>` va adentro de un `.media` con `aspect-ratio` y no suelto: un
+      `aspect-ratio` sobre el propio `<img>` no se respeta cuando es hijo de una
+      tarjeta flex, y la imagen sale estirada al doble de alto. El wrapper
+      además reserva el hueco antes de que la foto llegue, así que la grilla no
+      salta cuando cargan las de abajo del pliegue.
+    -->
+    <div class="media" :data-n="galeria.length">
       <img
-        v-if="propiedad.fotoPortada"
-        :src="propiedad.fotoPortada"
+        v-if="galeria.length"
+        :key="galeria[foto]"
+        :src="galeria[foto]"
         alt=""
-        loading="lazy"
+        :loading="foto === 0 ? 'lazy' : 'eager'"
         decoding="async"
         width="480"
         height="360"
       />
-      <!-- El placeholder digno: mismo bloque 4:3 para que la grilla no salte,
-           y dice QUÉ es la propiedad además de que no tiene foto. Nunca un
-           `<img>` con src roto ni un rectángulo gris pelado.
-           Los grises son `--ink-2` (9,15 claro / 10,89 oscuro) y `--muted`
-           (4,98 / 4,83) sobre `--surface-3`: `--muted-2` ahí da 4,42 en oscuro,
-           por debajo de AA, y a ojo se ve igual. -->
+
+      <!-- El placeholder digno: mismo bloque para que la grilla no salte, y
+           dice QUÉ es la propiedad además de que no tiene foto. Nunca un
+           `<img>` con src roto ni un rectángulo gris pelado. -->
       <div v-else class="placeholder">
         <UiIcon nombre="edificio" :tam="30" />
         <span class="ph-tipo">{{ tipoEnPalabras }}</span>
         <span class="ph-nota">Sin foto cargada</span>
       </div>
+
+      <!--
+        Las flechas aparecen con el cursor encima y sólo si hay más de una.
+        Siempre visibles taparían la foto en las cincuenta tarjetas de la
+        grilla; en pantalla táctil no hay hover, así que ahí quedan fijas (ver
+        la media query).
+      -->
+      <template v-if="galeria.length > 1">
+        <button class="flecha izq" type="button" aria-label="Foto anterior"
+          @click="mover(-1, $event)">‹</button>
+        <button class="flecha der" type="button" aria-label="Foto siguiente"
+          @click="mover(1, $event)">›</button>
+
+        <!-- Los puntos dicen CUÁNTAS hay y en cuál estás. Sin ellos, el
+             carrusel no anuncia que existe y nadie toca las flechas. -->
+        <span class="puntos" aria-hidden="true">
+          <i v-for="(u, i) in galeria" :key="u" :class="{ act: i === foto }" />
+        </span>
+        <span class="solo-lectores">Foto {{ foto + 1 }} de {{ galeria.length }}</span>
+      </template>
+
+      <!--
+        El corazón.
+
+        `aria-pressed` y no un ícono distinto a secas: para quien no ve el
+        relleno, «marcada» tiene que estar en el estado del botón y no en el
+        color. Y `type="button"` porque esto vive adentro de un enlace.
+      -->
+      <button
+        class="corazon"
+        :class="{ marcada: favorita }"
+        type="button"
+        :aria-pressed="favorita === true"
+        :aria-label="favorita ? 'Quitar de mis marcadas' : 'Marcar esta propiedad'"
+        @click="alternarFavorita"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 20.5 4.2 13a4.8 4.8 0 0 1 6.8-6.8l1 1 1-1A4.8 4.8 0 0 1 19.8 13z"
+            :fill="favorita ? 'currentColor' : 'none'"
+            stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+        </svg>
+      </button>
     </div>
 
-    <!--
-      El orden es el de Zillow y el de Zonaprop, y no por copiar: es el orden en
-      que se mira una propiedad. Primero cuánto sale, después qué es, después
-      dónde queda. El código y el tipo bajaron al pie —en la vista de tarjetas
-      nadie busca por «PROP-0017»; para eso está la tabla— y el chip de
-      situación aparece SÓLO cuando no es la corriente.
-    -->
     <div class="cuerpo">
       <div v-for="o in operaciones" :key="o.id" class="op">
         <span class="precio" :class="{ vacio: o.precio === null }">{{ precio(o) }}</span>
@@ -226,6 +312,7 @@ const etiquetaAccesible = computed(() => {
 .tarjeta {
   display: flex;
   flex-direction: column;
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -390,4 +477,71 @@ const etiquetaAccesible = computed(() => {
   color: var(--ink-2);
 }
 .solo-sup svg { color: var(--muted); flex: none; }
+
+/* ── La foto a sangre y sus controles ─────────────────────────────────────── */
+.media { position: relative; }
+
+/* Las flechas: sólo con el cursor encima. Siempre visibles taparían la foto en
+   las cincuenta tarjetas de una grilla. */
+.flecha, .corazon {
+  position: absolute;
+  border: 0; cursor: pointer;
+  display: grid; place-items: center;
+  transition: opacity var(--t-short), background var(--t-short);
+}
+.flecha {
+  top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px; border-radius: var(--r-full);
+  background: rgba(255, 255, 255, .92); color: var(--ink);
+  font-size: 20px; line-height: 1; padding-bottom: 3px;
+  opacity: 0;
+}
+.flecha.izq { left: 8px; }
+.flecha.der { right: 8px; }
+.tarjeta:hover .flecha, .flecha:focus-visible { opacity: 1; }
+.flecha:hover { background: #fff; }
+
+.puntos {
+  position: absolute; bottom: 8px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 5px;
+  pointer-events: none;
+}
+.puntos i {
+  width: 5px; height: 5px; border-radius: var(--r-full);
+  background: rgba(255, 255, 255, .55);
+  /* Una sombra mínima: sobre una foto clara, blanco al 55% desaparece. */
+  box-shadow: 0 0 2px rgba(0, 0, 0, .4);
+}
+.puntos i.act { background: #fff; }
+
+/* El corazón SÍ está siempre: es una acción, no una ayuda de navegación, y si
+   sólo aparece al pasar por encima nadie descubre que se puede marcar. */
+.corazon {
+  top: 8px; right: 8px;
+  width: 30px; height: 30px; border-radius: var(--r-full);
+  background: rgba(255, 255, 255, .88);
+  color: var(--ink-2);
+}
+.corazon:hover { background: #fff; }
+/* El rojo del sistema, no uno nuevo. `--danger` significa «peligro» en toda la
+   app, pero un corazón lleno se lee como marcado y no como alarma: el
+   significado lo pone la forma, no el color. */
+.corazon.marcada { color: var(--danger); }
+
+.solo-lectores {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/* En pantalla táctil no hay hover: las flechas quedan fijas o el carrusel es
+   invisible para quien usa el teléfono, que es justo donde más se usa. */
+@media (hover: none) {
+  .flecha { opacity: 1; }
+}
+
+/* Quien pidió menos movimiento no quiere transiciones de opacidad en cada
+   tarjeta que toca el cursor. */
+@media (prefers-reduced-motion: reduce) {
+  .flecha, .corazon { transition: none; }
+}
 </style>

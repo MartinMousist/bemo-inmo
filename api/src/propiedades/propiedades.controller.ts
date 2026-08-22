@@ -8,8 +8,10 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
+import { IsBoolean } from 'class-validator';
 import { PropiedadesService } from './propiedades.service';
 import { GeocodingService } from './geocoding.service';
 import { AlmacenamientoService } from '../archivos/almacenamiento.service';
@@ -22,6 +24,10 @@ import {
 } from './propiedades.dto';
 import { ComisionesOperacionDto } from '../ventas/ventas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
+
+class MarcarFavoritaDto {
+  @IsBoolean() marcada!: boolean;
+}
 
 @Controller('propiedades')
 export class PropiedadesController {
@@ -97,6 +103,32 @@ export class PropiedadesController {
   @Get()
   listar(@ActorActual() actor: Actor, @Query() f: FiltroPropiedadesDto) {
     return this.propiedades.listar(actor.tenantId, f);
+  }
+
+  /**
+   * Las que marcó quien está mirando.
+   *
+   * ANTES de `:id`, como todas las rutas literales: Nest resuelve por orden de
+   * declaración y «favoritas» se leería como un uuid, con un 400 del
+   * ParseUUIDPipe que no explica nada.
+   */
+  @Get('favoritas')
+  favoritas(@ActorActual() actor: Actor) {
+    return this.propiedades.favoritas(actor.tenantId, actor.usuarioId);
+  }
+
+  /**
+   * Marcar o desmarcar. Cualquiera que entre puede marcar las suyas: es un
+   * anotador personal, no una decisión de la casa.
+   */
+  @Put(':id/favorita')
+  @Roles('owner', 'admin', 'agente', 'contable')
+  marcarFavorita(
+    @ActorActual() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarcarFavoritaDto,
+  ) {
+    return this.propiedades.marcarFavorita(actor.tenantId, actor.usuarioId, id, dto.marcada);
   }
 
   @Get(':id')

@@ -27,7 +27,16 @@ defineProps<{
   cargando?: boolean;
   /** Cuántas tarjetas fantasma dibujar mientras carga. */
   esqueletos?: number;
+  /**
+   * Los ids que esta persona marcó.
+   *
+   * Un Set y no un array: con cincuenta tarjetas, `array.includes` por tarjeta
+   * es cincuenta recorridas en cada render.
+   */
+  favoritas?: Set<string>;
 }>();
+
+const emit = defineEmits<{ (e: 'favorita', id: string, marcada: boolean): void }>();
 </script>
 
 <template>
@@ -48,6 +57,8 @@ defineProps<{
       v-for="p in items"
       :key="p.id"
       :propiedad="p"
+      :favorita="favoritas?.has(p.id) ?? false"
+      @favorita="(m) => emit('favorita', p.id, m)"
       :modo="modo"
     />
   </div>

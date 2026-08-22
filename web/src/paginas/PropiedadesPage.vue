@@ -398,6 +398,43 @@ function alternarMarcada(id: string) {
  * después de elegir: mandar a otra pantalla obligaría a volver a marcar las
  * mismas propiedades.
  */
+/**
+ * Las propiedades que ESTA persona marcó.
+ *
+ * Se piden UNA vez y no por tarjeta: son ids, entran todos juntos, y el
+ * listado ya trae las propiedades. Un Set porque la grilla pregunta cincuenta
+ * veces por render.
+ */
+const favoritas = ref<Set<string>>(new Set());
+
+async function cargarFavoritas() {
+  try {
+    favoritas.value = new Set(await api<string[]>('/propiedades/favoritas'));
+  } catch {
+    // Si falla, las tarjetas quedan sin marcar. Es un ícono: no vale romper la
+    // pantalla por él.
+  }
+}
+
+async function alternarFavorita(id: string, marcada: boolean) {
+  // Se pinta PRIMERO y se guarda después: el corazón tiene que responder al
+  // toque, no a la latencia. Si el guardado falla se revierte, que es la única
+  // forma honesta de hacer esto.
+  const previo = new Set(favoritas.value);
+  const s = new Set(favoritas.value);
+  if (marcada) s.add(id); else s.delete(id);
+  favoritas.value = s;
+
+  try {
+    await api(`/propiedades/${id}/favorita`, {
+      method: 'PUT', body: JSON.stringify({ marcada }),
+    });
+  } catch {
+    favoritas.value = previo;
+    ui.error('No se pudo guardar', 'La marca volvió a como estaba.');
+  }
+}
+
 const abrirEnvio = ref(false);
 const creandoEnvio = ref(false);
 const errorEnvio = ref('');
@@ -536,6 +573,7 @@ onMounted(() => {
     filtros.value = { ...filtros.value, lat, lng, radioKm };
   }
   void cargar();
+  void cargarFavoritas();
 });
 </script>
 
@@ -851,6 +889,8 @@ onMounted(() => {
       v-if="vista === 'tarjetas' && (cargando || items.length > 0)"
       :items="items"
       :cargando="cargando"
+      :favoritas="favoritas"
+      @favorita="alternarFavorita"
     />
 
     <div v-else class="card sin-padding">

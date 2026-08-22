@@ -182,6 +182,14 @@ export interface Propiedad {
    * pide igual — un `<img>` roto en vez del placeholder digno.
    */
   fotoPortada: string | null;
+  /**
+   * Hasta ocho, para el carrusel de la tarjeta. La primera ES la portada.
+   *
+   * Con tope porque una tarjeta que cargue las treinta de una propiedad son
+   * medio megabyte por unidad en un listado de cincuenta; el resto vive en la
+   * ficha.
+   */
+  fotos: string[];
   operaciones: Operacion[];
   titulares: Array<{ personaId: string; nombre: string; porcentaje: number }>;
 }
@@ -982,6 +990,66 @@ export class PropiedadesService {
     if (!rows.length) throw AppError.notFound('No se encontró esa propiedad.');
     return aPropiedad(rows[0], await leerConfig(ej, rows[0].tenant_id));
   }
+
+  // ── Favoritas ──────────────────────────────────────────────────────────────
+
+  /**
+   * Las que marcó ESTA persona.
+   *
+   * Devuelve ids y no propiedades enteras: la grilla ya tiene las propiedades
+   * cargadas y lo único que le falta es saber cuáles llevan el corazón lleno.
+   * Traerlas de nuevo sería pedir dos veces lo mismo para pintar un ícono.
+   */
+  async favoritas(tenantId: string, usuarioId: string): Promise<string[]> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{ propiedad_id: string }>(
+        'SELECT propiedad_id FROM propiedad_favorita WHERE usuario_id = $1',
+        [usuarioId],
+      );
+      return rows.map((r) => r.propiedad_id);
+    });
+  }
+
+  /**
+   * Marca o desmarca, según `marcada`.
+   *
+   * Un PUT con el estado deseado y no un toggle: dos toques rápidos desde el
+   * teléfono —o dos pestañas abiertas— con un toggle terminan en el estado
+   * contrario al que la persona está viendo. Con el estado explícito, el último
+   * gana y coincide con la pantalla.
+   */
+  async marcarFavorita(
+    tenantId: string,
+    usuarioId: string,
+    propiedadId: string,
+    marcada: boolean,
+  ): Promise<{ marcada: boolean }> {
+    await this.db.withTenant(tenantId, async (ej) => {
+      if (!marcada) {
+        await ej.query(
+          'DELETE FROM propiedad_favorita WHERE usuario_id = $1 AND propiedad_id = $2',
+          [usuarioId, propiedadId],
+        );
+        return;
+      }
+
+      // La propiedad se comprueba antes: sin esto, marcar una de otra
+      // inmobiliaria fallaría por la clave foránea con un error de Postgres que
+      // no le dice nada a nadie.
+      const { rowCount } = await ej.query('SELECT 1 FROM propiedad WHERE id = $1', [propiedadId]);
+      if (!rowCount) throw AppError.notFound('La propiedad no existe.');
+
+      await ej.query(
+        `INSERT INTO propiedad_favorita (tenant_id, propiedad_id, usuario_id)
+         VALUES (app_current_tenant(), $1, $2)
+         ON CONFLICT (usuario_id, propiedad_id) DO NOTHING`,
+        [propiedadId, usuarioId],
+      );
+    });
+
+    return { marcada };
+  }
+
 }
 
 interface FilaPropiedad {
@@ -1028,6 +1096,7 @@ interface FilaPropiedad {
   agente_captador_id: string | null;
   captador_nombre: string | null;
   foto_portada: string | null;
+  fotos: string[] | null;
   operaciones: Array<Record<string, unknown>> | null;
   titulares: Array<Record<string, unknown>> | null;
 }
@@ -1070,6 +1139,20 @@ const selectPropiedad = (incluirCerradas = false): string => `
       WHERE f.propiedad_id = p.id
       ORDER BY f.es_portada DESC, f.orden, f.created_at
       LIMIT 1) AS foto_portada,
+    -- Todas las fotos, para el carrusel de la tarjeta.
+    --
+    -- Con tope: una propiedad puede tener treinta y una tarjeta que las cargue
+    -- todas es medio megabyte por unidad en un listado de cincuenta. Ocho es
+    -- más de lo que alguien pasa parado en una grilla; el resto está en la
+    -- ficha.
+    --
+    -- Mismo ORDER BY que la portada, así la primera del carrusel ES la portada
+    -- y no una foto distinta que aparece al abrir la tarjeta.
+    (SELECT json_agg(f2.url ORDER BY f2.es_portada DESC, f2.orden, f2.created_at)
+       FROM (SELECT url, es_portada, orden, created_at FROM propiedad_foto
+              WHERE propiedad_id = p.id
+              ORDER BY es_portada DESC, orden, created_at
+              LIMIT 8) f2) AS fotos,
     (SELECT json_agg(json_build_object(
         'id', o.id, 'tipo', o.tipo, 'precio', o.precio, 'moneda', o.moneda,
         'expensas', o.expensas, 'expensasMoneda', o.expensas_moneda,
@@ -1189,6 +1272,7 @@ function aPropiedad(f: FilaPropiedad, config: ConfigComisiones): Propiedad {
     // traer la clave y ahí sería `undefined` — y `undefined` desaparece del JSON,
     // así que el front recibiría la clave ausente en vez de `null`.
     fotoPortada: f.foto_portada ?? null,
+    fotos: (f.fotos as string[] | null) ?? [],
     operaciones: (f.operaciones ?? []).map((o) => ({
       id: String(o.id),
       tipo: String(o.tipo),

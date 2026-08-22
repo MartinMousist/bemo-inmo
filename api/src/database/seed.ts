@@ -407,11 +407,22 @@ async function sembrarDocumentosGarantes(
         ANDES, `garantes/${g.garantiaId}`, png, false, `${tipo}-ejemplo.png`,
       );
 
+      // Igual que `GarantesService.subirDocumento`, y no parecido.
+      //
+      // Faltaban dos cosas y las dos rompían:
+      //
+      // 1. `subido.url` es NULL en un objeto PRIVADO —que es como se suben
+      //    estos, y está bien que así sea— contra una columna NOT NULL. El seed
+      //    entero se caía acá, así que las fotos de las propiedades tampoco se
+      //    generaban nunca. Se descubrió corriendo `npm run seed`.
+      // 2. No guardaba `clave`, que es lo ÚNICO con lo que se sirve un privado.
+      //    Aunque la fila hubiera entrado, el documento no se podía abrir.
       const { rowCount } = await client.query(
         `INSERT INTO garantia_documento
-           (tenant_id, garantia_id, tipo, url, nombre_original, subido_por)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [ANDES, g.garantiaId, tipo, subido.url, `${tipo}-ejemplo.png`, OWNER_ANDES],
+           (tenant_id, garantia_id, tipo, url, clave, nombre_original, subido_por)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [ANDES, g.garantiaId, tipo, subido.url ?? '', subido.clave,
+         `${tipo}-ejemplo.png`, OWNER_ANDES],
       );
       creados += rowCount ?? 0;
     }

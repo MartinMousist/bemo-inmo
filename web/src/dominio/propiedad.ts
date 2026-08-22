@@ -27,5 +27,7 @@ export interface PropiedadTarjeta extends AtributosDePropiedad, SuperficieDeProp
   direccion: string;
   /** La portada, o `null` si no tiene fotos. Nunca `''`. */
   fotoPortada?: string | null;
+  /** Hasta ocho, para el carrusel. La primera ES la portada. */
+  fotos?: string[];
   operaciones: OperacionDeTarjeta[];
 }
