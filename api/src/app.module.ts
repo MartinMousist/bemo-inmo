@@ -134,6 +134,8 @@ import { RedController } from './red/red.controller';
 import { RedService } from './red/red.service';
 import { FotosColaService } from './importar/fotos-cola.service';
 import { VencimientosCron } from './alquileres/vencimientos.cron';
+import { InternoController } from './interno/interno.controller';
+import { InternoService } from './interno/interno.service';
 import { EnviosController, SeleccionPublicaController } from './envios/envios.controller';
 import { EnviosService } from './envios/envios.service';
 import { TelegramAdaptador } from './inbox/adaptadores/telegram.adaptador';
@@ -184,6 +186,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     CanalesController,
     RespuestasController,
     BotController,
+    InternoController,
     RedController,
     EnviosController,
     SeleccionPublicaController,
@@ -221,6 +224,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     DocumentosController,
   ],
   providers: [
+    InternoService,
     VencimientosCron,
     FotosColaService,
     RedService,

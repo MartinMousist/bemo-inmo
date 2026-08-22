@@ -49,6 +49,7 @@ const router = createRouter({
     { path: '/tablero', component: () => import('./paginas/TableroPage.vue') },
     { path: '/red', component: () => import('./paginas/RedPage.vue') },
     { path: '/envios', component: () => import('./paginas/EnviosPage.vue') },
+    { path: '/mensajes', component: () => import('./paginas/InternoPage.vue') },
     { path: '/reclamos', component: () => import('./paginas/ReclamosPage.vue') },
     { path: '/gastos', component: () => import('./paginas/GastosPage.vue') },
     { path: '/plantillas', component: () => import('./paginas/PlantillasPage.vue') },

@@ -52,11 +52,19 @@ const DESTINO: Record<string, (id: string) => string> = {
   visita: () => '/agenda',
 };
 
+const mensajes = ref(0);
+
 async function cargar() {
   try {
-    const r = await api<{ total: number; items: AvisoCorto[] }>('/avisos/sin-ver');
+    // Los dos contadores en el mismo viaje: son dos badges de la misma barra y
+    // pedirlos por separado son dos requests cada dos minutos, por pantalla.
+    const [r, m] = await Promise.all([
+      api<{ total: number; items: AvisoCorto[] }>('/avisos/sin-ver'),
+      api<{ total: number }>('/interno/sin-leer').catch(() => ({ total: 0 })),
+    ]);
     total.value = r.total;
     items.value = r.items;
+    mensajes.value = m.total;
   } catch {
     // Si falla, la campanita queda en cero. Es un badge: no vale romper la
     // barra de toda la aplicación por él.
@@ -103,6 +111,20 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="caja" class="campana">
+    <!-- Los mensajes sin leer, al lado de los avisos y NO adentro del mismo
+         panel: son dos cosas distintas. Un aviso lo genera el sistema y hay
+         que resolverlo; un mensaje lo escribió una persona y espera respuesta.
+         Mezclarlos haría que uno tape al otro. -->
+    <RouterLink
+      v-if="mensajes"
+      class="disparador mensajes"
+      to="/mensajes"
+      :aria-label="`${mensajes} mensajes sin leer`"
+    >
+      <UiIcon nombre="chat" :tam="18" />
+      <span class="badge acento">{{ mensajes > 9 ? '9+' : mensajes }}</span>
+    </RouterLink>
+
     <button
       class="disparador"
       type="button"
@@ -142,7 +164,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.campana { position: relative; }
+.campana { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+/* El badge de mensajes va en el acento y el de avisos en ámbar: un mensaje de
+   un compañero no es una alerta, y pintarlo igual le sacaría urgencia a lo que
+   sí la tiene. */
+.badge.acento { background: var(--accent); color: var(--on-accent); }
+.mensajes { text-decoration: none; }
 
 .disparador {
   position: relative; display: grid; place-items: center;

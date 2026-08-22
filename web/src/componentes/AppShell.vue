@@ -28,6 +28,7 @@ const grupos = [
       // el menú comunica el alcance— y encima la dejaba en el ítem 8, donde no
       // se encuentra.
       { a: '/inbox', icono: 'chat', texto: 'Bandeja', modulo: 'bandeja' },
+      { a: '/mensajes', icono: 'chat', texto: 'Mensajes' },
       { a: '/tablero', icono: 'grafico', texto: 'Tablero' },
     ],
   },
