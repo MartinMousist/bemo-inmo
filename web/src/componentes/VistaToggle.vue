@@ -24,8 +24,9 @@ const props = defineProps<{ modelo: Vista }>();
 const emit = defineEmits<{ (e: 'update:modelo', v: Vista): void }>();
 
 const OPCIONES: Array<{ valor: Vista; texto: string }> = [
-  { valor: 'tabla', texto: 'Tabla' },
+  { valor: 'lista', texto: 'Lista' },
   { valor: 'tarjetas', texto: 'Tarjetas' },
+  { valor: 'tabla', texto: 'Tabla' },
 ];
 </script>
 

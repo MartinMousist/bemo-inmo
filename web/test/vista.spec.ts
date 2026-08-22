@@ -30,10 +30,17 @@ describe('leerVista / guardarVista', () => {
     expect(localStorage.getItem(CLAVE)).toBe('tarjetas');
   });
 
+  it('«lista» es una vista válida, y es la tercera', () => {
+    // Se agregó sin tocar el default: la tabla sigue siendo con la que se abre,
+    // que es lo que decide DESIGN.md §1.
+    guardarVista('lista');
+    expect(leerVista()).toBe('lista');
+  });
+
   it('regla 2 · un valor guardado que ya no es válido cae al default', () => {
     // Si mañana se renombra `tarjetas`, un localStorage viejo dejaría la
-    // pantalla sin ninguna de las dos vistas: ni tabla ni grilla, o sea en
-    // blanco. Y el usuario no eligió nada raro: eligió una vista que existía.
+    // pantalla sin ninguna de las TRES vistas, o sea en blanco. Y el usuario no
+    // eligió nada raro: eligió una vista que existía.
     localStorage.setItem(CLAVE, 'mosaico');
     expect(leerVista()).toBe('tabla');
   });

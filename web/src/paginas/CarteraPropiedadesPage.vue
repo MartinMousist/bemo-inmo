@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError, descargar } from '../api/cliente';
 import PageHeader from '../componentes/PageHeader.vue';
+import FiltrosPropiedades from '../componentes/FiltrosPropiedades.vue';
+import PropiedadFila from '../componentes/PropiedadFila.vue';
 import PropiedadesGrilla from '../componentes/PropiedadesGrilla.vue';
 import SearchInput from '../componentes/SearchInput.vue';
 import SelectAgente from '../componentes/SelectAgente.vue';
@@ -120,7 +122,22 @@ const auth = useAuth();
 // equipo terminó de cargar.
 const { valores: filtros, limpiar: limpiarFiltros } = filtrosRecordados(
   'cartera-propiedades',
-  { tipo: '', estado: '', agente: '' },
+  {
+    tipo: '', estado: '', agente: '',
+    // Los avanzados, los mismos que «Todas». Hasta ahora estas dos pantallas
+    // ofrecían tipo, situación y captador y nada más: quien entraba por «En
+    // venta» no podía buscar por precio, que es lo primero que se busca en una
+    // cartera de venta.
+    ambientesMin: '', ambientesMax: '', dormitoriosMin: '', dormitoriosMax: '',
+    banosMin: '', banosMax: '', toilettesMin: '', toilettesMax: '',
+    cocherasMin: '', cocherasMax: '', plantasMin: '', plantasMax: '',
+    antiguedadMin: '', antiguedadMax: '',
+    supTotalMin: '', supTotalMax: '', supCubiertaMin: '', supCubiertaMax: '',
+    precioMoneda: 'USD', precioMin: '', precioMax: '',
+    expensasMoneda: 'ARS', expensasMin: '', expensasMax: '',
+    orientacion: '', disposicion: '', calefaccion: '', tipoUrbanizacion: '', amenities: '',
+    lat: '', lng: '', radioKm: '',
+  },
   // Regla 2 de `filtros.ts`: se valida contra los valores CRUDOS de la base,
   // que son los que viajan al backend. Las etiquetas cambian —«Cerrada» pasó a
   // ser «Vendida» o «Alquilada»— y los valores no.
@@ -187,6 +204,14 @@ async function cargar() {
           incluirCerradas: 'true',
           tipo: filtros.value.tipo,
           estado: filtros.value.estado,
+          // Todos los avanzados de una: `consulta()` descarta los vacíos, así
+          // que enumerarlos uno por uno sólo agregaría lugares donde olvidarse
+          // de agregar el próximo.
+          ...Object.fromEntries(
+            Object.entries(filtros.value).filter(
+              ([k]) => !['tipo', 'estado', 'agente'].includes(k),
+            ),
+          ),
           ...paramsDeAgente(filtros.value.agente, auth.usuario?.id ?? null),
           orden: orden.value ?? '',
           dir: orden.value ? dir.value : '',
@@ -333,6 +358,8 @@ async function exportar() {
         </select>
       </label>
 
+      <FiltrosPropiedades v-model:filtros="filtros" :operacion="operacion" />
+
       <SelectAgente v-model="filtros.agente" etiqueta="Captó" con-sin-asignar />
 
       <!-- En tarjetas no hay `<thead>`, o sea que no hay `ThOrden`. Sin esto,
@@ -369,7 +396,7 @@ async function exportar() {
     <!-- El skeleton también cambia de forma con la vista: filas para la tabla,
          tarjetas fantasma para la grilla. Un skeleton de filas que se convierte
          en una grilla es el salto de layout que el skeleton existe para evitar. -->
-    <PropiedadesGrilla v-if="cargando && vista === 'tarjetas'" :items="[]" cargando />
+    <PropiedadesGrilla v-if="cargando && vista !== 'tabla'" :items="[]" cargando />
     <UiSkeleton v-else-if="cargando" :filas="5" :alto="48" />
 
     <UiEmpty
@@ -389,6 +416,16 @@ async function exportar() {
     >
       <RouterLink class="btn" to="/propiedades/nueva">Cargar una propiedad</RouterLink>
     </UiEmpty>
+
+    <!-- La lista con foto, la misma de «Todas». Es la vista de recorrer. -->
+    <div v-else-if="items.length && vista === 'lista'" class="listado">
+      <PropiedadFila
+        v-for="p in items"
+        :key="p.id"
+        :propiedad="p"
+        :modo="operacion"
+      />
+    </div>
 
     <PropiedadesGrilla
       v-else-if="items.length && vista === 'tarjetas'"
@@ -556,5 +593,15 @@ async function exportar() {
    son lo que se busca, el resto está en la ficha. */
 @media (max-width: 860px) {
   .secundaria { display: none; }
+}
+
+.listado { display: grid; gap: var(--s-md); }
+
+/* Al imprimir: se van los controles —no se aprietan en un papel— y los bordes. */
+@media print {
+  .filtros, :deep(.ph .acciones), .aviso-exportar { display: none !important; }
+  .card, :deep(.card) { border: 0; box-shadow: none; }
+  :deep(table) { font-size: 10pt; }
+  :deep(tr) { break-inside: avoid; }
 }
 </style>

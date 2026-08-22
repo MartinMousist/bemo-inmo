@@ -43,7 +43,15 @@
 
 const CLAVE = 'bemo-inmo:vista:propiedades';
 
-export type Vista = 'tabla' | 'tarjetas';
+/**
+ * Las tres formas de mirar la cartera.
+ *
+ * `lista`    — una fila por propiedad CON su foto, como los portales. Es para
+ *              recorrer buscando: la foto es lo que hace que el ojo se detenga.
+ * `tarjetas` — la grilla. Para mostrarle la cartera a alguien.
+ * `tabla`    — densa y sin fotos. Para trabajar y para imprimir.
+ */
+export type Vista = 'lista' | 'tabla' | 'tarjetas';
 
 /**
  * La tabla es el DEFAULT y no se va a ningún lado.
@@ -54,9 +62,21 @@ export type Vista = 'tabla' | 'tarjetas';
  * —mostrarle la cartera a alguien— y por eso hay un interruptor y no un
  * reemplazo.
  */
+/**
+ * La TABLA sigue siendo el default, y no es inercia.
+ *
+ * Lo decide `DESIGN.md` §1 —«la densidad es una virtud: un administrador quiere
+ * ver 30 contratos, no 6 tarjetas»— y su matiz del 2026-08-09, que dice con
+ * todas las letras que la tabla es el default de las tres pantallas de
+ * propiedades «y no se va».
+ *
+ * `lista` se suma como TERCERA vista, no como reemplazo. Se probó cambiar el
+ * default y lo frenaron los tests, que estaban bien: es una decisión del
+ * sistema de diseño y no se cambia de costado mientras se agrega una vista.
+ */
 export const VISTA_POR_DEFECTO: Vista = 'tabla';
 
-const VALIDAS: readonly Vista[] = ['tabla', 'tarjetas'];
+const VALIDAS: readonly Vista[] = ['lista', 'tabla', 'tarjetas'];
 
 export function leerVista(): Vista {
   try {
