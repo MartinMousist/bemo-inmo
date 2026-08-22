@@ -217,9 +217,62 @@ export class FiltroPropiedadesDto extends FiltroConAgenteDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) plantasMin?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) plantasMax?: number;
 
-  // Sólo el máximo: en un portal se busca «hasta 10 años», nunca «entre 8 y 12
-  // años exactos» — la pregunta real es «qué tan nueva», con piso en 0 siempre.
+  /**
+   * Antigüedad, ahora con las dos puntas.
+   *
+   * El comentario anterior decía que sólo hacía falta el máximo porque «la
+   * pregunta real es qué tan nueva». Es cierto para quien compra para vivir, y
+   * falso para el resto: «de 5 a 20 años» es lo que busca quien no quiere ni
+   * pagar el sobreprecio de estrenar ni comprar una casa para refaccionar. Con
+   * sólo el máximo, esa búsqueda no se podía escribir.
+   */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(300) antiguedadMin?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(300) antiguedadMax?: number;
+
+  /**
+   * Los dos que estaban cargados y no se podían buscar.
+   *
+   * `estado_conservacion` y `fecha_publicacion` existen como columnas desde
+   * hace varias etapas: se llenaban y no había forma de filtrar por ellas. Un
+   * campo que se carga y no sirve para nada es la peor clase de campo — le
+   * cuesta tiempo a quien lo llena y no le devuelve nada.
+   *
+   * ⚠️ `tipologia` NO está acá aunque sea una columna de `propiedad`: es de las
+   * unidades de un EMPRENDIMIENTO —la pone el importador de planillas— y ni
+   * siquiera se puede cargar desde el formulario de una propiedad. Se agregó
+   * como filtro y se sacó al descubrirlo: filtrar la cartera entera por un
+   * campo que casi ninguna propiedad tiene es ofrecer una búsqueda que devuelve
+   * vacío siempre.
+   */
+  @IsOptional() @Transform(listaDesdeQuery) @IsArray() @IsString({ each: true })
+  estadoConservacion?: string[];
+
+  /** Publicadas en los últimos N días. «¿Qué entró esta semana?». */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(365) publicadaDias?: number;
+
+  /**
+   * Con foto, o sin ella.
+   *
+   * Sirve para las dos preguntas, y por eso es un booleano y no un flag: el
+   * asesor que arma un envío quiere SÓLO las que tienen foto, y quien ordena la
+   * cartera quiere exactamente las que no la tienen, para salir a sacarlas.
+   */
+  /*
+   * El transform conserva `undefined`, que acá es un TERCER estado.
+   *
+   * `sinCaptador` es de dos estados —o filtra o no— así que le alcanza con
+   * devolver `false` cuando no vino. Éste tiene tres: con foto, sin foto, y no
+   * preguntar. Si `conFotos=false` colapsara a «no vino», la mitad del filtro
+   * no existiría; y con `@Type(() => Boolean)`, `Boolean('false')` es `true` y
+   * pediría lo contrario de lo que se tocó. Lo segundo pasó: hay un test.
+   */
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || value === ''
+      ? undefined
+      : value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  conFotos?: boolean;
 
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) supTotalMin?: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) supTotalMax?: number;
@@ -297,7 +350,16 @@ export class FiltroPropiedadesDto extends FiltroConAgenteDto {
    * Es opt-in y no el default para no cambiarle el significado al listado que
    * ya existía.
    */
-  @IsOptional() @IsBoolean() @Type(() => Boolean)
+  /*
+   * Mismo transform que `sinCaptador` y por el mismo motivo: con
+   * `@Type(() => Boolean)`, `incluirCerradas=false` llegaba como `true` y traía
+   * justo lo que se pidió excluir. No se notaba porque el front sólo lo manda
+   * cuando es `true` — o sea, un bug latente esperando al primer cliente que
+   * arme la URL a mano.
+   */
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
   incluirCerradas?: boolean;
 
   /**

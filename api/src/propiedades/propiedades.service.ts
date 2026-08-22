@@ -231,6 +231,20 @@ export class PropiedadesService {
         f.precioMin ?? null, f.precioMax ?? null, f.precioMoneda ?? null,
         f.expensasMin ?? null, f.expensasMax ?? null, f.expensasMoneda ?? null,
         f.lat ?? null, f.lng ?? null, f.radioKm ?? null,
+        // ── Los que faltaban ──
+        //
+        // Todos sobre columnas que ya existían y que no se podían buscar: el
+        // dato estaba cargado y la pantalla no lo dejaba usar, que es la peor
+        // clase de campo — se llena y no sirve para nada.
+        // Los números NO se cuentan a ojo: son la posición en ESTE array. La
+        // primera versión los anotó como $41..$45 cuando eran $39..$43, y los
+        // dos que quedaron pasados y sin usar en el SQL tiraron «could not
+        // determine data type of parameter $39» — un error que no nombra al
+        // filtro nuevo ni ayuda a encontrarlo.
+        f.antiguedadMin ?? null,          // $39
+        f.estadoConservacion ?? null,     // $40
+        f.publicadaDias ?? null,          // $41
+        f.conFotos ?? null,               // $42
       ];
 
       // El MISMO `donde` para el conteo y para la página. Si el filtro entrara
@@ -297,6 +311,32 @@ export class PropiedadesService {
                   AND ($33::numeric IS NULL OR o.expensas >= $33)
                   AND ($34::numeric IS NULL OR o.expensas <= $34)))
 
+          -- Antigüedad: ahora con mínimo además del máximo. «De 5 a 20 años»
+          -- es una búsqueda real —ni a estrenar ni una casa vieja— y con sólo
+          -- el máximo no se podía expresar.
+          AND ($39::int IS NULL OR p.antiguedad >= $39)
+          AND ($40::text[] IS NULL OR p.estado_conservacion = ANY($40))
+
+          -- Publicadas en los últimos N días.
+          --
+          -- fecha_publicacion vive en la OPERACION y existe desde el principio;
+          -- no había forma de buscar por ella. Es lo primero que se mira cuando
+          -- alguien pregunta «¿qué entró esta semana?».
+          -- (Sin comillas invertidas: adentro de un template literal lo cierran.
+          --  Es la tercera vez que se pisa en este archivo.)
+          AND ($41::int IS NULL OR EXISTS (
+                SELECT 1 FROM operacion o WHERE o.propiedad_id = p.id
+                  AND ($5::boolean OR o.estado <> 'cerrada')
+                  AND o.fecha_publicacion >= current_date - $41::int))
+
+          -- Con fotos, o sin ellas.
+          --
+          -- Sirve para las dos preguntas: el asesor que arma un envío quiere
+          -- SÓLO las que tienen foto, y quien ordena la cartera quiere
+          -- exactamente las que no la tienen para salir a sacarlas.
+          AND ($42::boolean IS NULL
+               OR $42 = EXISTS (SELECT 1 FROM propiedad_foto pf WHERE pf.propiedad_id = p.id))
+
           -- A menos de N km de un punto, por Haversine.
           --
           -- 6371 es el radio medio de la Tierra en km. La fórmula da el arco
@@ -347,7 +387,14 @@ export class PropiedadesService {
            f.orden,
            f.dir,
          )}
-         LIMIT $39 OFFSET $40`,
+         -- El número del LIMIT y del OFFSET se CALCULA de cuántos parámetros
+         -- hay, no se escribe a mano.
+         --
+         -- Estaban puestos como $39 y $40, y agregar cinco filtros los corrió a
+         -- $46 y $47 sin que nada avisara: la consulta se caía con «could not
+         -- determine data type of parameter $39», que no señala al filtro nuevo
+         -- ni al LIMIT. Cada filtro que se agregue de acá en más los mueve solo.
+         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, f.porPagina, offset(f)],
       );
 

@@ -433,4 +433,89 @@ describe('Atributos de propiedad (migración 027)', () => {
         .set(...como(inmo)).expect(400);
     });
   });
+
+  /**
+   * Los filtros que faltaban.
+   *
+   * Todos sobre columnas que ya existían y que no se podían buscar: el dato se
+   * cargaba desde el formulario y la pantalla no lo dejaba usar. Un campo que
+   * se llena y no sirve para nada es la peor clase de campo — le cuesta tiempo
+   * a quien lo carga y no le devuelve nada.
+   */
+  describe('los filtros que faltaban', () => {
+    let conFoto = '';
+
+    beforeAll(async () => {
+      const rc = await crear('Nueva Con Foto', {
+        antiguedad: 1, estadoConservacion: 'muy_bueno',
+      });
+      conFoto = rc.body.id;
+      await crear('Vieja Regular', { antiguedad: 45, estadoConservacion: 'regular' });
+      await crear('Intermedia', { antiguedad: 12, estadoConservacion: 'bueno' });
+
+      // La fila de la foto se inserta directo y no por el endpoint de subida:
+      // lo que se prueba acá es el FILTRO, y pasar por el almacenamiento
+      // ataría este test a la validación de imágenes y al bucket.
+      const { DbService } = await import('../src/database/db.service');
+      await app.get(DbService).withTenant(inmo.tenantId, (ej) =>
+        ej.query(
+          `INSERT INTO propiedad_foto (tenant_id, propiedad_id, url, orden, es_portada)
+           VALUES (app_current_tenant(), $1, 'https://ejemplo.com/f.jpg', 0, true)`,
+          [conFoto],
+        ));
+    }, 60_000);
+
+    const calles = async (query: string) => {
+      const r = await http().get(`/v1/propiedades?${query}`).set(...como(inmo)).expect(200);
+      return (r.body.items as Array<{ direccion: string }>).map((p) => p.direccion);
+    };
+
+    /**
+     * El caso que el filtro anterior no podía expresar.
+     *
+     * Con sólo `antiguedadMax`, «de 5 a 20 años» no se podía escribir — y es lo
+     * que busca quien no quiere pagar el sobreprecio de estrenar ni comprar una
+     * casa para refaccionar.
+     */
+    it('antiguedadMin + Max define un rango, no sólo un techo', async () => {
+      const r = await calles('antiguedadMin=5&antiguedadMax=20');
+      expect(r.some((c) => c.includes('Intermedia'))).toBe(true);
+      expect(r.some((c) => c.includes('Nueva Con Foto'))).toBe(false);
+      expect(r.some((c) => c.includes('Vieja Regular'))).toBe(false);
+    });
+
+    it('estadoConservacion filtra, y acepta varios', async () => {
+      const uno = await calles('estadoConservacion=regular');
+      expect(uno.some((c) => c.includes('Vieja Regular'))).toBe(true);
+      expect(uno.some((c) => c.includes('Intermedia'))).toBe(false);
+
+      const dos = await calles('estadoConservacion=regular,bueno');
+      expect(dos.some((c) => c.includes('Vieja Regular'))).toBe(true);
+      expect(dos.some((c) => c.includes('Intermedia'))).toBe(true);
+    });
+
+    /**
+     * `conFotos` sirve para las DOS preguntas, y por eso es un booleano.
+     *
+     * El asesor que arma un envío quiere sólo las que tienen foto; quien ordena
+     * la cartera quiere exactamente las que no la tienen, para salir a sacarlas.
+     */
+    it('conFotos recorta en los dos sentidos', async () => {
+      const con = await calles('conFotos=true');
+      expect(con.some((c) => c.includes('Nueva Con Foto'))).toBe(true);
+      expect(con.some((c) => c.includes('Vieja Regular'))).toBe(false);
+
+      const sin = await calles('conFotos=false');
+      expect(sin.some((c) => c.includes('Vieja Regular'))).toBe(true);
+      expect(sin.some((c) => c.includes('Nueva Con Foto'))).toBe(false);
+    });
+
+    it('sin ninguno de los nuevos, no recortan nada', async () => {
+      // El caso que rompe si un filtro se aplica cuando no vino: con `null`,
+      // `p.tipologia = ANY(NULL)` no matchea NADA en vez de no filtrar.
+      const todas = await calles('porPagina=100');
+      expect(todas.some((c) => c.includes('Nueva Con Foto'))).toBe(true);
+      expect(todas.some((c) => c.includes('Vieja Regular'))).toBe(true);
+    });
+  });
 });
