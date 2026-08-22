@@ -434,15 +434,17 @@ describe('Personas por rol', () => {
 
       expect(mios.body.propietario).toBeGreaterThan(0);
       // La vecina no tiene ni una titularidad, ni un contrato, ni una venta.
-      expect(suyos.body).toEqual({
-        todas: suyos.body.todas,
-        propietario: 0,
-        inquilino: 0,
-        garante: 0,
-        comprador: 0,
-        interesado: 0,
-        reservante: 0,
-      });
+      //
+      // Se comprueba que TODOS los roles den cero, derivándolos del cuerpo y no
+      // listándolos: escritos a mano, agregar un rol deja este test pasando sin
+      // haberlo mirado — que es justo lo contrario de lo que un test de
+      // aislamiento tiene que hacer.
+      const { todas, ...porRol } = suyos.body as Record<string, number>;
+      expect(todas).toBeGreaterThan(0);
+      expect(Object.keys(porRol).length).toBeGreaterThanOrEqual(8);
+      for (const [rol, n] of Object.entries(porRol)) {
+        expect({ rol, n }).toEqual({ rol, n: 0 });
+      }
     });
 
     it('el filtro por rol tampoco cruza inmobiliarias', async () => {

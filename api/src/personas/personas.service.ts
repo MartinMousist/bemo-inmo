@@ -44,7 +44,9 @@ export interface Persona {
 export const ROLES_PERSONA = [
   'propietario',
   'inquilino',
+  'ex_inquilino',
   'garante',
+  'ex_garante',
   'comprador',
   'interesado',
   'reservante',
@@ -52,7 +54,30 @@ export const ROLES_PERSONA = [
 
 export type RolPersona = (typeof ROLES_PERSONA)[number];
 
+export type EstadoSemaforo = 'sin_marcar' | 'recomendado' | 'con_reparos' | 'no_alquilar';
+
+export const ESTADOS_SEMAFORO: EstadoSemaforo[] = [
+  'sin_marcar', 'recomendado', 'con_reparos', 'no_alquilar',
+];
+
+/**
+ * ⚠️ Este bloque NO sale de la inmobiliaria.
+ *
+ * No va al portal del propietario ni al del inquilino, ni a la Red, ni a un
+ * envío a un cliente, ni al feed XML. Cada uno de esos cinco lugares arma su
+ * propia proyección y ninguno incluye a `persona` entera — pero si alguien
+ * agrega uno nuevo, esto es lo que tiene que quedarse afuera.
+ */
+export interface SemaforoPersona {
+  estado: EstadoSemaforo;
+  motivo: string | null;
+  /** El NOMBRE de quien la marcó, no su id: es para leer. */
+  por: string | null;
+  el: string | null;
+}
+
 export interface PersonaConRoles extends Persona {
+  semaforo: SemaforoPersona;
   roles: RolPersona[];
 }
 
@@ -63,15 +88,15 @@ export interface PersonaConRoles extends Persona {
  * tres roles cuenta en los tres, así que la suma da más que el total y está
  * bien que dé más.
  */
-export interface ConteoPorRol {
-  todas: number;
-  propietario: number;
-  inquilino: number;
-  garante: number;
-  comprador: number;
-  interesado: number;
-  reservante: number;
-}
+/**
+ * El conteo se DERIVA de `ROLES_PERSONA`, no se escribe rol por rol.
+ *
+ * La versión anterior los listaba a mano acá y otra vez en el `return`, y al
+ * agregar `ex_inquilino` y `ex_garante` la consulta los contaba y el objeto los
+ * tiraba: la pantalla recibía `undefined` para los dos. Con el tipo derivado,
+ * agregar un rol no deja nada que sincronizar.
+ */
+export type ConteoPorRol = { todas: number } & Record<RolPersona, number>;
 
 @Injectable()
 export class PersonasService {
@@ -213,15 +238,77 @@ export class PersonasService {
       );
 
       const f = rows[0];
-      return {
-        todas: Number(f.todas),
-        propietario: Number(f.propietario),
-        inquilino: Number(f.inquilino),
-        garante: Number(f.garante),
-        comprador: Number(f.comprador),
-        interesado: Number(f.interesado),
-        reservante: Number(f.reservante),
-      };
+      // El `as` es porque `Object.fromEntries` devuelve un índice de string y
+      // TypeScript no puede probar que las claves son exactamente las de
+      // `RolPersona`. Lo son: salen de `ROLES_PERSONA`, que es el mismo array
+      // del que sale el tipo. La alternativa —listar los ocho a mano— es lo que
+      // se acaba de sacar por dejar dos sin devolver.
+      const porRol = Object.fromEntries(
+        ROLES_PERSONA.map((r) => [r, Number(f[r])]),
+      ) as Record<RolPersona, number>;
+
+      return { todas: Number(f.todas), ...porRol };
+    });
+  }
+
+  /**
+   * El semáforo: si a esta persona le volveríamos a alquilar.
+   *
+   * ── Qué es y qué no es ──
+   *
+   * Es lo que hoy vive en la cabeza de alguien o en un grupo de WhatsApp,
+   * escrito donde se pueda leer. **No es un puntaje** y no sale de esta
+   * inmobiliaria: ni al portal del inquilino, ni a la Red, ni a un envío, ni al
+   * feed. Es la opinión de ESTA oficina sobre una persona con nombre y
+   * apellido.
+   *
+   * ── Avisa, nunca bloquea ──
+   *
+   * No hay ningún lugar del sistema que impida armar un contrato con alguien
+   * marcado. Que el software se niegue a dejarte alquilarle a una persona es
+   * una decisión que no le corresponde, y una marca puesta con bronca dejaría a
+   * alguien afuera en silencio y para siempre.
+   *
+   * ── El motivo es obligatorio ──
+   *
+   * Una marca sin motivo es un rumor con forma de dato: dentro de seis meses
+   * nadie sabe por qué está puesta, y quien la lee no puede evaluarla. Se exige
+   * acá y no con un CHECK porque «sin marcar» no lleva motivo.
+   */
+  async marcarSemaforo(
+    tenantId: string,
+    personaId: string,
+    usuarioId: string,
+    estado: string,
+    motivo?: string,
+  ): Promise<PersonaConRoles> {
+    if (estado !== 'sin_marcar' && !motivo?.trim()) {
+      throw new AppError(
+        400,
+        ErrorCode.VALIDATION_FAILED,
+        'Escribí por qué. Una marca sin motivo no le sirve a nadie dentro de seis meses.',
+        'Bad Request',
+      );
+    }
+
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rowCount } = await ej.query(
+        `UPDATE persona
+            SET semaforo = $2,
+                -- Al desmarcar se limpia todo: dejar el motivo viejo colgando
+                -- de un «sin marcar» es peor que no tener nada.
+                semaforo_motivo = CASE WHEN $2 = 'sin_marcar' THEN NULL ELSE $3 END,
+                semaforo_por    = CASE WHEN $2 = 'sin_marcar' THEN NULL ELSE $4::uuid END,
+                semaforo_el     = CASE WHEN $2 = 'sin_marcar' THEN NULL ELSE now() END
+          WHERE id = $1`,
+        [personaId, estado, motivo?.trim() ?? null, usuarioId],
+      );
+      if (!rowCount) throw AppError.notFound('No se encontró esa persona.');
+
+      const { rows } = await ej.query<FilaPersona>(
+        `${SELECT_PERSONA} WHERE p.id = $1`, [personaId],
+      );
+      return aPersonaConRoles(rows[0]);
     });
   }
 
@@ -371,6 +458,10 @@ export class PersonasService {
 }
 
 interface FilaPersona {
+  semaforo: string | null;
+  semaforo_motivo: string | null;
+  semaforo_por: string | null;
+  semaforo_el: string | null;
   id: string;
   tipo: 'fisica' | 'juridica';
   nombre: string;
@@ -415,12 +506,62 @@ interface FilaPersona {
  *    vigentes» es de la PANTALLA Inquilinos, que lista contratos, no de acá.
  *    Por eso los dos números no coinciden, y por eso la pantalla dice los dos.
  */
+/**
+ * Un contrato que todavía cuenta. Se usa cuatro veces abajo.
+ *
+ * `vigente` y `por_iniciar`: el que arranca el mes que viene ya tiene inquilino,
+ * y decir que no lo es hasta el día de la mudanza sería falso al revés.
+ */
+const CONTRATO_EN_CURSO = "c.estado IN ('vigente', 'por_iniciar')";
+
 export const CONJUNTO_ROL: Record<RolPersona, string> = {
+  // El propietario NO caduca: la propiedad sigue siendo suya aunque no haya
+  // ningún contrato encima, y aunque esté archivada.
   propietario: 'SELECT persona_id FROM titularidad',
-  inquilino: "SELECT persona_id FROM contrato_parte WHERE rol = 'locatario'",
+
+  /*
+   * ── Los roles caducan ──
+   *
+   * Antes «inquilino» salía de `contrato_parte` sin mirar el estado del
+   * contrato, así que alguien que alquiló en 2019 y se fue seguía siendo
+   * inquilino para siempre. La ficha de una persona mentía, y la pantalla de
+   * Inquilinos mezclaba a los de hoy con los de hace seis años.
+   *
+   * Ahora «inquilino» quiere decir ACTUAL, y quien lo fue queda como
+   * `ex_inquilino` — que no es lo mismo y hay que poder distinguirlo: a un ex
+   * inquilino se le puede volver a alquilar, y para eso está el semáforo.
+   */
+  inquilino:
+    'SELECT cp.persona_id FROM contrato_parte cp ' +
+    'JOIN contrato_alquiler c ON c.id = cp.contrato_id ' +
+    `WHERE cp.rol = 'locatario' AND ${CONTRATO_EN_CURSO}`,
+
+  // Tuvo alguno y NINGUNO en curso. El `EXCEPT` es lo que evita que una persona
+  // con un contrato vivo y tres viejos aparezca como las dos cosas.
+  ex_inquilino:
+    "SELECT persona_id FROM contrato_parte WHERE rol = 'locatario' " +
+    'EXCEPT SELECT cp.persona_id FROM contrato_parte cp ' +
+    'JOIN contrato_alquiler c ON c.id = cp.contrato_id ' +
+    `WHERE cp.rol = 'locatario' AND ${CONTRATO_EN_CURSO}`,
+
   garante:
+    'SELECT cp.persona_id FROM contrato_parte cp ' +
+    'JOIN contrato_alquiler c ON c.id = cp.contrato_id ' +
+    `WHERE cp.rol IN ('garante', 'fiador') AND ${CONTRATO_EN_CURSO} ` +
+    'UNION SELECT g.persona_id FROM garantia g ' +
+    'JOIN contrato_alquiler c ON c.id = g.contrato_id ' +
+    `WHERE g.persona_id IS NOT NULL AND ${CONTRATO_EN_CURSO}`,
+
+  ex_garante:
     "SELECT persona_id FROM contrato_parte WHERE rol IN ('garante', 'fiador') " +
-    'UNION SELECT persona_id FROM garantia WHERE persona_id IS NOT NULL',
+    'UNION SELECT persona_id FROM garantia WHERE persona_id IS NOT NULL ' +
+    'EXCEPT (' +
+    'SELECT cp.persona_id FROM contrato_parte cp ' +
+    'JOIN contrato_alquiler c ON c.id = cp.contrato_id ' +
+    `WHERE cp.rol IN ('garante', 'fiador') AND ${CONTRATO_EN_CURSO} ` +
+    'UNION SELECT g.persona_id FROM garantia g ' +
+    'JOIN contrato_alquiler c ON c.id = g.contrato_id ' +
+    `WHERE g.persona_id IS NOT NULL AND ${CONTRATO_EN_CURSO})`,
   comprador:
     'SELECT comprador_id AS persona_id FROM operacion_venta ' +
     "WHERE comprador_id IS NOT NULL AND estado <> 'caida'",
@@ -447,6 +588,8 @@ export const ROLES_DERIVADOS = `array_remove(ARRAY[
 const SELECT_PERSONA = `
   SELECT p.id, p.tipo, p.nombre, p.apellido, p.doc_tipo, p.doc_numero,
          p.email::text AS email, p.telefono, p.domicilio, p.notas,
+         p.semaforo, p.semaforo_motivo, p.semaforo_el,
+         (SELECT u.nombre FROM usuario u WHERE u.id = p.semaforo_por) AS semaforo_por,
          ${ROLES_DERIVADOS}
     FROM persona p`;
 
@@ -464,6 +607,14 @@ function aPersonaConRoles(f: FilaPersona): PersonaConRoles {
     telefono: f.telefono,
     domicilio: f.domicilio,
     notas: f.notas,
+    // El semáforo viaja SIEMPRE, incluso «sin marcar»: la pantalla necesita
+    // saber que existe la marca para poder ofrecer ponerla.
+    semaforo: {
+      estado: (f.semaforo ?? 'sin_marcar') as EstadoSemaforo,
+      motivo: f.semaforo_motivo ?? null,
+      por: f.semaforo_por ?? null,
+      el: f.semaforo_el ?? null,
+    },
     roles: (f.roles ?? []) as RolPersona[],
   };
 }

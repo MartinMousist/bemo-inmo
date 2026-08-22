@@ -133,6 +133,7 @@ import { PlanesPagoService } from './emprendimientos/planes.service';
 import { RedController } from './red/red.controller';
 import { RedService } from './red/red.service';
 import { FotosColaService } from './importar/fotos-cola.service';
+import { VencimientosCron } from './alquileres/vencimientos.cron';
 import { EnviosController, SeleccionPublicaController } from './envios/envios.controller';
 import { EnviosService } from './envios/envios.service';
 import { TelegramAdaptador } from './inbox/adaptadores/telegram.adaptador';
@@ -220,6 +221,7 @@ import { CuentaService } from './cuenta/cuenta.service';
     DocumentosController,
   ],
   providers: [
+    VencimientosCron,
     FotosColaService,
     RedService,
     EnviosService,

@@ -11,7 +11,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { IsBoolean } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PropiedadesService } from './propiedades.service';
 import { GeocodingService } from './geocoding.service';
 import { AlmacenamientoService } from '../archivos/almacenamiento.service';
@@ -24,6 +24,11 @@ import {
 } from './propiedades.dto';
 import { ComisionesOperacionDto } from '../ventas/ventas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
+
+class ArchivarDto {
+  /** Por qué se archiva. Opcional: «se vendió» es lo normal y no hace falta. */
+  @IsOptional() @IsString() @MaxLength(300) motivo?: string;
+}
 
 class MarcarFavoritaDto {
   @IsBoolean() marcada!: boolean;
@@ -150,6 +155,29 @@ export class PropiedadesController {
     @Body() dto: EditarPropiedadDto,
   ) {
     return this.propiedades.editar(actor.tenantId, id, dto);
+  }
+
+  /**
+   * Archivar: sacarla de la cartera sin perder su historia.
+   *
+   * Sólo titular y administración. Sacar una propiedad de circulación toca la
+   * cartera entera —el feed, la Red, los listados— y no es una decisión de un
+   * asesor.
+   */
+  @Post(':id/archivar')
+  @Roles('owner', 'admin')
+  archivar(
+    @ActorActual() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ArchivarDto,
+  ) {
+    return this.propiedades.archivar(actor.tenantId, id, actor.usuarioId, dto.motivo);
+  }
+
+  @Post(':id/desarchivar')
+  @Roles('owner', 'admin')
+  desarchivar(@ActorActual() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.propiedades.desarchivar(actor.tenantId, id);
   }
 
   @Delete(':id')

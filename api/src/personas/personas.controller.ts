@@ -10,10 +10,25 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { PersonasService } from './personas.service';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  ESTADOS_SEMAFORO, PersonasService, type EstadoSemaforo,
+} from './personas.service';
 import { CuentaCorrienteService } from './cuenta-corriente.service';
 import { CrearPersonaDto, EditarPersonaDto, ListarPersonasDto } from './personas.dto';
 import { ActorActual, Roles, type Actor } from '../auth/decoradores';
+
+class SemaforoDto {
+  @IsIn(ESTADOS_SEMAFORO as unknown as string[])
+  estado!: EstadoSemaforo;
+
+  /**
+   * Obligatorio salvo al desmarcar. Lo exige el servicio y no un decorador,
+   * porque depende del estado: «sin marcar» no lleva motivo.
+   */
+  @IsOptional() @IsString() @MaxLength(500)
+  motivo?: string;
+}
 
 @Controller('personas')
 export class PersonasController {
@@ -21,6 +36,26 @@ export class PersonasController {
     private readonly personas: PersonasService,
     private readonly cuenta: CuentaCorrienteService,
   ) {}
+
+  /**
+   * Marcar si a esta persona le volveríamos a alquilar.
+   *
+   * Sólo titular y administración. Un asesor no marca «no alquilar» a nadie:
+   * es una decisión de la casa, queda escrita con su nombre y su fecha, y
+   * afecta a cómo la oficina entera va a mirar a esa persona.
+   *
+   * ⚠️ AVISA, NUNCA BLOQUEA. No hay ni un lugar del sistema que impida armar un
+   * contrato con alguien marcado, y no lo tiene que haber.
+   */
+  @Patch(':id/semaforo')
+  @Roles('owner', 'admin')
+  marcarSemaforo(
+    @ActorActual() a: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SemaforoDto,
+  ) {
+    return this.personas.marcarSemaforo(a.tenantId, id, a.usuarioId, dto.estado, dto.motivo);
+  }
 
   /**
    * La cuenta corriente de una persona.

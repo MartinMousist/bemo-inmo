@@ -274,6 +274,17 @@ export class FiltroPropiedadesDto extends FiltroConAgenteDto {
   @IsBoolean()
   conFotos?: boolean;
 
+  /**
+   * Ver las archivadas EN LUGAR de las activas, no además.
+   *
+   * Mezclarlas obligaría a leer una columna para saber cuál es cuál, y el 99%
+   * de las veces se abre la cartera para ver lo que hay para ofrecer.
+   */
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  archivadas?: boolean;
+
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) supTotalMin?: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) supTotalMax?: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) supCubiertaMin?: number;

@@ -245,6 +245,7 @@ export class PropiedadesService {
         f.estadoConservacion ?? null,     // $40
         f.publicadaDias ?? null,          // $41
         f.conFotos ?? null,               // $42
+        f.archivadas ?? false,            // $43
       ];
 
       // El MISMO `donde` para el conteo y para la página. Si el filtro entrara
@@ -336,6 +337,15 @@ export class PropiedadesService {
           -- exactamente las que no la tienen para salir a sacarlas.
           AND ($42::boolean IS NULL
                OR $42 = EXISTS (SELECT 1 FROM propiedad_foto pf WHERE pf.propiedad_id = p.id))
+
+          -- Las archivadas NO salen, salvo que se las pida.
+          --
+          -- El default es esconderlas: quien abre la cartera quiere ver lo que
+          -- tiene para ofrecer, no lo que vendió en 2022. Y el filtro es
+          -- EXCLUYENTE —o las activas o las archivadas— porque mezclarlas en
+          -- una sola lista obliga a leer una columna para saber cuál es cuál.
+          AND (CASE WHEN $43::boolean THEN p.archivada_el IS NOT NULL
+                    ELSE p.archivada_el IS NULL END)
 
           -- A menos de N km de un punto, por Haversine.
           --
@@ -608,10 +618,127 @@ export class PropiedadesService {
     });
   }
 
+  /**
+   * Borrar de verdad, y sólo si no dejó rastro.
+   *
+   * Las claves foráneas de `contrato_alquiler`, `gasto` y `reclamo` son
+   * RESTRICT: Postgres frena el borrado de una propiedad con historia y hace
+   * bien. Pero ese freno llegaba a la pantalla como un 500 «Ocurrió un error
+   * inesperado» — la regla era correcta y la explicación no existía.
+   *
+   * Ahora se comprueba ANTES y se contesta lo que hay que hacer en su lugar.
+   */
   async borrar(tenantId: string, id: string): Promise<void> {
     await this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{ contratos: string; gastos: string; reclamos: string }>(
+        `SELECT (SELECT count(*) FROM contrato_alquiler WHERE propiedad_id = $1) AS contratos,
+                (SELECT count(*) FROM gasto WHERE propiedad_id = $1) AS gastos,
+                (SELECT count(*) FROM reclamo WHERE propiedad_id = $1) AS reclamos`,
+        [id],
+      );
+
+      const c = rows[0];
+      const tiene = [
+        Number(c.contratos) ? `${c.contratos} contrato(s)` : null,
+        Number(c.gastos) ? `${c.gastos} gasto(s)` : null,
+        Number(c.reclamos) ? `${c.reclamos} reclamo(s)` : null,
+      ].filter(Boolean);
+
+      if (tiene.length) {
+        throw new AppError(
+          409,
+          ErrorCode.ESTADO_INVALIDO,
+          `Esta propiedad tiene ${tiene.join(', ')} y borrarla se los llevaría puestos. ` +
+            'Archivala: sale de la cartera y su historia queda.',
+          'Conflict',
+        );
+      }
+
       const { rowCount } = await ej.query('DELETE FROM propiedad WHERE id = $1', [id]);
       if (!rowCount) throw AppError.notFound('No se encontró esa propiedad.');
+    });
+  }
+
+  /**
+   * Archivar: sacarla de la cartera sin perder nada.
+   *
+   * ── Los tres efectos, y por qué van juntos ──
+   *
+   * 1. **Las operaciones se cierran.** Una propiedad archivada que siga
+   *    «disponible» aparecería en el feed a los portales y en la Red. Archivar
+   *    y seguir ofreciéndola es una contradicción.
+   * 2. **Sale de la Red.** Por lo mismo, y explícitamente: el flag se apaga.
+   * 3. **Deja de contar para el tope del plan** (lo hace `app_limite_plan`).
+   *    Si contara, archivar no liberaría nada y la única salida sería borrar —
+   *    que es justo lo que las claves foráneas impiden.
+   *
+   * ── Lo que NO se puede archivar ──
+   *
+   * Una propiedad con un contrato en curso. No es una restricción técnica: es
+   * que sacar de la cartera algo que está alquilado hoy deja al inquilino, a
+   * las cuotas y a la liquidación colgando de una propiedad que la pantalla ya
+   * no muestra.
+   */
+  async archivar(
+    tenantId: string,
+    id: string,
+    usuarioId: string,
+    motivo?: string,
+  ): Promise<{ archivada: boolean }> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rows } = await ej.query<{ existe: boolean; en_curso: string }>(
+        `SELECT EXISTS (SELECT 1 FROM propiedad WHERE id = $1) AS existe,
+                (SELECT count(*) FROM contrato_alquiler
+                  WHERE propiedad_id = $1 AND estado IN ('vigente','por_iniciar')) AS en_curso`,
+        [id],
+      );
+      if (!rows[0].existe) throw AppError.notFound('No se encontró esa propiedad.');
+
+      if (Number(rows[0].en_curso) > 0) {
+        throw new AppError(
+          409,
+          ErrorCode.ESTADO_INVALIDO,
+          'Tiene un contrato en curso. Terminá o rescindí el contrato y después archivala.',
+          'Conflict',
+        );
+      }
+
+      await ej.query(
+        `UPDATE propiedad
+            SET archivada_el = now(), archivada_por = $2, archivada_motivo = $3,
+                red_compartida = false, red_comision_pct = NULL, red_compartida_el = NULL
+          WHERE id = $1`,
+        [id, usuarioId, motivo ?? null],
+      );
+
+      // Las cerradas quedan cerradas; lo que estaba vivo se cierra.
+      await ej.query(
+        `UPDATE operacion SET estado = 'cerrada'
+          WHERE propiedad_id = $1 AND estado <> 'cerrada'`,
+        [id],
+      );
+
+      return { archivada: true };
+    });
+  }
+
+  /**
+   * Desarchivar.
+   *
+   * Las operaciones NO se reabren solas: cuál vuelve a estar disponible y a qué
+   * precio es una decisión, y adivinarla podría publicar una propiedad al valor
+   * de hace dos años.
+   */
+  async desarchivar(tenantId: string, id: string): Promise<{ archivada: boolean }> {
+    return this.db.withTenant(tenantId, async (ej) => {
+      const { rowCount } = await ej.query(
+        `UPDATE propiedad
+            SET archivada_el = NULL, archivada_por = NULL, archivada_motivo = NULL
+          WHERE id = $1`,
+        [id],
+      );
+      if (!rowCount) throw AppError.notFound('No se encontró esa propiedad.');
+      return { archivada: false };
     });
   }
 
