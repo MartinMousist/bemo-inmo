@@ -1,5 +1,21 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+/**
+ * Lo que la barra de arriba muestra del plan.
+ *
+ * `diasDePrueba` es la única cuenta regresiva REAL que existe: sale de
+ * `prueba_hasta`. Un plan pago no tiene fecha de vencimiento en la base porque
+ * no hay cobro integrado, y mostrar una inventada sería el peor dato posible.
+ */
+export interface PlanEnBarra {
+  codigo: string;
+  nombre: string | null;
+  familia: string | null;
+  estado: string | null;
+  pruebaHasta: string | null;
+  diasDePrueba: number | null;
+}
+
 import { api, fijarToken, renovar } from '../api/cliente';
 import type { TipoCuenta } from '../dominio/roles';
 
@@ -39,6 +55,13 @@ export const useAuth = defineStore('auth', () => {
    */
   const tipoCuenta = ref<TipoCuenta | null>(null);
 
+  /**
+   * El plan, para la barra de arriba. Viene del MISMO `GET /cuenta` que los
+   * módulos: la barra está en todas las pantallas y un pedido más por carga,
+   * para dibujar dos palabras, se paga en cada navegación.
+   */
+  const plan = ref<PlanEnBarra | null>(null);
+
   const autenticado = computed(() => usuario.value !== null);
 
   /** Mientras no se sabe, se asume que sí: esconder de más es peor que de menos. */
@@ -48,14 +71,18 @@ export const useAuth = defineStore('auth', () => {
 
   async function cargarCuenta(): Promise<void> {
     try {
-      const c = await api<{ activos: string[]; tipo: TipoCuenta }>('/cuenta');
+      const c = await api<{
+        activos: string[]; tipo: TipoCuenta; plan: PlanEnBarra | null;
+      }>('/cuenta');
       modulos.value = c.activos;
       tipoCuenta.value = c.tipo;
+      plan.value = c.plan ?? null;
     } catch {
       // Si falla, se deja `null` y se ve todo. Una barra lateral vacía por un
       // error de red es peor que una con una entrada de más.
       modulos.value = null;
       tipoCuenta.value = null;
+      plan.value = null;
     }
   }
 
@@ -169,6 +196,7 @@ export const useAuth = defineStore('auth', () => {
     autenticado,
     modulos,
     tipoCuenta,
+    plan,
     tieneModulo,
     cargarCuenta,
     restaurar,

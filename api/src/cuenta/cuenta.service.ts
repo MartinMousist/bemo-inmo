@@ -24,6 +24,20 @@ export interface Cuenta {
   modulos: EstadoModulo[];
   /** Los dos tipos con su descripción, para la pantalla que deja cambiarlo. */
   tipos: Array<{ clave: TipoCuenta; nombre: string; detalle: string }>;
+  /**
+   * El plan, para la barra de arriba. `null` si la cuenta no tiene suscripción
+   * cargada — que es un problema de datos nuestro y no puede romper la barra.
+   */
+  plan: {
+    codigo: string;
+    nombre: string | null;
+    familia: string | null;
+    estado: string | null;
+    /** La única fecha real que existe: el fin de la prueba. */
+    pruebaHasta: string | null;
+    /** Días que faltan, contados por Postgres. Negativo = ya venció. */
+    diasDePrueba: number | null;
+  } | null;
 }
 
 @Injectable()
@@ -124,8 +138,20 @@ export async function leerCuenta(ej: Ejecutor, tenantId: string): Promise<Cuenta
     modulos_on: string[];
     modulos_off: string[];
     plan_modulos: string[] | null;
+    plan_codigo: string | null;
+    plan_nombre: string | null;
+    plan_familia: string | null;
+    suscripcion_estado: string | null;
+    prueba_hasta: string | null;
+    dias_de_prueba: number | null;
   }>(
-    `SELECT t.tipo, t.modulos_on, t.modulos_off, p.modulos AS plan_modulos
+    `SELECT t.tipo, t.modulos_on, t.modulos_off, p.modulos AS plan_modulos,
+            p.codigo AS plan_codigo, p.nombre AS plan_nombre, p.familia AS plan_familia,
+            s.estado AS suscripcion_estado, s.prueba_hasta,
+            -- Los días los cuenta POSTGRES y no el navegador: la fecha de la
+            -- máquina de quien mira puede estar corrida, y «te quedan 3 días»
+            -- es justo el número donde eso se nota.
+            (s.prueba_hasta - current_date) AS dias_de_prueba
        FROM tenant t
        LEFT JOIN suscripcion s ON s.tenant_id = t.id
        LEFT JOIN plan p ON p.codigo = s.plan_codigo
@@ -143,6 +169,28 @@ export async function leerCuenta(ej: Ejecutor, tenantId: string): Promise<Cuenta
     tipoDetalle: DESCRIPCION_TIPO[r.tipo],
     activos: modulos.filter((m) => m.activo).map((m) => m.clave),
     modulos,
+    /**
+     * El plan, para la barra de arriba.
+     *
+     * Viaja acá y no en un pedido aparte porque la barra está en TODAS las
+     * pantallas: una llamada más por carga, para dibujar dos palabras, se paga
+     * en cada navegación.
+     *
+     * ⚠️ `diasDePrueba` sale de `prueba_hasta`, que es la ÚNICA fecha real que
+     * existe. No hay «vence el» de un plan pago porque no hay cobro integrado:
+     * `suscripcion` no tiene una fecha de renovación. Mostrar una sería
+     * inventar el dato más delicado de la pantalla.
+     */
+    plan: r.plan_codigo
+      ? {
+          codigo: r.plan_codigo,
+          nombre: r.plan_nombre,
+          familia: r.plan_familia,
+          estado: r.suscripcion_estado,
+          pruebaHasta: r.prueba_hasta,
+          diasDePrueba: r.dias_de_prueba,
+        }
+      : null,
     tipos: TIPOS.map((t) => ({
       clave: t,
       nombre: ETIQUETA_TIPO[t],

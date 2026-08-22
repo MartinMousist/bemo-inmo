@@ -28,6 +28,39 @@ const iniciales = computed(() =>
     .join(''),
 );
 
+/**
+ * Qué dice la línea del plan, según el estado REAL de la suscripción.
+ *
+ * Los cuatro estados existen en la base (`prueba`, `activa`, `morosa`,
+ * `cancelada`) y cada uno dice algo distinto. El único que lleva números es la
+ * prueba, porque es el único con una fecha de verdad.
+ */
+const textoPlan = computed(() => {
+  const p = auth.plan;
+  if (!p) return '';
+  if (p.estado === 'prueba') {
+    const d = p.diasDePrueba;
+    if (d === null) return 'En prueba';
+    if (d < 0) return 'La prueba terminó';
+    if (d === 0) return 'La prueba termina hoy';
+    return `Prueba · ${d} ${d === 1 ? 'día' : 'días'}`;
+  }
+  if (p.estado === 'morosa') return 'Con un pago pendiente';
+  if (p.estado === 'cancelada') return 'Cancelado';
+  // `activa`: no hay fecha de renovación en la base, así que no se dice
+  // ninguna. Ver el comentario del bloque en la plantilla.
+  return 'Activo';
+});
+
+const tonoPlan = computed(() => {
+  const p = auth.plan;
+  if (!p) return '';
+  if (p.estado === 'morosa' || p.estado === 'cancelada') return 'alerta';
+  // Los últimos siete días de prueba se marcan: es cuando hay que hacer algo.
+  if (p.estado === 'prueba' && (p.diasDePrueba ?? 99) <= 7) return 'aviso';
+  return '';
+});
+
 function elegirTema(p: Preferencia) {
   preferencia.value = p;
   aplicar(p);
@@ -73,15 +106,47 @@ async function salir() {
       @click="abierto = !abierto"
     >
       <span class="avatar">{{ iniciales }}</span>
-      <span class="rol">{{ etiquetaRol(auth.rol, auth.tipoCuenta) }}</span>
+      <!--
+        El NOMBRE primero y el rol a la derecha.
+
+        Antes el disparador mostraba sólo el rol —«Titular»— y el nombre estaba
+        escondido adentro del panel. En una cuenta compartida, saber con QUÉ
+        usuario estás es la primera pregunta, y era la única que la barra no
+        contestaba sin abrir nada.
+      -->
+      <span class="quien">
+        <span class="nom">{{ auth.usuario?.nombre }}</span>
+        <span class="rol">{{ etiquetaRol(auth.rol, auth.tipoCuenta) }}</span>
+      </span>
       <UiIcon nombre="chevron" :tam="14" />
     </button>
 
     <div v-if="abierto" class="panel" role="menu">
-      <div class="cabecera">
-        <p class="nombre">{{ auth.usuario?.nombre }}</p>
-        <p class="tenant">{{ auth.tenant?.nombre }}</p>
-      </div>
+      <!-- La cabecera es un ENLACE: tocar tu propio nombre y que no pase nada
+           es lo que hace que la gente busque «mi perfil» en el menú. -->
+      <RouterLink class="cabecera" to="/cuenta" role="menuitem" @click="abierto = false">
+        <span class="nombre">{{ auth.usuario?.nombre }}</span>
+        <span class="tenant">{{ auth.tenant?.nombre }}</span>
+        <span class="ir">Ver mi cuenta</span>
+      </RouterLink>
+
+      <!--
+        El plan.
+
+        `diasDePrueba` es la ÚNICA cuenta regresiva real: sale de `prueba_hasta`.
+        Un plan pago NO tiene fecha de vencimiento en la base porque no hay cobro
+        integrado, así que cuando la suscripción está activa no se muestra
+        ninguna — inventar «te vence en 23 días» sería el peor dato posible de
+        toda la pantalla.
+      -->
+      <RouterLink v-if="auth.plan" class="plan" to="/plan" role="menuitem"
+        @click="abierto = false">
+        <span class="plan-nombre">
+          {{ auth.plan.familia === 'gestion' ? 'Gestión' : 'Inmobiliaria' }}
+          · {{ auth.plan.nombre }}
+        </span>
+        <span class="plan-estado" :class="tonoPlan">{{ textoPlan }}</span>
+      </RouterLink>
 
       <div class="seccion">
         <p class="titulo">Tema</p>
@@ -228,4 +293,43 @@ async function salir() {
 .tilde {
   margin-left: auto;
 }
+
+/* ── El disparador, con nombre y rol ─────────────────────────────────────── */
+.quien { display: flex; align-items: baseline; gap: var(--s-sm); min-width: 0; }
+.nom {
+  color: var(--ink-2); font-weight: 500;
+  max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* El rol va apagado y más chico: es el contexto del nombre, no un dato aparte.
+   En pantalla angosta desaparece antes que el nombre, porque saber QUIÉN sos
+   importa más que saber con qué permisos. */
+.rol { color: var(--muted); font-size: 12px; white-space: nowrap; }
+@media (max-width: 40rem) { .rol { display: none; } }
+
+/* ── La cabecera, ahora enlace ───────────────────────────────────────────── */
+.cabecera {
+  display: grid; gap: 1px;
+  padding: var(--s-md) var(--s-lg);
+  text-decoration: none; color: inherit;
+  border-bottom: 1px solid var(--line);
+}
+.cabecera:hover { background: var(--surface-2); }
+.cabecera .nombre { font-weight: 600; color: var(--ink); }
+.cabecera .tenant { font-size: 13px; color: var(--muted); }
+.cabecera .ir { font-size: 12px; color: var(--accent-ink); margin-top: 2px; }
+
+/* ── El plan ─────────────────────────────────────────────────────────────── */
+.plan {
+  display: grid; gap: 1px;
+  padding: var(--s-md) var(--s-lg);
+  text-decoration: none; color: inherit;
+  border-bottom: 1px solid var(--line);
+}
+.plan:hover { background: var(--surface-2); }
+.plan-nombre { font-size: 13px; color: var(--ink-2); }
+.plan-estado { font-size: 12px; color: var(--muted); }
+/* El color sólo cuando hay algo que hacer. Un estado «Activo» en verde en cada
+   apertura del menú gasta color sin informar. */
+.plan-estado.aviso { color: var(--warning-ink); }
+.plan-estado.alerta { color: var(--danger); }
 </style>
